@@ -1,0 +1,13 @@
+tags:
+  - {name: tenuki_ok,              type: global,  desc: "Local urgency low; safe to play elsewhere"}
+  - {name: urgent_local,           type: global,  desc: "Local response required"}
+  - {name: invasion_viable,        type: spatial, desc: "Inside enemy sphere can live/reduce", mask: true}
+  - {name: sabaki_required,        type: spatial, desc: "If invading, needs light shape"}
+  - {name: reduction_preferred,    type: spatial, desc: "Should reduce from outside"}
+  - {name: cut_available,          type: spatial, desc: "Cut threatens to separate groups"}
+  - {name: ladder_works,           type: spatial, desc: "Ladder capture succeeds"}
+  - {name: ladder_fails,           type: spatial, desc: "Ladder escape works"}
+  - {name: base_weak,              type: spatial, desc: "Group lacks base/eyespace"}
+  - {name: aji_present,            type: spatial, desc: "Residual forcing potential"}
+  - {name: big_point_corner,       type: spatial, desc: "Large-point move near a corner"}
+  - {name: sente_line,             type: spatial, desc: "Follow-up opponent must answer"}
