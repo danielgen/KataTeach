@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Sequence
+from typing import Sequence, Mapping
 
 import yaml
 
@@ -29,14 +29,41 @@ def load_tags(ontology_path: Path) -> tuple[Sequence[str], Sequence[str]]:
     return global_tags, spatial_tags
 
 
-def build_label_page(sgf_path: Path, html_path: Path, ontology_path: Path) -> None:
-    """Create an interactive labeling web page for ``sgf_path``."""
+def build_label_page(
+    sgf_path: Path,
+    html_path: Path,
+    ontology_path: Path,
+    policy_path: Path | None = None,
+) -> None:
+    """Create an interactive labeling web page for ``sgf_path``.
+
+    Parameters
+    ----------
+    sgf_path:
+        Input SGF game record.
+    html_path:
+        Destination HTML file.
+    ontology_path:
+        Path to the ontology YAML used for tag definitions.
+    policy_path:
+        Optional JSON file containing pre-computed policy suggestions for
+        each move.  The file should map move indices to lists of objects
+        with ``move`` and ``winrate`` fields.
+    """
+
     sgf_text = sgf_path.read_text(encoding="utf-8")
     global_tags, spatial_tags = load_tags(ontology_path)
+
+    policy: Mapping[str, object]
+    if policy_path is not None and policy_path.exists():
+        policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    else:
+        policy = {}
 
     sgf_js = json.dumps(sgf_text)
     globals_js = json.dumps(list(global_tags))
     spatial_js = json.dumps(list(spatial_tags))
+    policy_js = json.dumps(policy)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -57,11 +84,13 @@ def build_label_page(sgf_path: Path, html_path: Path, ontology_path: Path) -> No
   <button id='next'>Next</button>
 </div>
 <form id='tag_form'></form>
+<div id='policy_suggestions'></div>
 <button id='export'>Export Labels</button>
 <script>
 const SGF = {sgf_js};
 const GLOBAL_TAGS = {globals_js};
 const SPATIAL_TAGS = {spatial_js};
+const POLICY = {policy_js};
 let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF }});
 let currentMove = 0;
 let labels = {{}};  // move index -> tag mapping
@@ -96,6 +125,17 @@ function renderMarkers() {{
   }}
 }}
 
+function renderPolicy() {{
+  const div = document.getElementById('policy_suggestions');
+  const opts = POLICY[currentMove] || [];
+  if(opts.length === 0) {{
+    div.textContent = '';
+    return;
+  }}
+  const lines = opts.map(o => `${{o.move}} (${{(o.winrate * 100).toFixed(1)}}%)`);
+  div.innerHTML = '<h3>Top policy moves</h3>' + lines.join('<br/>');
+}}
+
 document.getElementById('tag_form').addEventListener('change', e => {{
   const tag = e.target.getAttribute('data-tag');
   if(tag) {{
@@ -128,6 +168,7 @@ function gotoMove(idx) {{
   updateMoveDisplay();
   renderForm();
   renderMarkers();
+  renderPolicy();
 }}
 
 document.getElementById('next').onclick = () => gotoMove(currentMove + 1);
@@ -143,6 +184,7 @@ document.getElementById('export').onclick = () => {{
 
 renderForm();
 updateMoveDisplay();
+renderPolicy();
 </script>
 </body>
 </html>
@@ -155,9 +197,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build SGF labeling web page")
     parser.add_argument("sgf", type=Path, help="Input SGF file")
     parser.add_argument("html", type=Path, help="Output HTML file")
-    parser.add_argument("--ontology", type=Path, default=Path(__file__).parent.parent / "configs" / "ontology.yaml", help="Ontology YAML path")
+    parser.add_argument(
+        "--ontology",
+        type=Path,
+        default=Path(__file__).parent.parent / "configs" / "ontology.yaml",
+        help="Ontology YAML path",
+    )
+    parser.add_argument(
+        "--policy",
+        type=Path,
+        default=None,
+        help="Optional JSON file with policy suggestions",
+    )
     args = parser.parse_args()
-    build_label_page(args.sgf, args.html, args.ontology)
+    build_label_page(args.sgf, args.html, args.ontology, args.policy)
 
 
 if __name__ == "__main__":
