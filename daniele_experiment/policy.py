@@ -2,29 +2,16 @@ from __future__ import annotations
 
 """Utilities for computing and storing top policy moves.
 
-This module offers two separate helpers:
-
-``extract_top_policy_moves``
-    Read a JSONL file produced by ``katago analysis`` and record, for
-    each position, the set of moves that are within a winrate threshold
-    of the best move.
-
-``compute_policy_suggestions``
-    Run a 1-visit neural-network evaluation on one or more SGF files and
-    record the top policy moves for each position using the raw network
-    policy.  The resulting mappings can be saved to JSON and later
-    displayed on the labeling web page.
-
-The analysis JSON is expected to contain for each position at least the
-fields ``moves`` (list of move strings in SGF coordinate form) and
-``Q`` (corresponding winrates expressed as probabilities from the
-current player's perspective).
+This module provides functionality to run 1-visit neural-network evaluation 
+on SGF files and record the top policy moves for each position using the raw 
+network policy. The resulting mappings can be saved to JSON and later 
+displayed on the labeling web page.
 """
 
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Sequence, Iterable
+from typing import Dict, List, Iterable
 
 from sgfmill import sgf, sgf_moves, common as sgf_common
 
@@ -36,48 +23,10 @@ MoveInfo = Dict[str, float]
 PolicyMap = Dict[int, List[MoveInfo]]
 
 
-def extract_top_policy_moves(
-    analysis_jsonl: Path | str,
-    *,
-    threshold: float = -0.005,
-) -> PolicyMap:
-    """Return mapping of move index to strong policy moves.
-
-    Parameters
-    ----------
-    analysis_jsonl:
-        Path to a JSONL file emitted by ``katago analysis``.
-    threshold:
-        Inclusive drop in winrate (absolute) from the best move that we
-        still consider a top move.  The default of ``-0.005`` collects
-        all moves within a 0.5% drop of the best move's winrate.
-    """
-
-    policy: PolicyMap = {}
-    path = Path(analysis_jsonl)
-    with path.open("r", encoding="utf-8") as f:
-        for idx, line in enumerate(f):
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            moves: Sequence[str] = rec.get("moves", [])
-            winrates: Sequence[float] = rec.get("Q", [])
-            if not moves or not winrates:
-                continue
-            best = max(winrates)
-            top: List[MoveInfo] = []
-            for mv, q in zip(moves, winrates):
-                if q >= best + threshold:
-                    top.append({"move": mv, "winrate": float(q)})
-            if top:
-                policy[idx] = top
-    return policy
-
-
 def save_policy_map(policy: PolicyMap, path: Path | str) -> None:
     """Save ``policy`` to ``path`` in JSON format."""
     Path(path).write_text(json.dumps(policy), encoding="utf-8")
+
 
 def _loc_to_sgf(loc: int, board: Board) -> str:
     """Convert an internal ``loc`` to an SGF coordinate string."""
@@ -93,7 +42,7 @@ def compute_policy_suggestions(
     model_path: Path | str,
     *,
     threshold: float = -0.005,
-    device: str = "cpu",
+    device: str = "cuda",
 ) -> None:
     """Run 1-visit policy evaluation for each SGF in ``sgf_paths``.
 
@@ -158,13 +107,13 @@ def main() -> None:
     parser.add_argument("model", type=Path, help="KataGo model checkpoint")
     parser.add_argument("sgfs", nargs="+", type=Path, help="SGF files to analyse")
     parser.add_argument("--threshold", type=float, default=-0.005, help="Probability drop from best move")
-    parser.add_argument("--device", type=str, default="cpu", help="Torch device for model")
+    parser.add_argument("--device", type=str, default="cuda", help="Torch device for model")
     args = parser.parse_args()
 
     compute_policy_suggestions(args.sgfs, args.model, threshold=args.threshold, device=args.device)
 
 
-__all__ = ["extract_top_policy_moves", "save_policy_map", "compute_policy_suggestions"]
+__all__ = ["save_policy_map", "compute_policy_suggestions"]
 
 
 if __name__ == "__main__":

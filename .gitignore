@@ -84,3 +84,16 @@ for_release/
 tests/results/matchsgfs/
 tests/results/matchsgfs2/
 kata1-b28c512nbt-s9584861952-d4960414494/
+
+# Node dependencies
+daniele_experiment/web/node_modules/
+daniele_experiment/web/package-lock.json
+
+# Build / test outputs
+daniele_experiment/web/test_out.html
+daniele_experiment/web/wgo.min.js
+
+# OS / editor cruft
+daniele_experiment/web/.DS_Store
+daniele_experiment/web/Thumbs.db
+daniele_experiment/web/*.log
