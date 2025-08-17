@@ -43,7 +43,7 @@ def build_label_page(sgf_path: Path, html_path: Path, ontology_path: Path) -> No
 <head>
 <meta charset='utf-8' />
 <title>Go Position Labeler</title>
-<script src='https://cdnjs.cloudflare.com/ajax/libs/wgo/2.3.0/wgo.min.js'></script>
+<script src='wgo.min.js'></script>
 <style>
   #board {{ width: 400px; margin-bottom: 10px; }}
   .tag-block {{ margin: 5px 0; }}
@@ -62,7 +62,7 @@ def build_label_page(sgf_path: Path, html_path: Path, ontology_path: Path) -> No
 const SGF = {sgf_js};
 const GLOBAL_TAGS = {globals_js};
 const SPATIAL_TAGS = {spatial_js};
-let player = new WGo.BasicPlayer(document.getElementById('board'), {{ sgf: SGF }});
+let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF }});
 let currentMove = 0;
 let labels = {{}};  // move index -> tag mapping
 let selectedSpatial = null;
@@ -73,25 +73,27 @@ function renderForm() {{
   form.innerHTML += '<h3>Global tags</h3>';
   GLOBAL_TAGS.forEach(tag => {{
     const checked = labels[currentMove] && labels[currentMove][tag] ? 'checked' : '';
-    form.innerHTML += `<div class="tag-block"><label><input type="checkbox" data-tag="${{tag}}" ${checked}/> ${{tag}}</label></div>`;
+    form.innerHTML += `<div class="tag-block"><label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label></div>`;
   }});
   form.innerHTML += '<h3>Spatial tags</h3>';
   SPATIAL_TAGS.forEach(tag => {{
     const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
     const checked = selectedSpatial === tag ? 'checked' : '';
-    form.innerHTML += `<div class="tag-block"><label><input type="radio" name="spatial" value="${{tag}}" ${checked}/> ${{tag}}</label> <span id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span></div>`;
+    form.innerHTML += `<div class="tag-block"><label><input type="radio" name="spatial" value="${{tag}}" ${{checked}}/> ${{tag}}</label> <span id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span></div>`;
   }});
 }}
 
 function renderMarkers() {{
-  player.board.removeAllObjects();
-  const tags = labels[currentMove] || {{}};
-  Object.keys(tags).forEach(tag => {{
-    const pts = tags[tag];
-    if(Array.isArray(pts)) {{
-      pts.forEach(pt => player.board.addObject({{ x: pt[0], y: pt[1], type: 'MA' }}));
-    }}
-  }});
+  if(player.board && player.board.removeAllObjects) {{
+    player.board.removeAllObjects();
+    const tags = labels[currentMove] || {{}};
+    Object.keys(tags).forEach(tag => {{
+      const pts = tags[tag];
+      if(Array.isArray(pts)) {{
+        pts.forEach(pt => player.board.addObject({{ x: pt[0], y: pt[1], type: 'MA' }}));
+      }}
+    }});
+  }}
 }}
 
 document.getElementById('tag_form').addEventListener('change', e => {{
@@ -104,14 +106,16 @@ document.getElementById('tag_form').addEventListener('change', e => {{
   }}
 }});
 
-player.board.addEventListener('click', (x, y) => {{
-  if(selectedSpatial === null) return;
-  labels[currentMove] = labels[currentMove] || {{}};
-  labels[currentMove][selectedSpatial] = labels[currentMove][selectedSpatial] || [];
-  labels[currentMove][selectedSpatial].push([x, y]);
-  renderForm();
-  renderMarkers();
-}});
+if(player.board && player.board.addEventListener) {{
+  player.board.addEventListener('click', (x, y) => {{
+    if(selectedSpatial === null) return;
+    labels[currentMove] = labels[currentMove] || {{}};
+    labels[currentMove][selectedSpatial] = labels[currentMove][selectedSpatial] || [];
+    labels[currentMove][selectedSpatial].push([x, y]);
+    renderForm();
+    renderMarkers();
+  }});
+}}
 
 function updateMoveDisplay() {{
   document.getElementById('move_idx').textContent = currentMove;
@@ -151,7 +155,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build SGF labeling web page")
     parser.add_argument("sgf", type=Path, help="Input SGF file")
     parser.add_argument("html", type=Path, help="Output HTML file")
-    parser.add_argument("--ontology", type=Path, default=Path("daniele_experiment/configs/ontology.yaml"), help="Ontology YAML path")
+    parser.add_argument("--ontology", type=Path, default=Path(__file__).parent.parent / "configs" / "ontology.yaml", help="Ontology YAML path")
     args = parser.parse_args()
     build_label_page(args.sgf, args.html, args.ontology)
 
