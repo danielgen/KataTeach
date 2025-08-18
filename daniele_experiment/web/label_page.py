@@ -191,6 +191,51 @@ let currentMove = 0;
 let labels = {{}};  // move index -> tag mapping
 let selectedSpatial = null;
 
+// Try to sync with WGo.js player state changes
+function syncPlayerState() {{
+  // Calculate current move from player state
+  let moveCount = 0;
+  if(player.currentNode && player.rootNode) {{
+    let node = player.rootNode;
+    while(node !== player.currentNode && node.children && node.children.length > 0) {{
+      moveCount++;
+      node = node.children[0];
+    }}
+  }}
+  
+  // Only update if move actually changed
+  if(moveCount !== currentMove) {{
+    console.log('Move changed from', currentMove, 'to', moveCount);
+    currentMove = moveCount;
+    
+    // Update our custom UI
+    updateMoveDisplay();
+    renderForm();
+    renderPolicy();
+    
+    // Delay marker rendering to let WGo.js finish updating
+    setTimeout(() => {{
+      renderMarkers();
+    }}, 10);
+  }}
+}}
+
+// Check for player state changes periodically
+setInterval(syncPlayerState, 100);
+
+// Also try to hook into WGo.js events if available
+if(player.on && typeof player.on === 'function') {{
+  console.log('Using player.on for events');
+  player.on('update', syncPlayerState);
+  player.on('change', syncPlayerState);
+}} else if(player.addEventListener && typeof player.addEventListener === 'function') {{
+  console.log('Using player.addEventListener for events');
+  player.addEventListener('update', syncPlayerState);
+  player.addEventListener('change', syncPlayerState);
+}} else {{
+  console.log('Using polling method for player state sync');
+}}
+
 // Extract game info from SGF
 function initGameInfo() {{
   try {{
@@ -270,6 +315,8 @@ function renderForm() {{
 function renderMarkers() {{
   // Access board through SimplePlayer structure - try multiple ways
   let board = null;
+  
+  console.log('=== RENDER MARKERS DEBUG ===');
   
   // Try different ways to access the board
   if(player.components && player.components.get) {{
@@ -439,10 +486,23 @@ function renderMarkers() {{
     console.log('Board methods:', Object.getOwnPropertyNames(board));
     console.log('Board config:', board.config);
     console.log('Board size/dimensions:', {{ width: board.width, height: board.height, size: board.size }});
+    console.log('Existing board objects:', board.objects);
+    
+    // Check if there are existing objects and their coordinate format
+    if(board.objects && board.objects.length > 0) {{
+      console.log('Sample existing object:', board.objects[0]);
+      console.log('Existing object coordinates:', {{ x: board.objects[0].x, y: board.objects[0].y }});
+    }}
   }}
   
-  if(board && board.removeAllObjects) {{
-    board.removeAllObjects();
+  if(board && board.objects) {{
+    // Remove only our custom objects (AI labels and user tags), keep game stones
+    const objectsToRemove = board.objects.filter(obj => 
+      obj.type === 'LB' || obj.type === 'MA' || obj.type === 'CR' || obj.type === 'SQ'
+    );
+    objectsToRemove.forEach(obj => board.removeObject(obj));
+    
+    console.log('Removed', objectsToRemove.length, 'custom objects, keeping game stones');
     
     // Render user tags
     const tags = labels[currentMove] || {{}};
@@ -453,7 +513,7 @@ function renderMarkers() {{
       }}
     }});
     
-    // Render policy suggestions as circles
+    // Render policy suggestions
     const policyMoves = POLICY[currentMove] || [];
     console.log('Rendering', policyMoves.length, 'policy moves for position', currentMove);
     
@@ -483,34 +543,18 @@ function renderMarkers() {{
             // Try different ways to add the object
             console.log('Trying to add object with different formats...');
             
-            // Method 1: Standard WGo object format
-            const wgoObject = {{
-              x: coord.x,
-              y: coord.y,
-              type: 'LB',
-              text: winrateText
-            }};
-            console.log('Adding WGo object:', wgoObject);
-            board.addObject(wgoObject);
+            // Try different parameter orders for WGo.LabelBoardObject
+            console.log('Trying to create label at:', coord.x, coord.y, 'with text:', winrateText);
             
-            // Method 2: Try with position property instead
-            try {{
-              const posObject = {{
-                position: {{ x: coord.x, y: coord.y }},
-                type: 'LB', 
-                text: winrateText
-              }};
-              console.log('Trying position format:', posObject);
-              board.addObject(posObject);
-            }} catch(e) {{
-              console.log('Position format failed:', e.message);
-            }}
+            // Try the correct parameter order: (text, x, y) 
+            const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
+            console.log('Created label (text, x, y):', labelObj);
+            console.log('Label properties:', {{ x: labelObj.x, y: labelObj.y, text: labelObj.text }});
+            console.log('Expected at board position:', move.move, 'coords:', coord.x, coord.y);
+            board.addObject(labelObj);
+            console.log('Successfully added label at', coord.x, coord.y);
             
-            // Method 3: Check if board has different methods
-            if(board.setObjectAt) {{
-              console.log('Using setObjectAt method');
-              board.setObjectAt(coord.x, coord.y, {{ type: 'LB', text: winrateText }});
-            }}
+
             
             console.log('Added policy move at', coord.x, coord.y, 'with winrate', winrateText + '%');
           }} catch(e) {{
@@ -525,6 +569,15 @@ function renderMarkers() {{
     }} else {{
       console.log('No policy moves to render for position', currentMove);
     }}
+    
+    // Refresh only the objects layer, not the entire board
+    if(board && board.redraw) {{
+      console.log('Calling board.redraw() to refresh custom objects');
+      board.redraw();
+    }}
+    
+    console.log('Total objects on board after rendering:', board.objects.length);
+    console.log('Objects:', board.objects.map(obj => obj.type || 'unknown'));
   }} else {{
     console.error('Board object not found or missing removeAllObjects method');
     console.error('Player structure:', player);
@@ -622,54 +675,36 @@ function updateMoveDisplay() {{
 
 function gotoMove(idx) {{
   try {{
-    // For SimplePlayer, count moves by traversing the game tree
-    let totalMoves = 0;
-    if(player.game && player.game.size) {{
-      totalMoves = player.game.size;
-    }} else {{
-      // Count moves by traversing from root
-      let node = player.rootNode;
-      while(node && node.children && node.children.length > 0) {{
-        totalMoves++;
-        node = node.children[0];
-      }}
-    }}
-    
-    console.log('Navigating to move', idx, 'out of', totalMoves, 'total moves');
+    console.log('Manual navigation to move', idx, 'from current move', currentMove);
     
     if(idx < 0) {{
       console.log('Move index too low');
       return;
     }}
     
-    // Navigate to the target move using SimplePlayer methods
+    // Use WGo.js navigation methods that properly maintain board state
     if(idx > currentMove) {{
-      // Move forward
+      // Move forward one step at a time
       for(let i = currentMove; i < idx; i++) {{
         if(player.next && typeof player.next === 'function') {{
           player.next();
-          currentMove++;
         }} else {{
           break;
         }}
       }}
     }} else if(idx < currentMove) {{
-      // Move backward  
+      // Move backward one step at a time
       for(let i = currentMove; i > idx; i--) {{
         if(player.previous && typeof player.previous === 'function') {{
           player.previous();
-          currentMove--;
         }} else {{
           break;
         }}
       }}
     }}
     
-    console.log('Navigated to move', currentMove);
-    updateMoveDisplay();
-    renderForm();
-    renderPolicy();
-    renderMarkers(); // Call this after renderPolicy to ensure markers are on top
+    // The 'update' event listener will handle UI updates
+    console.log('Navigation completed');
   }} catch(e) {{
     console.error('Error in gotoMove:', e);
   }}
