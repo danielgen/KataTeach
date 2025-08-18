@@ -498,7 +498,7 @@ function renderMarkers() {{
   if(board && board.objects) {{
     // Remove only our custom objects (AI labels and user tags), keep game stones
     const objectsToRemove = board.objects.filter(obj => 
-      obj.type === 'LB' || obj.type === 'MA' || obj.type === 'CR' || obj.type === 'SQ' || obj.type === 'policy_label'
+      obj.type === 'LB' || obj.type === 'MA' || obj.type === 'CR' || obj.type === 'SQ'
     );
     objectsToRemove.forEach(obj => board.removeObject(obj));
     
@@ -513,31 +513,8 @@ function renderMarkers() {{
       }}
     }});
     
-    // Render actual move value if available (show with the move that was played, not before it)
-    const actualMoveData = currentMove > 0 ? POLICY[currentMove - 1] : null;
-    if(actualMoveData && actualMoveData.actual_move && actualMoveData.actual_move.winrate !== null) {{
-      const actualMove = actualMoveData.actual_move;
-      const coord = sgfToCoord(actualMove.move);
-      
-      if(coord && typeof coord.x === 'number' && typeof coord.y === 'number' && 
-         coord.x >= 0 && coord.x < 19 && coord.y >= 0 && coord.y < 19) {{
-        try {{
-          const winrateText = (actualMove.winrate * 100).toFixed(0);
-          console.log('Adding actual move value label:', winrateText, 'at', coord.x, coord.y);
-          
-          // Create a circle marker for the actual move value
-          const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
-          board.addObject(labelObj);
-          console.log('Added actual move value label at', coord.x, coord.y, 'with winrate', winrateText + '%');
-        }} catch(e) {{
-          console.error('Error adding actual move label:', e);
-        }}
-      }}
-    }}
-    
-    // Render policy suggestions for the current position
-    const policyData = POLICY[currentMove] || {{}};
-    const policyMoves = policyData.suggestions || [];
+    // Render policy suggestions
+    const policyMoves = POLICY[currentMove] || [];
     console.log('Rendering', policyMoves.length, 'policy moves for position', currentMove);
     
     if(policyMoves.length > 0) {{
@@ -550,22 +527,40 @@ function renderMarkers() {{
         if(coord && typeof coord.x === 'number' && typeof coord.y === 'number' && 
            coord.x >= 0 && coord.x < 19 && coord.y >= 0 && coord.y < 19) {{
           try {{
+            
+                        // Add policy move marker - use simple approach
             const winrateText = (move.winrate * 100).toFixed(0);
             
-            console.log('Adding policy suggestion at:', coord.x, coord.y, 'with text:', winrateText);
+            // Try SGF coordinate format instead of grid coordinates
+            console.log('Grid coords:', coord.x, coord.y);
             
-            // Create a square marker for policy suggestions to differentiate from actual moves
-            const squareObj = new WGo.SquareBoardObject(coord.x, coord.y);
-            board.addObject(squareObj);
+            // Convert back to SGF format (a-s)
+            const sgfX = String.fromCharCode('a'.charCodeAt(0) + coord.x);
+            const sgfY = String.fromCharCode('a'.charCodeAt(0) + coord.y);
+            const sgfPos = sgfX + sgfY;
+            console.log('SGF position:', sgfPos);
             
-            // Also add a small label
+            // Try different ways to add the object
+            console.log('Trying to add object with different formats...');
+            
+            // Try different parameter orders for WGo.LabelBoardObject
+            console.log('Trying to create label at:', coord.x, coord.y, 'with text:', winrateText);
+            
+            // Try the correct parameter order: (text, x, y) 
             const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
-            labelObj.type = 'policy_label';
+            console.log('Created label (text, x, y):', labelObj);
+            console.log('Label properties:', {{ x: labelObj.x, y: labelObj.y, text: labelObj.text }});
+            console.log('Expected at board position:', move.move, 'coords:', coord.x, coord.y);
             board.addObject(labelObj);
+            console.log('Successfully added label at', coord.x, coord.y);
             
-            console.log('Added policy suggestion at', coord.x, coord.y, 'with winrate', winrateText + '%');
+
+            
+            console.log('Added policy move at', coord.x, coord.y, 'with winrate', winrateText + '%');
           }} catch(e) {{
-            console.error('Error adding policy suggestion:', e);
+            console.error('Error adding board object:', e);
+            console.error('Board object at error:', board);
+            console.error('Board addObject method:', typeof board.addObject);
           }}
         }} else {{
           console.error('Invalid coordinates for move:', move.move, coord);
@@ -635,36 +630,20 @@ function sgfToCoord(moveString) {{
 
 function renderPolicy() {{
   const div = document.getElementById('policy_suggestions');
-  const policyData = POLICY[currentMove] || {{}};
-  const suggestions = policyData.suggestions || [];
+  const opts = POLICY[currentMove] || [];
   
-  console.log('Current move:', currentMove, 'Policy data:', policyData);
+  console.log('Current move:', currentMove, 'Policy data:', opts);
   
-  let content = '';
-  
-  // Show actual move information if available (for the previous position)
-  const actualMoveData = currentMove > 0 ? POLICY[currentMove - 1] : null;
-  if(actualMoveData && actualMoveData.actual_move) {{
-    const actualMove = actualMoveData.actual_move;
-    const winrateText = actualMove.winrate !== null ? `${{(actualMove.winrate * 100).toFixed(1)}}%` : 'N/A';
-    const playerName = actualMove.player === 'b' ? 'Black' : 'White';
-    content += `<div style="margin-bottom: 10px; padding: 8px; background: #e8f4f8; border-radius: 4px;">
-      <strong>Last Move:</strong> ${{playerName}} played ${{actualMove.move}} (Value: ${{winrateText}})
-    </div>`;
+  if(opts.length === 0) {{
+    div.innerHTML = '<em>No AI suggestions for this position</em>';
+    return;
   }}
   
-  // Show suggestions for current position
-  if(suggestions.length === 0) {{
-    content += '<em>No AI suggestions for this position</em>';
-  }} else {{
-    const playerToMove = currentMove % 2 === 0 ? 'Black' : 'White';
-    const lines = suggestions.map(o => 
-      `<div class="policy-move">${{o.move}}: ${{(o.winrate * 100).toFixed(1)}}%</div>`
-    );
-    content += `<strong>${{playerToMove}} to play</strong><br/>${{lines.join('')}}`;
-  }}
-  
-  div.innerHTML = content;
+  const playerToMove = currentMove % 2 === 0 ? 'Black' : 'White';
+  const lines = opts.map(o => 
+    `<div class="policy-move">${{o.move}}: ${{(o.winrate * 100).toFixed(1)}}%</div>`
+  );
+  div.innerHTML = `<strong>${{playerToMove}} to play</strong><br/>${{lines.join('')}}`;
 }}
 
 document.getElementById('tag_form').addEventListener('change', e => {{
