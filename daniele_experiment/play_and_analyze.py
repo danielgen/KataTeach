@@ -8,6 +8,12 @@ Usage:
     python play_and_analyze.py <model_path> <num_games> [options]
 """
 
+# TODO change this to use cpp scripts and python wrappers in python/ to:
+# 1. play games with n_visits = 1
+# 2. obtain value output for policy candidate moves 
+
+## once this works properly, delete play_games.py and policy.py
+
 import argparse
 import json
 import sys
