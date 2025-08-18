@@ -24,7 +24,6 @@ sys.path.append(str(Path(__file__).parent.parent / "python"))
 
 from load_model import load_model
 from gamestate import GameState, Board
-from query_analysis_engine_example import KataGo, sgfmill_to_str
 
 
 MoveInfo = Dict[str, float]
@@ -60,20 +59,6 @@ def loc_to_sgf_coords(loc: int, board: Board) -> str:
     sgf_x = chr(ord('a') + x)
     sgf_y = chr(ord('a') + y)
     return sgf_x + sgf_y
-
-
-def board_to_initial_stones(board: Board) -> List[Tuple[str, str]]:
-    """Convert a Board to KataGo initialStones format."""
-    stones: List[Tuple[str, str]] = []
-    for y in range(board.size):
-        for x in range(board.size):
-            loc = board.loc(x, y)
-            pla = board.board[loc]
-            if pla == Board.BLACK:
-                stones.append(("B", sgfmill_to_str((y, x))))
-            elif pla == Board.WHITE:
-                stones.append(("W", sgfmill_to_str((y, x))))
-    return stones
 
 
 def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_threshold: float = 0.01) -> Tuple[int, float, bool]:
@@ -124,7 +109,6 @@ def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_thr
 def compute_policy_analysis(
     sgf_content: str,
     model,
-    katago: KataGo,
     *,
     threshold: float = -0.005,
     verbose: bool = True
@@ -196,38 +180,28 @@ def compute_policy_analysis(
         if verbose:
             print(f"Position {idx}: Evaluating {len(candidate_moves)} out of {len(moves_probs)} legal moves")
         
-        # Evaluate each candidate move by querying KataGo on the resulting position
-        move_winrates: List[Tuple[int, float]] = []
+        # Evaluate each candidate move by playing it and getting the resulting winrate
+        move_winrates = []
         current_player = gs.board.pla
-        next_player = Board.get_opp(current_player)
-        komi = gs.rules.get("whiteKomi", 7.5)
-
-        derived_positions: List[Tuple[int, float, Dict[str, object]]] = []
+        
         for mv, prob in candidate_moves:
-            board_copy = gs.board.copy()
-            board_copy.play(current_player, mv)
-            stones = board_to_initial_stones(board_copy)
-            query = {
-                "id": str(uuid.uuid4()),
-                "initialStones": stones,
-                "initialPlayer": "B" if next_player == Board.BLACK else "W",
-                "rules": "Chinese",
-                "komi": komi,
-                "boardXSize": board_size,
-                "boardYSize": board_size,
-                "includePolicy": True,
-                "maxVisits": 1,
-            }
-            derived_positions.append((mv, prob, query))
-
-        for mv, prob, query in derived_positions:
+            # Play the candidate move
+            gs.play(current_player, mv)
+            
+            # Evaluate the resulting position
             try:
-                result = katago.query_raw(query)
-                our_winrate = float(result["rootInfo"]["rawWinrate"])
+                next_outputs = gs.get_model_outputs(model)
+                next_value = next_outputs["value"]
+                # Since we played a move, the perspective flipped - take 1 - opponent_winrate
+                opponent_winrate = float(next_value[0])
+                our_winrate = 1.0 - opponent_winrate
                 move_winrates.append((mv, our_winrate))
-            except Exception:
+            except:
                 # Fallback to policy probability if evaluation fails
                 move_winrates.append((mv, prob))
+            
+            # Undo the move to restore the original position
+            gs.undo()
         
         # Find best winrate and collect moves within threshold
         position_data = {}
@@ -391,7 +365,6 @@ def create_sgf(moves: List[Tuple[int, int]], board_size: int, game_id: int) -> s
 
 def play_and_analyze_games(
     model,
-    katago: KataGo,
     num_games: int,
     output_dir: Path,
     board_size: int = 19,
@@ -420,7 +393,7 @@ def play_and_analyze_games(
             
             # Analyze the game
             print(f"  Analyzing game {game_id}...")
-            policy = compute_policy_analysis(sgf_content, model, katago, threshold=analysis_threshold, verbose=False)
+            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=False)
             
             # Save policy analysis
             policy_file = policy_dir / f"{sgf_file.stem}.json"
@@ -440,17 +413,14 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Play and analyze 5 new games with custom settings
-  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 5 --output-dir my_games --board-size 13 --prob-threshold 0.02
-
   # Play and analyze 5 new games
-  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 5 --prob-threshold 0.05
+  python play_and_analyze.py model.ckpt 5
   
   # Play games with custom settings
-  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 3 --output-dir my_games --board-size 13 --prob-threshold 0.02
+  python play_and_analyze.py model.ckpt 3 --output-dir my_games --board-size 13 --prob-threshold 0.02
   
   # Use CPU instead of GPU
-  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 2 --device cpu
+  python play_and_analyze.py model.ckpt 2 --device cpu
         """
     )
     
@@ -466,13 +436,6 @@ Examples:
                        help="Probability threshold for move sampling (default: 0.01 = 1%%)")
     parser.add_argument("--analysis-threshold", type=float, default=-0.005,
                        help="Winrate drop threshold for policy analysis (default: -0.005)")
-    parser.add_argument("--katago-binary", type=Path, default="D:/KataGo/bin/katago.exe",
-                       help="Path to KataGo analysis binary (default: katago)")
-    parser.add_argument("--katago-config", type=Path,
-                       default=Path("cpp/configs/analysis_example.cfg"),
-                       help="Path to KataGo analysis config")
-    parser.add_argument("--katago-model", type=Path, default=None,
-                       help="Path to KataGo model for analysis (default: --model)")
     
     args = parser.parse_args()
     
@@ -484,33 +447,25 @@ Examples:
         print("Error: Number of games must be positive")
         sys.exit(1)
     
-    katago = None
     try:
         print(f"Loading model from {args.model}...")
         model, _, _ = load_model(args.model, use_swa=False, device=args.device, pos_len=19, verbose=False)
-
-        katago_model_path = args.katago_model if args.katago_model is not None else args.model
-        katago = KataGo(str(args.katago_binary), str(args.katago_config), str(katago_model_path))
-
+        
         play_and_analyze_games(
             model=model,
-            katago=katago,
             num_games=args.num_games,
             output_dir=args.output_dir,
             board_size=args.board_size,
             prob_threshold=args.prob_threshold,
             analysis_threshold=args.analysis_threshold
         )
-
+        
     except KeyboardInterrupt:
         print("\nInterrupted by user")
         sys.exit(1)
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
-    finally:
-        if katago is not None:
-            katago.close()
 
 
 if __name__ == "__main__":
