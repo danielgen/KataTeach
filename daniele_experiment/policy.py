@@ -25,7 +25,8 @@ from gamestate import GameState, Board
 
 
 MoveInfo = Dict[str, float]
-PolicyMap = Dict[int, List[MoveInfo]]
+PositionInfo = Dict[str, object]  # Contains policy moves and actual move info
+PolicyMap = Dict[int, PositionInfo]
 
 
 def save_combined_data(sgf_data: str, policy: PolicyMap, path: Path | str) -> None:
@@ -157,6 +158,7 @@ def compute_policy_suggestions(
                 gs.undo()
             
             # Find best winrate and collect moves within threshold
+            position_data = {}
             if move_winrates:
                 best_winrate = max(winrate for _mv, winrate in move_winrates)
                 top: List[MoveInfo] = []
@@ -164,17 +166,51 @@ def compute_policy_suggestions(
                     if winrate >= best_winrate + threshold:
                         top.append({"move": _loc_to_sgf(mv, gs.board), "winrate": float(winrate)})
                 if top:
-                    policy[idx] = top
+                    position_data["suggestions"] = top
 
+            # If this is not the last position, evaluate the actual move played
             if idx < len(plays):
                 color, move = plays[idx]
                 pla = Board.BLACK if color == "b" else Board.WHITE
+                
+                actual_move_loc = None
+                actual_move_sgf = None
+                actual_move_winrate = None
+                
                 if move is None:
-                    gs.play(pla, Board.PASS_LOC)
+                    actual_move_loc = Board.PASS_LOC
+                    actual_move_sgf = "pass"
                 else:
                     row, col = move
-                    loc = gs.board.loc(col, row)
-                    gs.play(pla, loc)
+                    actual_move_loc = gs.board.loc(col, row)
+                    actual_move_sgf = _loc_to_sgf(actual_move_loc, gs.board)
+                
+                # Evaluate the actual move played
+                if actual_move_loc is not None:
+                    try:
+                        gs.play(pla, actual_move_loc)
+                        actual_outputs = gs.get_model_outputs(model)
+                        actual_value = actual_outputs["value"]
+                        # Since we played a move, the perspective flipped
+                        opponent_winrate = float(actual_value[0])
+                        actual_move_winrate = 1.0 - opponent_winrate
+                        gs.undo()  # Undo to restore position
+                    except:
+                        actual_move_winrate = None
+                
+                # Store actual move information
+                position_data["actual_move"] = {
+                    "move": actual_move_sgf,
+                    "winrate": actual_move_winrate,
+                    "player": color
+                }
+                
+                # Now play the actual move to advance the game state
+                gs.play(pla, actual_move_loc)
+            
+            # Only store position data if we have either suggestions or actual move info
+            if position_data:
+                policy[idx] = position_data
 
         # Create policy directory if it doesn't exist
         policy_dir = path.parent / "policy"
