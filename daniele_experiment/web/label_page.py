@@ -513,9 +513,10 @@ function renderMarkers() {{
       }}
     }});
     
-    // Render policy suggestions
-    const policyMoves = POLICY[currentMove] || [];
-    console.log('Rendering', policyMoves.length, 'policy moves for position', currentMove);
+         // Render policy suggestions for the position that was just played (not the upcoming move)
+     // Show suggestions for the previous move (what AI suggested before this move was played)
+     const policyMoves = currentMove > 0 ? (POLICY[currentMove - 1] || []) : [];
+     console.log('Rendering', policyMoves.length, 'policy moves for position', currentMove > 0 ? currentMove - 1 : 'none');
     
     if(policyMoves.length > 0) {{
       const playerToMove = currentMove % 2 === 0 ? 'black' : 'white';
@@ -546,12 +547,65 @@ function renderMarkers() {{
             // Try different parameter orders for WGo.LabelBoardObject
             console.log('Trying to create label at:', coord.x, coord.y, 'with text:', winrateText);
             
-            // Try the correct parameter order: (text, x, y) 
-            const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
-            console.log('Created label (text, x, y):', labelObj);
-            console.log('Label properties:', {{ x: labelObj.x, y: labelObj.y, text: labelObj.text }});
-            console.log('Expected at board position:', move.move, 'coords:', coord.x, coord.y);
-            board.addObject(labelObj);
+                         // Create label with red color - try multiple approaches
+             console.log('Attempting to create red label at:', coord.x, coord.y, 'with text:', winrateText);
+             
+             // Approach 1: Try with color parameter in constructor
+             let labelObj;
+             try {{
+               // Some WGo.js versions might accept color in constructor
+               labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y, {{ color: 'red', textColor: 'red' }});
+               console.log('Created label with color parameter');
+             }} catch(e) {{
+               console.log('Constructor with color failed, trying basic constructor');
+               labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
+             }}
+             
+             // Approach 2: Set color properties after creation
+             if(labelObj) {{
+               // Try all possible color properties
+               labelObj.color = 'red';
+               labelObj.textColor = 'red';
+               labelObj.fill = 'red';
+               labelObj.stroke = 'red';
+               
+               // Try setting font color
+               if(labelObj.font) {{
+                 labelObj.font.color = 'red';
+                 labelObj.font.fill = 'red';
+               }}
+               
+               console.log('Label object created:', labelObj);
+               console.log('Available properties:', Object.getOwnPropertyNames(labelObj));
+               
+               // Add the object to board
+               board.addObject(labelObj);
+               console.log('Added red label to board');
+             }}
+             
+             // Approach 3: If standard approach doesn't work, try creating a custom object
+             if(!labelObj || (labelObj.color !== 'red' && labelObj.textColor !== 'red')) {{
+               console.log('Standard red label failed, trying custom approach');
+               
+               // Create a custom red label object
+               const customLabel = {{
+                 type: 'LB',
+                 x: coord.x,
+                 y: coord.y,
+                 text: winrateText,
+                 color: 'red',
+                 textColor: 'red',
+                 fill: 'red',
+                 stroke: 'red'
+               }};
+               
+               try {{
+                 board.addObject(customLabel);
+                 console.log('Added custom red label');
+               }} catch(e) {{
+                 console.error('Custom label also failed:', e);
+               }}
+             }}
             console.log('Successfully added label at', coord.x, coord.y);
             
 
@@ -628,22 +682,30 @@ function sgfToCoord(moveString) {{
   return null;
 }}
 
-function renderPolicy() {{
-  const div = document.getElementById('policy_suggestions');
-  const opts = POLICY[currentMove] || [];
+  function renderPolicy() {{
+    const div = document.getElementById('policy_suggestions');
+    // Show policy suggestions for the position that was just played (not the upcoming move)
+    const opts = currentMove > 0 ? (POLICY[currentMove - 1] || []) : [];
+    
+    console.log('Current move:', currentMove, 'Policy data for position:', currentMove > 0 ? currentMove - 1 : 'none', opts);
   
-  console.log('Current move:', currentMove, 'Policy data:', opts);
-  
-  if(opts.length === 0) {{
-    div.innerHTML = '<em>No AI suggestions for this position</em>';
-    return;
-  }}
-  
-  const playerToMove = currentMove % 2 === 0 ? 'Black' : 'White';
-  const lines = opts.map(o => 
-    `<div class="policy-move">${{o.move}}: ${{(o.winrate * 100).toFixed(1)}}%</div>`
-  );
-  div.innerHTML = `<strong>${{playerToMove}} to play</strong><br/>${{lines.join('')}}`;
+     if(currentMove === 0) {{
+     div.innerHTML = '<em>No move played yet</em>';
+     return;
+   }}
+   
+   if(opts.length === 0) {{
+     div.innerHTML = '<em>No AI suggestions available for this position</em>';
+     return;
+   }}
+   
+       // The player who was to move at the previous position (before current move was played)
+    const playerWhoMoved = (currentMove - 1) % 2 === 0 ? 'Black' : 'White';
+    const lines = opts.map(o => 
+      `<div class="policy-move">${{o.move}}: ${{(o.winrate * 100).toFixed(1)}}%</div>`
+    );
+    // Display move number as 1-indexed (currentMove is already the human-readable move number)
+    div.innerHTML = `<strong>AI suggestions for ${{playerWhoMoved}} at move ${{currentMove}}</strong><br/>${{lines.join('')}}`;
 }}
 
 document.getElementById('tag_form').addEventListener('change', e => {{
