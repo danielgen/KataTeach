@@ -30,35 +30,30 @@ def load_tags(ontology_path: Path) -> tuple[Sequence[str], Sequence[str]]:
 
 
 def build_label_page(
-    sgf_path: Path,
+    combined_data_path: Path,
     html_path: Path,
     ontology_path: Path,
-    policy_path: Path | None = None,
 ) -> None:
-    """Create an interactive labeling web page for ``sgf_path``.
+    """Create an interactive labeling web page from combined SGF+policy data.
 
     Parameters
     ----------
-    sgf_path:
-        Input SGF game record.
+    combined_data_path:
+        JSON file containing both SGF data and policy suggestions.
+        Expected format: {"sgf": "...", "policy": {...}}
     html_path:
         Destination HTML file.
     ontology_path:
         Path to the ontology YAML used for tag definitions.
-    policy_path:
-        Optional JSON file containing pre-computed policy suggestions for
-        each move.  The file should map move indices to lists of objects
-        with ``move`` and ``winrate`` fields.
     """
 
-    sgf_text = sgf_path.read_text(encoding="utf-8")
+    # Load combined data
+    with combined_data_path.open("r", encoding="utf-8") as f:
+        combined_data = json.load(f)
+    
+    sgf_text = combined_data.get("sgf", "")
+    policy: Mapping[str, object] = combined_data.get("policy", {})
     global_tags, spatial_tags = load_tags(ontology_path)
-
-    policy: Mapping[str, object]
-    if policy_path is not None and policy_path.exists():
-        policy = json.loads(policy_path.read_text(encoding="utf-8"))
-    else:
-        policy = {}
 
     sgf_js = json.dumps(sgf_text)
     globals_js = json.dumps(list(global_tags))
@@ -72,20 +67,120 @@ def build_label_page(
 <title>Go Position Labeler</title>
 <script src='wgo.min.js'></script>
 <style>
-  #board {{ width: 400px; margin-bottom: 10px; }}
+  body {{ margin: 20px; font-family: Arial, sans-serif; }}
+  .container {{ display: flex; gap: 20px; max-width: 100%; }}
+  .board-section {{ flex: 0 0 520px; }}
+  .controls-section {{ flex: 1; min-width: 300px; }}
+  #board {{ width: 480px; height: 480px; }}
+  .game-info {{ 
+    background: #f9f9f9; 
+    padding: 8px; 
+    border-radius: 5px; 
+    margin-bottom: 10px;
+    font-size: 14px;
+    border: 1px solid #ddd;
+  }}
+  .player-names {{ 
+    display: flex; 
+    justify-content: space-between; 
+    margin-bottom: 5px;
+  }}
+  .player-black {{ font-weight: bold; }}
+  .player-white {{ font-weight: bold; }}
+  .navigation {{ 
+    margin: 10px 0; 
+    text-align: center;
+    padding: 10px;
+    background: #f5f5f5;
+    border-radius: 5px;
+  }}
+  .nav-button {{ 
+    padding: 8px 16px; 
+    margin: 0 5px; 
+    background: #007bff; 
+    color: white; 
+    border: none; 
+    border-radius: 3px; 
+    cursor: pointer;
+  }}
+  .nav-button:hover {{ background: #0056b3; }}
+  .move-counter {{ 
+    display: inline-block; 
+    margin: 0 10px; 
+    font-weight: bold; 
+    font-size: 16px;
+  }}
   .tag-block {{ margin: 5px 0; }}
+  .policy-info {{ 
+    background: #f5f5f5; 
+    padding: 10px; 
+    border-radius: 5px; 
+    margin: 10px 0;
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+  }}
+  .policy-move {{ 
+    margin: 2px 0; 
+    padding: 4px 8px; 
+    background: white; 
+    border-radius: 3px;
+    font-size: 13px;
+    border-left: 3px solid #007bff;
+  }}
+  h3 {{ margin-top: 20px; margin-bottom: 10px; }}
+  h4 {{ margin: 10px 0 5px 0; color: #333; }}
+  
+  /* Hide WGo.js default controls that appear at bottom */
+  .wgo-player-wrapper .wgo-player-control {{ display: none !important; }}
+  .wgo-player-wrapper .wgo-comments {{ display: none !important; }}
+  .wgo-player-wrapper .wgo-info {{ display: none !important; }}
+  .wgo-player-wrapper .wgo-infobox {{ display: none !important; }}
+  
+  /* Hide WGo.js player name boxes that push the board down */
+  .wgo-player__box.wgo-player__player-tag {{ display: none !important; }}
+  .wgo-player__player-tag {{ display: none !important; }}
+  
+  /* Style our custom board container */
+  #board {{ 
+    border: 2px solid #333; 
+    border-radius: 5px; 
+    overflow: hidden;
+    box-sizing: border-box;
+  }}
+  
+  /* Ensure board container doesn't overflow */
+  .board-section {{
+    overflow: hidden;
+  }}
 </style>
 </head>
 <body>
-<div id='board'></div>
-<div>
-  <button id='prev'>Prev</button>
-  <span id='move_idx'>0</span>
-  <button id='next'>Next</button>
+<div class='container'>
+  <div class='board-section'>
+    <div class='game-info'>
+      <div class='player-names'>
+        <span class='player-black'>⚫ <span id='black-player'></span></span>
+        <span class='player-white'>⚪ <span id='white-player'></span></span>
+      </div>
+      <div>Game: <span id='game-info'>Loading...</span></div>
+    </div>
+    <div id='board'></div>
+    <div class='navigation'>
+      <button id='prev' class='nav-button'>← Prev</button>
+      <span class='move-counter'>Move <span id='move_idx'>0</span></span>
+      <button id='next' class='nav-button'>Next →</button>
+    </div>
+    <div class='policy-info'>
+      <h4>AI Suggestions</h4>
+      <div id='policy_suggestions'></div>
+    </div>
+  </div>
+  <div class='controls-section'>
+    <form id='tag_form'></form>
+    <button id='export'>Export Labels</button>
+  </div>
 </div>
-<form id='tag_form'></form>
-<div id='policy_suggestions'></div>
-<button id='export'>Export Labels</button>
 <script>
 const SGF = {sgf_js};
 const GLOBAL_TAGS = {globals_js};
@@ -95,6 +190,66 @@ let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF 
 let currentMove = 0;
 let labels = {{}};  // move index -> tag mapping
 let selectedSpatial = null;
+
+// Extract game info from SGF
+function initGameInfo() {{
+  try {{
+    let sgfRoot = null;
+    
+    // Try different ways to access SGF info - WGo SimplePlayer structure
+    if(player.rootNode && player.rootNode.properties) {{
+      sgfRoot = player.rootNode.properties;
+    }} else if(player.game && player.game.root && player.game.root.properties) {{
+      sgfRoot = player.game.root.properties;
+    }} else if(player.rootNode) {{
+      sgfRoot = player.rootNode;
+    }} else {{
+      console.log('Could not find SGF root info, using defaults');
+    }}
+    
+    console.log('SGF Root found:', sgfRoot);
+    
+    // Extract player names - try multiple formats
+    let blackPlayer = 'Black';
+    let whitePlayer = 'White';
+    let gameDate = '';
+    let result = '';
+    
+    if(sgfRoot) {{
+      // Try array format first [SGF standard]
+      if(sgfRoot.PB && Array.isArray(sgfRoot.PB)) blackPlayer = sgfRoot.PB[0];
+      else if(sgfRoot.PB) blackPlayer = sgfRoot.PB;
+      
+      if(sgfRoot.PW && Array.isArray(sgfRoot.PW)) whitePlayer = sgfRoot.PW[0];
+      else if(sgfRoot.PW) whitePlayer = sgfRoot.PW;
+      
+      if(sgfRoot.DT && Array.isArray(sgfRoot.DT)) gameDate = sgfRoot.DT[0];
+      else if(sgfRoot.DT) gameDate = sgfRoot.DT;
+      
+      if(sgfRoot.RE && Array.isArray(sgfRoot.RE)) result = sgfRoot.RE[0];
+      else if(sgfRoot.RE) result = sgfRoot.RE;
+    }}
+    
+    // Fallback: extract from raw SGF string if properties didn't work
+    if(blackPlayer === 'Black' || whitePlayer === 'White') {{
+      const pbMatch = SGF.match(/PB\\[([^\\]]*)\\]/);
+      const pwMatch = SGF.match(/PW\\[([^\\]]*)\\]/);
+      if(pbMatch && pbMatch[1]) blackPlayer = pbMatch[1];
+      if(pwMatch && pwMatch[1]) whitePlayer = pwMatch[1];
+    }}
+    
+    console.log('Final extracted names:', blackPlayer, whitePlayer);
+    
+    document.getElementById('black-player').textContent = blackPlayer || 'Black';
+    document.getElementById('white-player').textContent = whitePlayer || 'White';
+    document.getElementById('game-info').textContent = gameDate + (result ? ' • ' + result : '');
+  }} catch(e) {{
+    console.error('Error initializing game info:', e);
+    document.getElementById('black-player').textContent = 'Black';
+    document.getElementById('white-player').textContent = 'White';
+    document.getElementById('game-info').textContent = 'Game loaded';
+  }}
+}}
 
 function renderForm() {{
   const form = document.getElementById('tag_form');
@@ -113,27 +268,329 @@ function renderForm() {{
 }}
 
 function renderMarkers() {{
-  if(player.board && player.board.removeAllObjects) {{
-    player.board.removeAllObjects();
+  // Access board through SimplePlayer structure - try multiple ways
+  let board = null;
+  
+  // Try different ways to access the board
+  if(player.components && player.components.get) {{
+    // components is a Map, get the board container
+    const boardElement = document.getElementById('board');
+    const container = player.components.get(boardElement);
+    console.log('Board from components Map:', container);
+    
+    // Based on the structure we can see, try to get SVGBoardComponent directly
+    if(container && container.children && container.children[1] && container.children[1].children) {{
+      const svgBoardComponent = container.children[1].children[0];
+      console.log('Direct access to SVGBoardComponent:', svgBoardComponent);
+      if(svgBoardComponent && svgBoardComponent.board) {{
+        console.log('Direct access to SVGBoard:', svgBoardComponent.board);
+        board = svgBoardComponent.board;
+      }}
+    }}
+    
+    if(!board) {{
+      board = container;
+    }}
+  }}
+  
+  if(!board && player.board) {{
+    board = player.board;
+    console.log('Board from player.board:', board);
+  }}
+  
+  if(!board && player.components && player.components.board) {{
+    board = player.components.board;
+    console.log('Board from player.components.board:', board);
+  }}
+  
+  console.log('Final board object:', board);
+  console.log('Board methods available:', board ? Object.getOwnPropertyNames(board) : 'No board');
+  
+  // If we found a Container, search through its children for the board component
+  if(board && board.children && Array.isArray(board.children)) {{
+    console.log('Container children:', board.children);
+    
+    // Look for a child that has board methods
+    for(let child of board.children) {{
+      console.log('Checking child:', child);
+      console.log('Child methods:', child ? Object.getOwnPropertyNames(child) : 'No child');
+      
+      if(child && child.removeAllObjects) {{
+        console.log('Found board in child:', child);
+        board = child;
+        break;
+      }}
+      
+      // Also check if child has a board property
+      if(child && child.board && child.board.removeAllObjects) {{
+        console.log('Found board in child.board:', child.board);
+        board = child.board;
+        break;
+      }}
+      
+      // Check if this is a ResponsiveComponent with a component property
+      if(child && child.component) {{
+        console.log('Checking child.component:', child.component);
+        if(child.component.removeAllObjects) {{
+          console.log('Found board in child.component:', child.component);
+          board = child.component;
+          break;
+        }}
+        
+        // If component is a Container, check its children too
+        if(child.component.children && Array.isArray(child.component.children)) {{
+          console.log('Checking nested container children:', child.component.children);
+          for(let nestedChild of child.component.children) {{
+            console.log('Nested child:', nestedChild);
+            console.log('Nested child type:', nestedChild.constructor.name);
+            
+            if(nestedChild && nestedChild.removeAllObjects) {{
+              console.log('Found board in nested child:', nestedChild);
+              board = nestedChild;
+              break;
+            }}
+            
+            // Check for SVGBoardComponent which has a board property
+            if(nestedChild && nestedChild.constructor && nestedChild.constructor.name === 'SVGBoardComponent') {{
+              console.log('Found SVGBoardComponent, checking its board property:', nestedChild.board);
+              if(nestedChild.board) {{
+                console.log('SVGBoard object:', nestedChild.board);
+                console.log('SVGBoard methods:', Object.getOwnPropertyNames(nestedChild.board));
+                board = nestedChild.board;
+                break;
+              }}
+            }}
+            
+            // Also check nested child's board property
+            if(nestedChild && nestedChild.board && nestedChild.board.removeAllObjects) {{
+              console.log('Found board in nested child.board:', nestedChild.board);
+              board = nestedChild.board;
+              break;
+            }}
+          }}
+          if(board && board.removeAllObjects) break; // Exit outer loop if found
+        }}
+      }}
+    }}
+  }}
+  
+  // If we found a Container, try to access its board
+  if(board && !board.removeAllObjects && board.board) {{
+    console.log('Trying board.board:', board.board);
+    board = board.board;
+  }}
+  
+  // Also try accessing through getBoard method if it exists
+  if(board && !board.removeAllObjects && board.getBoard) {{
+    console.log('Trying board.getBoard():', board.getBoard());
+    board = board.getBoard();
+  }}
+  
+  // If we still haven't found the board, do a recursive search
+  if(!board || !board.removeAllObjects) {{
+    console.log('Board not found yet, doing recursive search...');
+    
+    function findBoardRecursively(obj, path = '') {{
+      if(!obj) return null;
+      
+      // Check if this object is the board we want
+      if(obj.removeAllObjects && obj.addObject) {{
+        console.log('Found board at path:', path, obj);
+        return obj;
+      }}
+      
+      // Check if this is SVGBoardComponent
+      if(obj.constructor && obj.constructor.name === 'SVGBoardComponent') {{
+        console.log('Found SVGBoardComponent at path:', path, obj);
+        if(obj.board && obj.board.removeAllObjects) {{
+          console.log('Found board in SVGBoardComponent.board:', obj.board);
+          return obj.board;
+        }}
+      }}
+      
+      // Recursively search common properties
+      const propsToSearch = ['board', 'component', 'children', 'components'];
+      for(let prop of propsToSearch) {{
+        if(obj[prop]) {{
+          if(Array.isArray(obj[prop])) {{
+            for(let i = 0; i < obj[prop].length; i++) {{
+              const result = findBoardRecursively(obj[prop][i], path + '.' + prop + '[' + i + ']');
+              if(result) return result;
+            }}
+          }} else {{
+            const result = findBoardRecursively(obj[prop], path + '.' + prop);
+            if(result) return result;
+          }}
+        }}
+      }}
+      
+      return null;
+    }}
+    
+    const foundBoard = findBoardRecursively(player, 'player');
+    if(foundBoard) {{
+      board = foundBoard;
+      console.log('Recursively found board:', board);
+    }}
+  }}
+  
+  console.log('Final resolved board:', board);
+  if(board) {{
+    console.log('Board methods:', Object.getOwnPropertyNames(board));
+    console.log('Board config:', board.config);
+    console.log('Board size/dimensions:', {{ width: board.width, height: board.height, size: board.size }});
+  }}
+  
+  if(board && board.removeAllObjects) {{
+    board.removeAllObjects();
+    
+    // Render user tags
     const tags = labels[currentMove] || {{}};
     Object.keys(tags).forEach(tag => {{
       const pts = tags[tag];
       if(Array.isArray(pts)) {{
-        pts.forEach(pt => player.board.addObject({{ x: pt[0], y: pt[1], type: 'MA' }}));
+        pts.forEach(pt => board.addObject({{ x: pt[0], y: pt[1], type: 'MA' }}));
       }}
     }});
+    
+    // Render policy suggestions as circles
+    const policyMoves = POLICY[currentMove] || [];
+    console.log('Rendering', policyMoves.length, 'policy moves for position', currentMove);
+    
+    if(policyMoves.length > 0) {{
+      const playerToMove = currentMove % 2 === 0 ? 'black' : 'white';
+      console.log('Player to move:', playerToMove);
+      
+      policyMoves.forEach((move, index) => {{
+        const coord = sgfToCoord(move.move);
+        
+        if(coord && typeof coord.x === 'number' && typeof coord.y === 'number' && 
+           coord.x >= 0 && coord.x < 19 && coord.y >= 0 && coord.y < 19) {{
+          try {{
+            
+                        // Add policy move marker - use simple approach
+            const winrateText = (move.winrate * 100).toFixed(0);
+            
+            // Try SGF coordinate format instead of grid coordinates
+            console.log('Grid coords:', coord.x, coord.y);
+            
+            // Convert back to SGF format (a-s)
+            const sgfX = String.fromCharCode('a'.charCodeAt(0) + coord.x);
+            const sgfY = String.fromCharCode('a'.charCodeAt(0) + coord.y);
+            const sgfPos = sgfX + sgfY;
+            console.log('SGF position:', sgfPos);
+            
+            // Try different ways to add the object
+            console.log('Trying to add object with different formats...');
+            
+            // Method 1: Standard WGo object format
+            const wgoObject = {{
+              x: coord.x,
+              y: coord.y,
+              type: 'LB',
+              text: winrateText
+            }};
+            console.log('Adding WGo object:', wgoObject);
+            board.addObject(wgoObject);
+            
+            // Method 2: Try with position property instead
+            try {{
+              const posObject = {{
+                position: {{ x: coord.x, y: coord.y }},
+                type: 'LB', 
+                text: winrateText
+              }};
+              console.log('Trying position format:', posObject);
+              board.addObject(posObject);
+            }} catch(e) {{
+              console.log('Position format failed:', e.message);
+            }}
+            
+            // Method 3: Check if board has different methods
+            if(board.setObjectAt) {{
+              console.log('Using setObjectAt method');
+              board.setObjectAt(coord.x, coord.y, {{ type: 'LB', text: winrateText }});
+            }}
+            
+            console.log('Added policy move at', coord.x, coord.y, 'with winrate', winrateText + '%');
+          }} catch(e) {{
+            console.error('Error adding board object:', e);
+            console.error('Board object at error:', board);
+            console.error('Board addObject method:', typeof board.addObject);
+          }}
+        }} else {{
+          console.error('Invalid coordinates for move:', move.move, coord);
+        }}
+      }});
+    }} else {{
+      console.log('No policy moves to render for position', currentMove);
+    }}
+  }} else {{
+    console.error('Board object not found or missing removeAllObjects method');
+    console.error('Player structure:', player);
   }}
+}}
+
+function sgfToCoord(moveString) {{
+  if(!moveString || moveString === 'pass') {{
+    console.log('Skipping move:', moveString);
+    return null;
+  }}
+  
+  console.log('Converting move string:', moveString);
+  
+  // Handle SGF coordinates like 'pd', 'dp', etc. (lowercase letters)
+  if(moveString.length === 2 && /^[a-s][a-s]$/.test(moveString)) {{
+    const x = moveString.charCodeAt(0) - 'a'.charCodeAt(0);
+    const y = moveString.charCodeAt(1) - 'a'.charCodeAt(0);
+    console.log(`SGF format ${{moveString}}: x=${{x}}, y=${{y}}`);
+    return {{ x: x, y: y }};
+  }}
+  
+  // Handle human coordinates like 'C16', 'D4', 'P16', etc.
+  const match = moveString.match(/^([A-HJ-T])(\\d+)$/);
+  if(match) {{
+    const letter = match[1];
+    const number = parseInt(match[2], 10);
+    
+    // Convert letter to x coordinate (A=0, B=1, ..., H=7, J=8, ..., T=18)
+    let x = letter.charCodeAt(0) - 'A'.charCodeAt(0);
+    if(x >= 8) x--; // Skip 'I' in Go notation
+    
+    // Convert number to y coordinate (1=18, 2=17, ..., 19=0)
+    const y = 19 - number;
+    
+    console.log(`Human format ${{moveString}}: letter=${{letter}}, number=${{number}}, x=${{x}}, y=${{y}}`);
+    
+    // Validate the coordinates
+    if(isNaN(x) || isNaN(y) || x < 0 || x >= 19 || y < 0 || y >= 19) {{
+      console.error(`Invalid coordinates generated: x=${{x}}, y=${{y}} from ${{moveString}}`);
+      return null;
+    }}
+    
+    return {{ x: x, y: y }};
+  }}
+  
+  console.error('Failed to parse move:', moveString);
+  return null;
 }}
 
 function renderPolicy() {{
   const div = document.getElementById('policy_suggestions');
   const opts = POLICY[currentMove] || [];
+  
+  console.log('Current move:', currentMove, 'Policy data:', opts);
+  
   if(opts.length === 0) {{
-    div.textContent = '';
+    div.innerHTML = '<em>No AI suggestions for this position</em>';
     return;
   }}
-  const lines = opts.map(o => `${{o.move}} (${{(o.winrate * 100).toFixed(1)}}%)`);
-  div.innerHTML = '<h3>Top policy moves</h3>' + lines.join('<br/>');
+  
+  const playerToMove = currentMove % 2 === 0 ? 'Black' : 'White';
+  const lines = opts.map(o => 
+    `<div class="policy-move">${{o.move}}: ${{(o.winrate * 100).toFixed(1)}}%</div>`
+  );
+  div.innerHTML = `<strong>${{playerToMove}} to play</strong><br/>${{lines.join('')}}`;
 }}
 
 document.getElementById('tag_form').addEventListener('change', e => {{
@@ -146,8 +603,10 @@ document.getElementById('tag_form').addEventListener('change', e => {{
   }}
 }});
 
-if(player.board && player.board.addEventListener) {{
-  player.board.addEventListener('click', (x, y) => {{
+// Set up click handler for the board
+const board = player.board || (player.components && player.components.board);
+if(board && board.addEventListener) {{
+  board.addEventListener('click', (x, y) => {{
     if(selectedSpatial === null) return;
     labels[currentMove] = labels[currentMove] || {{}};
     labels[currentMove][selectedSpatial] = labels[currentMove][selectedSpatial] || [];
@@ -162,13 +621,58 @@ function updateMoveDisplay() {{
 }}
 
 function gotoMove(idx) {{
-  if(idx < 0 || idx >= player.kifu.nodes.length) return;
-  while(currentMove < idx) {{ player.next(); currentMove++; }}
-  while(currentMove > idx) {{ player.previous(); currentMove--; }}
-  updateMoveDisplay();
-  renderForm();
-  renderMarkers();
-  renderPolicy();
+  try {{
+    // For SimplePlayer, count moves by traversing the game tree
+    let totalMoves = 0;
+    if(player.game && player.game.size) {{
+      totalMoves = player.game.size;
+    }} else {{
+      // Count moves by traversing from root
+      let node = player.rootNode;
+      while(node && node.children && node.children.length > 0) {{
+        totalMoves++;
+        node = node.children[0];
+      }}
+    }}
+    
+    console.log('Navigating to move', idx, 'out of', totalMoves, 'total moves');
+    
+    if(idx < 0) {{
+      console.log('Move index too low');
+      return;
+    }}
+    
+    // Navigate to the target move using SimplePlayer methods
+    if(idx > currentMove) {{
+      // Move forward
+      for(let i = currentMove; i < idx; i++) {{
+        if(player.next && typeof player.next === 'function') {{
+          player.next();
+          currentMove++;
+        }} else {{
+          break;
+        }}
+      }}
+    }} else if(idx < currentMove) {{
+      // Move backward  
+      for(let i = currentMove; i > idx; i--) {{
+        if(player.previous && typeof player.previous === 'function') {{
+          player.previous();
+          currentMove--;
+        }} else {{
+          break;
+        }}
+      }}
+    }}
+    
+    console.log('Navigated to move', currentMove);
+    updateMoveDisplay();
+    renderForm();
+    renderPolicy();
+    renderMarkers(); // Call this after renderPolicy to ensure markers are on top
+  }} catch(e) {{
+    console.error('Error in gotoMove:', e);
+  }}
 }}
 
 document.getElementById('next').onclick = () => gotoMove(currentMove + 1);
@@ -182,9 +686,17 @@ document.getElementById('export').onclick = () => {{
   a.click();
 }};
 
+console.log('Player object:', player);
+console.log('Player kifu:', player.kifu);
+console.log('Player available methods:', Object.getOwnPropertyNames(player));
+if(player.kifu) {{
+  console.log('Kifu structure:', Object.getOwnPropertyNames(player.kifu));
+}}
+initGameInfo();
 renderForm();
 updateMoveDisplay();
 renderPolicy();
+renderMarkers();
 </script>
 </body>
 </html>
@@ -195,7 +707,7 @@ renderPolicy();
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build SGF labeling web page")
-    parser.add_argument("sgf", type=Path, help="Input SGF file")
+    parser.add_argument("combined_data", type=Path, help="Combined JSON file with SGF and policy data")
     parser.add_argument("html", type=Path, help="Output HTML file")
     parser.add_argument(
         "--ontology",
@@ -203,15 +715,11 @@ def main() -> None:
         default=Path(__file__).parent.parent / "configs" / "ontology.yaml",
         help="Ontology YAML path",
     )
-    parser.add_argument(
-        "--policy",
-        type=Path,
-        default=None,
-        help="Optional JSON file with policy suggestions",
-    )
     args = parser.parse_args()
-    build_label_page(args.sgf, args.html, args.ontology, args.policy)
+    build_label_page(args.combined_data, args.html, args.ontology)
 
 
 if __name__ == "__main__":
     main()
+    #python label_page.py D:\KataGo\daniele_experiment\games\policy\[a531233903]vs[danielgen]1737762562030002806.json test_out.html
+    
