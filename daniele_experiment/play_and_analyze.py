@@ -440,14 +440,17 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  # Play and analyze 5 new games with custom settings
+  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 5 --output-dir my_games --board-size 13 --prob-threshold 0.02
+
   # Play and analyze 5 new games
-  python play_and_analyze.py model.ckpt 5
+  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 5 --prob-threshold 0.05
   
   # Play games with custom settings
-  python play_and_analyze.py model.ckpt 3 --output-dir my_games --board-size 13 --prob-threshold 0.02
+  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 3 --output-dir my_games --board-size 13 --prob-threshold 0.02
   
   # Use CPU instead of GPU
-  python play_and_analyze.py model.ckpt 2 --device cpu
+  python play_and_analyze.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 2 --device cpu
         """
     )
     
@@ -463,7 +466,7 @@ Examples:
                        help="Probability threshold for move sampling (default: 0.01 = 1%%)")
     parser.add_argument("--analysis-threshold", type=float, default=-0.005,
                        help="Winrate drop threshold for policy analysis (default: -0.005)")
-    parser.add_argument("--katago-binary", type=Path, default="katago",
+    parser.add_argument("--katago-binary", type=Path, default="D:/KataGo/bin/katago.exe",
                        help="Path to KataGo analysis binary (default: katago)")
     parser.add_argument("--katago-config", type=Path,
                        default=Path("cpp/configs/analysis_example.cfg"),
