@@ -1,13 +1,23 @@
 tags:
-  - {name: tenuki_ok,              type: global,  desc: "Local urgency low; safe to play elsewhere"}
-  - {name: urgent_local,           type: global,  desc: "Local response required"}
-  - {name: invasion_viable,        type: spatial, desc: "Inside enemy sphere can live/reduce", mask: true}
-  - {name: sabaki_required,        type: spatial, desc: "If invading, needs light shape"}
-  - {name: reduction_preferred,    type: spatial, desc: "Should reduce from outside"}
-  - {name: cut_available,          type: spatial, desc: "Cut threatens to separate groups"}
-  - {name: ladder_works,           type: spatial, desc: "Ladder capture succeeds"}
-  - {name: ladder_fails,           type: spatial, desc: "Ladder escape works"}
-  - {name: base_weak,              type: spatial, desc: "Group lacks base/eyespace"}
-  - {name: aji_present,            type: spatial, desc: "Residual forcing potential"}
-  - {name: big_point_corner,       type: spatial, desc: "Large-point move near a corner"}
-  - {name: sente_line,             type: spatial, desc: "Follow-up opponent must answer"}
+  global:
+    - {name: tenuki_ok,           desc: "Local urgency low; safe to play elsewhere"}
+    - {name: urgent_local,        desc: "Local response required"}
+    - {name: game_stage_opening,  desc: "Early game; board mostly empty"}
+    - {name: game_stage_endgame,  desc: "Late game; yose and counting dominate"}
+  strategic:
+    - {name: invasion_viable,     desc: "Inside enemy sphere can live/reduce", mask: true}
+    - {name: reduction_preferred, desc: "Should reduce from outside"}
+    - {name: big_point_corner,    desc: "Large-point move near a corner"}
+    - {name: sente_line,          desc: "Follow-up opponent must answer"}
+  shape:
+    - {name: sabaki_required,     desc: "If invading, needs light shape"}
+    - {name: base_weak,           desc: "Group lacks base/eyespace"}
+    - {name: aji_present,         desc: "Residual forcing potential"}
+  tactical:
+    - {name: cut_available,       desc: "Cut threatens to separate groups"}
+    - {name: ladder_works,        desc: "Ladder capture succeeds"}
+    - {name: ladder_fails,        desc: "Ladder escape works"}
+    - {name: atari_available,     desc: "Immediate atari can be played"}
+    - {name: connection_required, desc: "Connection move needed to prevent separation"}
+    - {name: ko_threat,           desc: "Move threatens to win ko if ignored"}
+    - {name: capture_race,        desc: "Liberty race determining life"}
