@@ -65,7 +65,7 @@ def build_label_page(
 <head>
 <meta charset='utf-8' />
 <title>Go Position Labeler</title>
-<script src='wgo.min.js'></script>
+<script src='web/wgo.min.js'></script>
 <style>
   body {{ margin: 20px; font-family: Arial, sans-serif; }}
   .container {{ display: flex; gap: 20px; max-width: 100%; }}
@@ -152,6 +152,14 @@ def build_label_page(
   /* Ensure board container doesn't overflow */
   .board-section {{
     overflow: hidden;
+  }}
+  
+  /* Style only policy move labels to be red - more targeted approach */
+  .policy-label {{
+    fill: red !important;
+    color: red !important;
+    font-weight: bold !important;
+    font-size: 1px !important;
   }}
 </style>
 </head>
@@ -529,84 +537,34 @@ function renderMarkers() {{
            coord.x >= 0 && coord.x < 19 && coord.y >= 0 && coord.y < 19) {{
           try {{
             
-                        // Add policy move marker - use simple approach
+            // Add policy move marker with red styling
             const winrateText = (move.winrate * 100).toFixed(0);
+            console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText);
             
-            // Try SGF coordinate format instead of grid coordinates
-            console.log('Grid coords:', coord.x, coord.y);
+            // Create label object
+            const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
             
-            // Convert back to SGF format (a-s)
-            const sgfX = String.fromCharCode('a'.charCodeAt(0) + coord.x);
-            const sgfY = String.fromCharCode('a'.charCodeAt(0) + coord.y);
-            const sgfPos = sgfX + sgfY;
-            console.log('SGF position:', sgfPos);
+            // Mark this as a policy label so we can style it differently
+            labelObj.isPolicyLabel = true;
             
-            // Try different ways to add the object
-            console.log('Trying to add object with different formats...');
+            board.addObject(labelObj);
             
-            // Try different parameter orders for WGo.LabelBoardObject
-            console.log('Trying to create label at:', coord.x, coord.y, 'with text:', winrateText);
+                         // Apply red styling after the object is added to the DOM
+             setTimeout(() => {{
+               const boardElement = document.getElementById('board');
+               const textElements = boardElement.querySelectorAll('text');
+               textElements.forEach(textEl => {{
+                 // Only style text elements that contain our winrate numbers
+                 if(textEl.textContent === winrateText) {{
+                   textEl.style.fill = 'red';
+                   textEl.style.fontWeight = 'bold';
+                   textEl.style.fontSize = '10px';
+                   textEl.classList.add('policy-label');
+                 }}
+               }});
+             }}, 50);
             
-                         // Create label with red color - try multiple approaches
-             console.log('Attempting to create red label at:', coord.x, coord.y, 'with text:', winrateText);
-             
-             // Approach 1: Try with color parameter in constructor
-             let labelObj;
-             try {{
-               // Some WGo.js versions might accept color in constructor
-               labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y, {{ color: 'red', textColor: 'red' }});
-               console.log('Created label with color parameter');
-             }} catch(e) {{
-               console.log('Constructor with color failed, trying basic constructor');
-               labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
-             }}
-             
-             // Approach 2: Set color properties after creation
-             if(labelObj) {{
-               // Try all possible color properties
-               labelObj.color = 'red';
-               labelObj.textColor = 'red';
-               labelObj.fill = 'red';
-               labelObj.stroke = 'red';
-               
-               // Try setting font color
-               if(labelObj.font) {{
-                 labelObj.font.color = 'red';
-                 labelObj.font.fill = 'red';
-               }}
-               
-               console.log('Label object created:', labelObj);
-               console.log('Available properties:', Object.getOwnPropertyNames(labelObj));
-               
-               // Add the object to board
-               board.addObject(labelObj);
-               console.log('Added red label to board');
-             }}
-             
-             // Approach 3: If standard approach doesn't work, try creating a custom object
-             if(!labelObj || (labelObj.color !== 'red' && labelObj.textColor !== 'red')) {{
-               console.log('Standard red label failed, trying custom approach');
-               
-               // Create a custom red label object
-               const customLabel = {{
-                 type: 'LB',
-                 x: coord.x,
-                 y: coord.y,
-                 text: winrateText,
-                 color: 'red',
-                 textColor: 'red',
-                 fill: 'red',
-                 stroke: 'red'
-               }};
-               
-               try {{
-                 board.addObject(customLabel);
-                 console.log('Added custom red label');
-               }} catch(e) {{
-                 console.error('Custom label also failed:', e);
-               }}
-             }}
-            console.log('Successfully added label at', coord.x, coord.y);
+            console.log('Successfully added red label at', coord.x, coord.y);
             
 
             
