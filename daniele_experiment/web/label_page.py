@@ -24,8 +24,18 @@ def load_tags(ontology_path: Path) -> tuple[Sequence[str], Sequence[str]]:
     """Return lists of global and spatial tag names from the ontology."""
     with ontology_path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    global_tags = [t["name"] for t in data.get("tags", []) if t.get("type") == "global"]
-    spatial_tags = [t["name"] for t in data.get("tags", []) if t.get("type") == "spatial"]
+    
+    # Handle new ontology structure with categories
+    tags_data = data.get("tags", {})
+    
+    # Global tags are in the "global" category
+    global_tags = [t["name"] for t in tags_data.get("global", [])]
+    
+    # Spatial tags are all non-global categories (strategic, shape, tactical)
+    spatial_tags = []
+    for category in ["strategic", "shape", "tactical"]:
+        spatial_tags.extend([t["name"] for t in tags_data.get(category, [])])
+    
     return global_tags, spatial_tags
 
 

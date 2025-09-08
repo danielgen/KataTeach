@@ -2,22 +2,51 @@ tags:
   global:
     - {name: tenuki_ok,           desc: "Local urgency low; safe to play elsewhere"}
     - {name: urgent_local,        desc: "Local response required"}
-    - {name: game_stage_opening,  desc: "Early game; board mostly empty"}
-    - {name: game_stage_endgame,  desc: "Late game; yose and counting dominate"}
+  initiative:
+    - {name: play_sente,    desc: "Play a sente move"}
+    - {name: take_sente,    desc: "Follow-up opponent must answer"}
+    - {name: play_gote,     desc: "Take points"}
   strategic:
-    - {name: invasion_viable,     desc: "Inside enemy sphere can live/reduce", mask: true}
-    - {name: reduction_preferred, desc: "Should reduce from outside"}
-    - {name: big_point_corner,    desc: "Large-point move near a corner"}
-    - {name: sente_line,          desc: "Follow-up opponent must answer"}
-  shape:
-    - {name: sabaki_required,     desc: "If invading, needs light shape"}
-    - {name: base_weak,           desc: "Group lacks base/eyespace"}
-    - {name: aji_present,         desc: "Residual forcing potential"}
+    - {name: building_viable,     desc: "Building moyo is viable"}
+    - {name: profit_viable,       desc: "Take profit"}
+    - {name: invasion_viable,     desc: "Inside enemy sphere can live/reduce"}
+    - {name: reduction_viable,    desc: "Should reduce from outside"}
+    - {name: fight_viable,        desc: "Starts a fight"}
+    - {name: must_live,           desc: "Safety first"}
   tactical:
+    - {name: approach_opp_corner,    desc: "Large-point move near a corner"}
+    - {name: enclose_own_corner,     desc: "Enclose a corner"}
+    - {name: inside_opp_corner,      desc: "Invade opponent's corner"}
+    - {name: extend_side,            desc: "Extension on the side"}
+    - {name: expand_while_reducing,  desc: "Expand own territory while reducing opponent's"}
+    - {name: connect,                desc: "Connect 2+ groups"}
+    - {name: get_base,               desc: "Get base/make shape for weak group"}
+    - {name: jump_into_center,       desc: "Jump into center with weak group"}
+    - {name: throw_in,            desc: "Throw in center with weak group"}
+    - {name: make_eyes,           desc: "Make eyespace"}
+    - {name: steal_eyes,          desc: "Steal eyespace "}
+    - {name: pincer,              desc: "Pincer attack"}
     - {name: cut_available,       desc: "Cut threatens to separate groups"}
-    - {name: ladder_works,        desc: "Ladder capture succeeds"}
-    - {name: ladder_fails,        desc: "Ladder escape works"}
+    - {name: peep_available,      desc: "Can peep at opp's weakness"}
+    - {name: ladder_present,      desc: "A certain situation depends on ladder"}
     - {name: atari_available,     desc: "Immediate atari can be played"}
-    - {name: connection_required, desc: "Connection move needed to prevent separation"}
     - {name: ko_threat,           desc: "Move threatens to win ko if ignored"}
-    - {name: capture_race,        desc: "Liberty race determining life"}
+    - {name: capture_race,        desc: "Semeai"}
+  location: 
+    - {name: left_side,      desc: "Left side"}
+    - {name: upper_side,     desc: "Upper side"}
+    - {name: right_side,     desc: "Right side"}
+    - {name: lower_side,     desc: "Lower side"}
+    - {name: tl_corner,      desc: "Top left corner"}
+    - {name: tr_corner,      desc: "Top right corner"}
+    - {name: bl_corner,      desc: "Bottom left corner"}
+    - {name: br_corner,      desc: "Bottom right corner"}
+    - {name: center,         desc: "Center"}
+  shape:
+    - {name: lightly,        desc: "Light shape"}
+    - {name: good_shape,     desc: "Play tiger's mouth, table, etc"}
+    - {name: bad_shape,      desc: "Play weak shape move"}
+    - {name: joseki,         desc: "Play joseki"}
+    - {name: hane,           desc: "Hane"}
+    - {name: extension,      desc: "Extend next to stone, horizontally"}
+    - {name: descend,        desc: "Descend/Ascend, vertically"}
