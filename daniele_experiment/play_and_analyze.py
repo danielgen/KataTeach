@@ -30,6 +30,7 @@ sys.path.append(str(Path(__file__).parent.parent / "python"))
 
 from load_model import load_model
 from gamestate import GameState, Board
+import torch
 
 
 MoveInfo = Dict[str, float]
@@ -65,6 +66,75 @@ def loc_to_sgf_coords(loc: int, board: Board) -> str:
     sgf_x = chr(ord('a') + x)
     sgf_y = chr(ord('a') + y)
     return sgf_x + sgf_y
+
+
+def evaluate_moves_batched(gs: GameState, moves: List[int], model) -> List[float]:
+    """Evaluate multiple moves in a batched fashion for better performance.
+    
+    Args:
+        gs: Current game state
+        moves: List of moves to evaluate
+        model: KataGo model
+    
+    Returns:
+        List of winrates for each move from current player's perspective
+    """
+    if not moves:
+        return []
+    
+    # Store original state
+    current_player = gs.board.pla
+    
+    # Prepare batch data
+    batch_states = []
+    valid_moves = []
+    
+    for move in moves:
+        try:
+            # Play the move
+            gs.play(current_player, move)
+            
+            # Get features for this position
+            from features import Features
+            features = Features(model.config, model.pos_len)
+            bin_input_data, global_input_data = gs.get_input_features(features)
+            
+            batch_states.append((bin_input_data, global_input_data))
+            valid_moves.append(move)
+            
+            # Undo to restore original position
+            gs.undo()
+        except:
+            # Skip invalid moves
+            continue
+    
+    if not batch_states:
+        return []
+    
+    # Create batch tensors
+    batch_bin = torch.stack([torch.tensor(bin_data, dtype=torch.float32, device=model.device) 
+                            for bin_data, _ in batch_states])
+    batch_global = torch.stack([torch.tensor(global_data, dtype=torch.float32, device=model.device) 
+                               for _, global_data in batch_states])
+    
+    # Batch evaluation
+    with torch.no_grad():
+        model.eval()
+        model_outputs = model(batch_bin, batch_global)
+        postprocessed = model.postprocess_output(model_outputs)
+        
+        # Extract values (perspective is flipped after playing move)
+        value_logits = postprocessed[0][1]  # [batch_size, 3] for win/loss/draw
+        batch_winrates = []
+        
+        for i in range(len(valid_moves)):
+            # Convert logits to probabilities and get winrate
+            # Since we played a move, perspective flipped - take 1 - opponent_winrate  
+            opponent_winrate = float(torch.softmax(value_logits[i], dim=0)[0])  # Win probability for current player (now opponent)
+            our_winrate = 1.0 - opponent_winrate
+            batch_winrates.append(our_winrate)
+    
+    return batch_winrates
 
 
 def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_threshold: float = 0.01) -> Tuple[int, float, bool]:
@@ -117,7 +187,8 @@ def compute_policy_analysis(
     model,
     *,
     threshold: float = -0.005,
-    verbose: bool = True
+    verbose: bool = True,
+    max_moves_per_position: int = 10
 ) -> PolicyMap:
     """Analyze an SGF game and compute policy suggestions and actual move values.
     
@@ -170,13 +241,13 @@ def compute_policy_analysis(
         # First filter moves by policy probability - only evaluate top moves
         sorted_moves = sorted(moves_probs, key=lambda x: x[1], reverse=True)
         
-        # Take moves that together make up 95% of probability mass
+        # Take moves that together make up 95% of probability mass, but cap at max_moves_per_position
         cumulative_prob = 0.0
         candidate_moves = []
         for mv, prob in sorted_moves:
             candidate_moves.append((mv, prob))
             cumulative_prob += prob
-            if cumulative_prob >= 0.95:
+            if cumulative_prob >= 0.95 or len(candidate_moves) >= max_moves_per_position:
                 break
         
         # Also ensure we always include at least the top 3 moves
@@ -186,28 +257,32 @@ def compute_policy_analysis(
         if verbose:
             print(f"Position {idx}: Evaluating {len(candidate_moves)} out of {len(moves_probs)} legal moves")
         
-        # Evaluate each candidate move by playing it and getting the resulting winrate
-        move_winrates = []
-        current_player = gs.board.pla
+        # Evaluate candidate moves using batched evaluation for better performance
+        candidate_move_locs = [mv for mv, _ in candidate_moves]
+        candidate_probs = {mv: prob for mv, prob in candidate_moves}
         
-        for mv, prob in candidate_moves:
-            # Play the candidate move
-            gs.play(current_player, mv)
+        try:
+            # Use batched evaluation
+            winrates = evaluate_moves_batched(gs, candidate_move_locs, model)
+            move_winrates = [(candidate_move_locs[i], winrates[i]) for i in range(len(winrates))]
+        except Exception as e:
+            if verbose:
+                print(f"Batched evaluation failed, falling back to individual evaluation: {e}")
+            # Fallback to individual evaluation
+            move_winrates = []
+            current_player = gs.board.pla
             
-            # Evaluate the resulting position
-            try:
-                next_outputs = gs.get_model_outputs(model)
-                next_value = next_outputs["value"]
-                # Since we played a move, the perspective flipped - take 1 - opponent_winrate
-                opponent_winrate = float(next_value[0])
-                our_winrate = 1.0 - opponent_winrate
-                move_winrates.append((mv, our_winrate))
-            except:
-                # Fallback to policy probability if evaluation fails
-                move_winrates.append((mv, prob))
-            
-            # Undo the move to restore the original position
-            gs.undo()
+            for mv, prob in candidate_moves:
+                try:
+                    gs.play(current_player, mv)
+                    next_outputs = gs.get_model_outputs(model)
+                    next_value = next_outputs["value"]
+                    opponent_winrate = float(next_value[0])
+                    our_winrate = 1.0 - opponent_winrate
+                    move_winrates.append((mv, our_winrate))
+                    gs.undo()
+                except:
+                    move_winrates.append((mv, prob))  # Fallback to policy probability
         
         # Find best winrate and collect moves within threshold
         position_data = {}
@@ -376,6 +451,7 @@ def play_and_analyze_games(
     board_size: int = 19,
     prob_threshold: float = 0.01,
     analysis_threshold: float = -0.005,
+    max_moves_per_position: int = 10,
 ) -> None:
     """Play N games, save them as SGF files, and analyze them."""
     
@@ -399,7 +475,7 @@ def play_and_analyze_games(
             
             # Analyze the game
             print(f"  Analyzing game {game_id}...")
-            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=False)
+            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=False, max_moves_per_position=max_moves_per_position)
             
             # Save policy analysis
             policy_file = policy_dir / f"{sgf_file.stem}.json"
@@ -442,6 +518,8 @@ Examples:
                        help="Probability threshold for move sampling (default: 0.01 = 1%%)")
     parser.add_argument("--analysis-threshold", type=float, default=-0.005,
                        help="Winrate drop threshold for policy analysis (default: -0.005)")
+    parser.add_argument("--max-moves-per-position", type=int, default=10,
+                       help="Maximum number of moves to analyze per position (default: 10)")
     
     args = parser.parse_args()
     
@@ -463,7 +541,8 @@ Examples:
             output_dir=args.output_dir,
             board_size=args.board_size,
             prob_threshold=args.prob_threshold,
-            analysis_threshold=args.analysis_threshold
+            analysis_threshold=args.analysis_threshold,
+            max_moves_per_position=args.max_moves_per_position
         )
         
     except KeyboardInterrupt:

@@ -20,23 +20,29 @@ from typing import Sequence, Mapping
 import yaml
 
 
-def load_tags(ontology_path: Path) -> tuple[Sequence[str], Sequence[str]]:
-    """Return lists of global and spatial tag names from the ontology."""
+def load_tags(ontology_path: Path) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """Return dictionaries of grouped tag names from the ontology."""
     with ontology_path.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     
     # Handle new ontology structure with categories
     tags_data = data.get("tags", {})
     
-    # Global tags are in the "global" category
-    global_tags = [t["name"] for t in tags_data.get("global", [])]
+    # Global tags grouped by category
+    global_groups = {
+        "global": [t["name"] for t in tags_data.get("global", [])],
+        "initiative": [t["name"] for t in tags_data.get("initiative", [])]
+    }
     
-    # Spatial tags are all non-global categories (strategic, shape, tactical)
-    spatial_tags = []
-    for category in ["strategic", "shape", "tactical"]:
-        spatial_tags.extend([t["name"] for t in tags_data.get(category, [])])
+    # Spatial tags grouped by category
+    spatial_groups = {
+        "strategic": [t["name"] for t in tags_data.get("strategic", [])],
+        "tactical": [t["name"] for t in tags_data.get("tactical", [])],
+        "location": [t["name"] for t in tags_data.get("location", [])],
+        "shape": [t["name"] for t in tags_data.get("shape", [])]
+    }
     
-    return global_tags, spatial_tags
+    return global_groups, spatial_groups
 
 
 def build_label_page(
@@ -63,11 +69,11 @@ def build_label_page(
     
     sgf_text = combined_data.get("sgf", "")
     policy: Mapping[str, object] = combined_data.get("policy", {})
-    global_tags, spatial_tags = load_tags(ontology_path)
+    global_groups, spatial_groups = load_tags(ontology_path)
 
     sgf_js = json.dumps(sgf_text)
-    globals_js = json.dumps(list(global_tags))
-    spatial_js = json.dumps(list(spatial_tags))
+    global_groups_js = json.dumps(global_groups)
+    spatial_groups_js = json.dumps(spatial_groups)
     policy_js = json.dumps(policy)
 
     html = f"""<!DOCTYPE html>
@@ -80,7 +86,78 @@ def build_label_page(
   body {{ margin: 20px; font-family: Arial, sans-serif; }}
   .container {{ display: flex; gap: 20px; max-width: 100%; }}
   .board-section {{ flex: 0 0 520px; }}
-  .controls-section {{ flex: 1; min-width: 300px; }}
+  .controls-section {{ flex: 1; min-width: 500px; }}
+  .labels-container {{ 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    gap: 15px; 
+    margin-bottom: 20px;
+    max-width: 800px;
+  }}
+  .label-column {{ 
+    background: #f8f9fa; 
+    padding: 6px; 
+    border-radius: 6px; 
+    border: 1px solid #dee2e6;
+    max-width: 380px;
+  }}
+  .label-group {{ 
+    margin: 14px 0 10px; 
+  }}
+  .label-group h4 {{ 
+    margin: 8px 0 8px; 
+    color: #495057; 
+    font-size: 12px; 
+    font-weight: bold; 
+    text-transform: uppercase; 
+    border-bottom: 2px solid #007bff; 
+    padding-bottom: 0;
+  }}
+  .label-column .label-group:first-child h4 {{
+    margin-top: 12px;
+  }}
+  .tag-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    row-gap: 5px;
+    column-gap: 6px;
+    align-items: start;
+  }}
+  .tag-block {{ 
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 16px;
+  }}
+  .tag-block label {{ 
+    display: flex; 
+    align-items: center; 
+    padding: 0;
+    margin: 0;
+    line-height: 1.05;
+    height: 16px;
+    min-height: 16px;
+  }}
+  .tag-block input {{ 
+    margin-right: 4px; 
+    flex-shrink: 0;
+    transform: scale(0.85);
+    vertical-align: middle;
+  }}
+  .tag-block .tag-points {{
+    display: inline-block;
+    line-height: 1;
+    font-size: 11px;
+    color: #666;
+    margin-left: 4px;
+  }}
+  .tag-block .tag-points:empty {{
+    display: none;
+  }}
+  .labels-container .tag-block {{ 
+    margin: 0 !important; 
+  }}
   #board {{ width: 480px; height: 480px; }}
   .game-info {{ 
     background: #f9f9f9; 
@@ -135,7 +212,7 @@ def build_label_page(
     padding: 4px 8px; 
     background: white; 
     border-radius: 3px;
-    font-size: 13px;
+    font-size: 12px;
     border-left: 3px solid #007bff;
   }}
   h3 {{ margin-top: 20px; margin-bottom: 10px; }}
@@ -195,19 +272,22 @@ def build_label_page(
     </div>
   </div>
   <div class='controls-section'>
-    <form id='tag_form'></form>
+    <div class='labels-container'>
+      <div class='label-column' id='global_column'></div>
+      <div class='label-column' id='spatial_column'></div>
+    </div>
     <button id='export'>Export Labels</button>
   </div>
 </div>
 <script>
 const SGF = {sgf_js};
-const GLOBAL_TAGS = {globals_js};
-const SPATIAL_TAGS = {spatial_js};
+const GLOBAL_GROUPS = {global_groups_js};
+const SPATIAL_GROUPS = {spatial_groups_js};
 const POLICY = {policy_js};
 let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF }});
 let currentMove = 0;
 let labels = {{}};  // move index -> tag mapping
-let selectedSpatial = null;
+let activeSpatialTags = new Set();  // Set of currently selected spatial tags
 
 // Try to sync with WGo.js player state changes
 function syncPlayerState() {{
@@ -315,18 +395,75 @@ function initGameInfo() {{
 }}
 
 function renderForm() {{
-  const form = document.getElementById('tag_form');
-  form.innerHTML = '';
-  form.innerHTML += '<h3>Global tags</h3>';
-  GLOBAL_TAGS.forEach(tag => {{
-    const checked = labels[currentMove] && labels[currentMove][tag] ? 'checked' : '';
-    form.innerHTML += `<div class="tag-block"><label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label></div>`;
+  const globalColumn = document.getElementById('global_column');
+  const spatialColumn = document.getElementById('spatial_column');
+  
+  // Clear both columns
+  globalColumn.innerHTML = '';
+  spatialColumn.innerHTML = '';
+  
+  // Render global groups (global, initiative, location, shape)
+  Object.entries(GLOBAL_GROUPS).forEach(([groupName, tags]) => {{
+    if (tags.length === 0) return;
+    
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'label-group';
+    groupDiv.innerHTML = `<h4>${{groupName}}</h4><div class="tag-grid"></div>`;
+    
+    const tagGrid = groupDiv.querySelector('.tag-grid');
+    tags.forEach(tag => {{
+      const checked = labels[currentMove] && labels[currentMove][tag] ? 'checked' : '';
+      const tagBlock = document.createElement('div');
+      tagBlock.className = 'tag-block';
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
+      tagGrid.appendChild(tagBlock);
+    }});
+    
+    globalColumn.appendChild(groupDiv);
   }});
-  form.innerHTML += '<h3>Spatial tags</h3>';
-  SPATIAL_TAGS.forEach(tag => {{
-    const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
-    const checked = selectedSpatial === tag ? 'checked' : '';
-    form.innerHTML += `<div class="tag-block"><label><input type="radio" name="spatial" value="${{tag}}" ${{checked}}/> ${{tag}}</label> <span id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span></div>`;
+  
+  // Add location and shape to the left column
+  ['location', 'shape'].forEach(groupName => {{
+    const tags = SPATIAL_GROUPS[groupName] || [];
+    if (tags.length === 0) return;
+    
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'label-group';
+    groupDiv.innerHTML = `<h4>${{groupName}}</h4><div class="tag-grid"></div>`;
+    
+    const tagGrid = groupDiv.querySelector('.tag-grid');
+    tags.forEach(tag => {{
+      const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
+      const checked = labels[currentMove] && labels[currentMove][tag] && labels[currentMove][tag].length > 0 ? 'checked' : '';
+      const tagBlock = document.createElement('div');
+      tagBlock.className = 'tag-block';
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label> <span class="tag-points" id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span>`;
+      tagGrid.appendChild(tagBlock);
+    }});
+    
+    globalColumn.appendChild(groupDiv);
+  }});
+  
+  // Render strategic and tactical groups only
+  ['strategic', 'tactical'].forEach(groupName => {{
+    const tags = SPATIAL_GROUPS[groupName] || [];
+    if (tags.length === 0) return;
+    
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'label-group';
+    groupDiv.innerHTML = `<h4>${{groupName}}</h4><div class="tag-grid"></div>`;
+    
+    const tagGrid = groupDiv.querySelector('.tag-grid');
+    tags.forEach(tag => {{
+      const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
+      const checked = labels[currentMove] && labels[currentMove][tag] && labels[currentMove][tag].length > 0 ? 'checked' : '';
+      const tagBlock = document.createElement('div');
+      tagBlock.className = 'tag-block';
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label> <span class="tag-points" id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span>`;
+      tagGrid.appendChild(tagBlock);
+    }});
+    
+    spatialColumn.appendChild(groupDiv);
   }});
 }}
 
@@ -533,8 +670,10 @@ function renderMarkers() {{
     
          // Render policy suggestions for the position that was just played (not the upcoming move)
      // Show suggestions for the previous move (what AI suggested before this move was played)
-     const policyMoves = currentMove > 0 ? (POLICY[currentMove - 1] || []) : [];
-     console.log('Rendering', policyMoves.length, 'policy moves for position', currentMove > 0 ? currentMove - 1 : 'none');
+     const positionKey = currentMove > 0 ? (currentMove - 1).toString() : null;
+     const positionData = positionKey ? POLICY[positionKey] : null;
+     const policyMoves = positionData && positionData.suggestions ? positionData.suggestions : [];
+     console.log('Rendering', policyMoves.length, 'policy moves for position', positionKey, 'Position data:', positionData);
     
     if(policyMoves.length > 0) {{
       const playerToMove = currentMove % 2 === 0 ? 'black' : 'white';
@@ -551,28 +690,43 @@ function renderMarkers() {{
             const winrateText = (move.winrate * 100).toFixed(0);
             console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText);
             
-            // Create label object
+            // Create label object with unique identifier
+            const uniqueId = 'policy-' + coord.x + '-' + coord.y + '-' + index;
             const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
             
             // Mark this as a policy label so we can style it differently
             labelObj.isPolicyLabel = true;
+            labelObj.policyId = uniqueId;
             
             board.addObject(labelObj);
             
-                         // Apply red styling after the object is added to the DOM
-             setTimeout(() => {{
-               const boardElement = document.getElementById('board');
-               const textElements = boardElement.querySelectorAll('text');
-               textElements.forEach(textEl => {{
-                 // Only style text elements that contain our winrate numbers
-                 if(textEl.textContent === winrateText) {{
-                   textEl.style.fill = 'red';
-                   textEl.style.fontWeight = 'bold';
-                   textEl.style.fontSize = '10px';
-                   textEl.classList.add('policy-label');
-                 }}
-               }});
-             }}, 50);
+                        // Apply red styling after the object is added to the DOM
+            setTimeout(() => {{
+              const boardElement = document.getElementById('board');
+              const textElements = boardElement.querySelectorAll('text');
+              
+              let matchingElements = [];
+              
+              textElements.forEach((textEl, index) => {{
+                // Only style text elements that contain our winrate numbers
+                if(textEl.textContent === winrateText) {{
+                  matchingElements.push(textEl);
+                }}
+              }});
+              
+              // Style ALL matching elements (since we're now confident these are policy labels)
+              const elementsToStyle = matchingElements; // Style all matching elements
+              
+              elementsToStyle.forEach((elem) => {{
+                // Apply red styling
+                elem.style.setProperty('fill', 'red', 'important');
+                elem.style.setProperty('color', 'red', 'important');
+                elem.style.setProperty('font-weight', 'bold', 'important');
+                elem.style.setProperty('font-size', '1px', 'important');
+                elem.setAttribute('fill', 'red');
+                elem.classList.add('policy-label');
+              }});
+            }}, 100);
             
             console.log('Successfully added red label at', coord.x, coord.y);
             
@@ -653,16 +807,18 @@ function sgfToCoord(moveString) {{
   function renderPolicy() {{
     const div = document.getElementById('policy_suggestions');
     // Show policy suggestions for the position that was just played (not the upcoming move)
-    const opts = currentMove > 0 ? (POLICY[currentMove - 1] || []) : [];
+    const positionKey = currentMove > 0 ? (currentMove - 1).toString() : null;
+    const positionData = positionKey ? POLICY[positionKey] : null;
+    const opts = positionData && positionData.suggestions ? positionData.suggestions : [];
     
-    console.log('Current move:', currentMove, 'Policy data for position:', currentMove > 0 ? currentMove - 1 : 'none', opts);
+    console.log('Current move:', currentMove, 'Policy data for position:', positionKey, 'Position data:', positionData, 'Suggestions:', opts);
   
      if(currentMove === 0) {{
      div.innerHTML = '<em>No move played yet</em>';
      return;
    }}
    
-   if(opts.length === 0) {{
+   if(!positionData || !opts || opts.length === 0) {{
      div.innerHTML = '<em>No AI suggestions available for this position</em>';
      return;
    }}
@@ -676,13 +832,53 @@ function sgfToCoord(moveString) {{
     div.innerHTML = `<strong>AI suggestions for ${{playerWhoMoved}} at move ${{currentMove}}</strong><br/>${{lines.join('')}}`;
 }}
 
-document.getElementById('tag_form').addEventListener('change', e => {{
+// Set up event delegation for both columns
+document.getElementById('global_column').addEventListener('change', e => {{
   const tag = e.target.getAttribute('data-tag');
   if(tag) {{
     labels[currentMove] = labels[currentMove] || {{}};
-    labels[currentMove][tag] = e.target.checked;
-  }} else if(e.target.name === 'spatial') {{
-    selectedSpatial = e.target.value;
+    
+    // Check if this is a spatial tag (location or shape) or a regular global tag
+    const isSpatialTag = Object.values(SPATIAL_GROUPS).some(groupTags => groupTags.includes(tag));
+    
+    if(isSpatialTag) {{
+      if(e.target.checked) {{
+        // Add to active spatial tags for board clicking
+        activeSpatialTags.add(tag);
+        // Initialize as empty array if not exists
+        if(!labels[currentMove][tag]) {{
+          labels[currentMove][tag] = [];
+        }}
+      }} else {{
+        // Remove from active spatial tags
+        activeSpatialTags.delete(tag);
+        // Remove the tag when unchecked
+        delete labels[currentMove][tag];
+      }}
+    }} else {{
+      // Regular global tag (boolean)
+      labels[currentMove][tag] = e.target.checked;
+    }}
+  }}
+}});
+
+document.getElementById('spatial_column').addEventListener('change', e => {{
+  const tag = e.target.getAttribute('data-tag');
+  if(tag) {{
+    labels[currentMove] = labels[currentMove] || {{}};
+    if(e.target.checked) {{
+      // Add to active spatial tags for board clicking
+      activeSpatialTags.add(tag);
+      // Initialize as empty array if not exists
+      if(!labels[currentMove][tag]) {{
+        labels[currentMove][tag] = [];
+      }}
+    }} else {{
+      // Remove from active spatial tags
+      activeSpatialTags.delete(tag);
+      // Remove the tag when unchecked
+      delete labels[currentMove][tag];
+    }}
   }}
 }});
 
@@ -690,10 +886,15 @@ document.getElementById('tag_form').addEventListener('change', e => {{
 const board = player.board || (player.components && player.components.board);
 if(board && board.addEventListener) {{
   board.addEventListener('click', (x, y) => {{
-    if(selectedSpatial === null) return;
+    if(activeSpatialTags.size === 0) return;
     labels[currentMove] = labels[currentMove] || {{}};
-    labels[currentMove][selectedSpatial] = labels[currentMove][selectedSpatial] || [];
-    labels[currentMove][selectedSpatial].push([x, y]);
+    
+    // Add the clicked point to all active spatial tags
+    activeSpatialTags.forEach(tag => {{
+      labels[currentMove][tag] = labels[currentMove][tag] || [];
+      labels[currentMove][tag].push([x, y]);
+    }});
+    
     renderForm();
     renderMarkers();
   }});

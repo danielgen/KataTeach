@@ -47,7 +47,7 @@ tags:
     - {name: br_corner,      desc: "Bottom right corner"}
     - {name: center,         desc: "Center"}
   shape:
-    - {name: lightly,        desc: "Light shape"}
+    - {name: play_lightly,        desc: "Light shape"}
     - {name: good_shape,     desc: "Play tiger's mouth, table, etc"}
     - {name: bad_shape,      desc: "Play weak shape move"}
     - {name: joseki,         desc: "Play joseki"}
