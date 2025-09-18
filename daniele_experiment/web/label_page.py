@@ -215,6 +215,11 @@ def build_label_page(
     font-size: 12px;
     border-left: 3px solid #007bff;
   }}
+  .policy-move:has(★) {{
+    background: #fff3cd;
+    border-left-color: #ffc107;
+    font-weight: bold;
+  }}
   h3 {{ margin-top: 20px; margin-bottom: 10px; }}
   h4 {{ margin: 10px 0 5px 0; color: #333; }}
   
@@ -402,6 +407,9 @@ function renderForm() {{
   globalColumn.innerHTML = '';
   spatialColumn.innerHTML = '';
   
+  // Clear and restore active spatial tags for current move
+  activeSpatialTags.clear();
+  
   // Render global groups (global, initiative, location, shape)
   Object.entries(GLOBAL_GROUPS).forEach(([groupName, tags]) => {{
     if (tags.length === 0) return;
@@ -434,7 +442,14 @@ function renderForm() {{
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
       const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
-      const checked = labels[currentMove] && labels[currentMove][tag] && labels[currentMove][tag].length > 0 ? 'checked' : '';
+      const isChecked = labels[currentMove] && labels[currentMove][tag + '_checked'] === true;
+      const checked = isChecked ? 'checked' : '';
+      
+      // Restore active spatial tags for checked spatial tags
+      if (isChecked) {{
+        activeSpatialTags.add(tag);
+      }}
+      
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
       tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label> <span class="tag-points" id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span>`;
@@ -456,7 +471,14 @@ function renderForm() {{
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
       const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
-      const checked = labels[currentMove] && labels[currentMove][tag] && labels[currentMove][tag].length > 0 ? 'checked' : '';
+      const isChecked = labels[currentMove] && labels[currentMove][tag + '_checked'] === true;
+      const checked = isChecked ? 'checked' : '';
+      
+      // Restore active spatial tags for checked spatial tags
+      if (isChecked) {{
+        activeSpatialTags.add(tag);
+      }}
+      
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
       tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label> <span class="tag-points" id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span>`;
@@ -825,9 +847,12 @@ function sgfToCoord(moveString) {{
    
        // The player who was to move at the previous position (before current move was played)
     const playerWhoMoved = (currentMove - 1) % 2 === 0 ? 'Black' : 'White';
-    const lines = opts.map(o => 
-      `<div class="policy-move">${{o.move}}: ${{(o.winrate * 100).toFixed(1)}}%</div>`
-    );
+    const lines = opts.map(o => {{
+      const winrateText = `${{(o.winrate * 100).toFixed(1)}}%`;
+      const policyText = o.policy_prob ? `${{(o.policy_prob * 100).toFixed(1)}}%` : 'N/A';
+      const actualMoveMarker = o.is_actual_move ? ' ★' : '';
+      return `<div class="policy-move">${{o.move}}: ${{winrateText}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
+    }});
     // Display move number as 1-indexed (currentMove is already the human-readable move number)
     div.innerHTML = `<strong>AI suggestions for ${{playerWhoMoved}} at move ${{currentMove}}</strong><br/>${{lines.join('')}}`;
 }}
@@ -849,11 +874,13 @@ document.getElementById('global_column').addEventListener('change', e => {{
         if(!labels[currentMove][tag]) {{
           labels[currentMove][tag] = [];
         }}
+        // Mark this tag as checked
+        labels[currentMove][tag + '_checked'] = true;
       }} else {{
         // Remove from active spatial tags
         activeSpatialTags.delete(tag);
-        // Remove the tag when unchecked
-        delete labels[currentMove][tag];
+        // Mark this tag as unchecked
+        labels[currentMove][tag + '_checked'] = false;
       }}
     }} else {{
       // Regular global tag (boolean)
@@ -873,11 +900,13 @@ document.getElementById('spatial_column').addEventListener('change', e => {{
       if(!labels[currentMove][tag]) {{
         labels[currentMove][tag] = [];
       }}
+      // Mark this tag as checked
+      labels[currentMove][tag + '_checked'] = true;
     }} else {{
       // Remove from active spatial tags
       activeSpatialTags.delete(tag);
-      // Remove the tag when unchecked
-      delete labels[currentMove][tag];
+      // Mark this tag as unchecked
+      labels[currentMove][tag + '_checked'] = false;
     }}
   }}
 }});

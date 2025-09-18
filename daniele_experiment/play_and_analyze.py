@@ -111,10 +111,10 @@ def evaluate_moves_batched(gs: GameState, moves: List[int], model) -> List[float
     if not batch_states:
         return []
     
-    # Create batch tensors
-    batch_bin = torch.stack([torch.tensor(bin_data, dtype=torch.float32, device=model.device) 
+    # Create batch tensors - squeeze out the batch dimension from individual features
+    batch_bin = torch.stack([torch.tensor(bin_data, dtype=torch.float32, device=model.device).squeeze(0) 
                             for bin_data, _ in batch_states])
-    batch_global = torch.stack([torch.tensor(global_data, dtype=torch.float32, device=model.device) 
+    batch_global = torch.stack([torch.tensor(global_data, dtype=torch.float32, device=model.device).squeeze(0) 
                                for _, global_data in batch_states])
     
     # Batch evaluation
@@ -232,7 +232,13 @@ def compute_policy_analysis(
                 plays.append(("w", None))
 
     policy: PolicyMap = {}
-    for idx in range(len(plays) + 1):
+    total_positions = len(plays) + 1
+    
+    for idx in range(total_positions):
+        if verbose:
+            print(f"Analyzing position {idx + 1}/{total_positions}...")
+        
+        start_time = time.time()
         outputs = gs.get_model_outputs(model)
         moves_probs = outputs["moves_and_probs0"]
         if not moves_probs:
@@ -291,7 +297,51 @@ def compute_policy_analysis(
             top: List[MoveInfo] = []
             for mv, winrate in move_winrates:
                 if winrate >= best_winrate + threshold:
-                    top.append({"move": _loc_to_sgf(mv, gs.board), "winrate": float(winrate)})
+                    policy_prob = candidate_probs.get(mv, 0.0)
+                    top.append({
+                        "move": _loc_to_sgf(mv, gs.board), 
+                        "winrate": float(winrate),
+                        "policy_prob": float(policy_prob)
+                    })
+            
+            # If we have an actual move to be played, ensure it's included in suggestions
+            if idx < len(plays):
+                color, move = plays[idx]
+                if move is not None:
+                    row, col = move
+                    actual_move_loc = gs.board.loc(col, row)
+                    actual_move_sgf = _loc_to_sgf(actual_move_loc, gs.board)
+                    
+                    # Check if actual move is already in suggestions
+                    actual_move_in_suggestions = any(s["move"] == actual_move_sgf for s in top)
+                    
+                    if not actual_move_in_suggestions:
+                        # Find the actual move's winrate and policy probability
+                        actual_winrate = None
+                        actual_policy_prob = None
+                        
+                        for mv, winrate in move_winrates:
+                            if mv == actual_move_loc:
+                                actual_winrate = winrate
+                                break
+                        
+                        actual_policy_prob = candidate_probs.get(actual_move_loc, None)
+                        if actual_policy_prob is None:
+                            # Find from original moves_probs if not in candidates
+                            for mv_loc, prob in moves_probs:
+                                if mv_loc == actual_move_loc:
+                                    actual_policy_prob = prob
+                                    break
+                        
+                        # Add the actual move to suggestions even if it doesn't meet threshold
+                        if actual_winrate is not None:
+                            top.append({
+                                "move": actual_move_sgf,
+                                "winrate": float(actual_winrate),
+                                "policy_prob": float(actual_policy_prob) if actual_policy_prob is not None else 0.0,
+                                "is_actual_move": True  # Mark this as the actual move played
+                            })
+            
             if top:
                 position_data["suggestions"] = top
 
@@ -313,7 +363,19 @@ def compute_policy_analysis(
                 actual_move_sgf = _loc_to_sgf(actual_move_loc, gs.board)
             
             # Evaluate the actual move played
+            actual_move_policy_prob = None
             if actual_move_loc is not None:
+                # Get the policy probability for the actual move
+                actual_move_policy_prob = candidate_probs.get(actual_move_loc, None)
+                
+                # If the actual move wasn't in the candidate moves, get its probability from the original policy
+                if actual_move_policy_prob is None:
+                    # Find the policy probability from the original moves_probs
+                    for mv_loc, prob in moves_probs:
+                        if mv_loc == actual_move_loc:
+                            actual_move_policy_prob = prob
+                            break
+                
                 try:
                     gs.play(pla, actual_move_loc)
                     actual_outputs = gs.get_model_outputs(model)
@@ -325,10 +387,11 @@ def compute_policy_analysis(
                 except:
                     actual_move_winrate = None
             
-            # Store actual move information
+            # Store actual move information with both winrate and policy probability
             position_data["actual_move"] = {
                 "move": actual_move_sgf,
                 "winrate": actual_move_winrate,
+                "policy_prob": float(actual_move_policy_prob) if actual_move_policy_prob is not None else None,
                 "player": color
             }
             
@@ -338,6 +401,10 @@ def compute_policy_analysis(
         # Only store position data if we have either suggestions or actual move info
         if position_data:
             policy[idx] = position_data
+        
+        if verbose:
+            elapsed = time.time() - start_time
+            print(f"  Position {idx + 1} completed in {elapsed:.2f}s")
 
     return policy
 
@@ -475,7 +542,7 @@ def play_and_analyze_games(
             
             # Analyze the game
             print(f"  Analyzing game {game_id}...")
-            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=False, max_moves_per_position=max_moves_per_position)
+            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=True, max_moves_per_position=max_moves_per_position)
             
             # Save policy analysis
             policy_file = policy_dir / f"{sgf_file.stem}.json"
