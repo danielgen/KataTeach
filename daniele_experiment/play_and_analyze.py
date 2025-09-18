@@ -409,7 +409,8 @@ def compute_policy_analysis(
     return policy
 
 
-def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: float = 0.01) -> Tuple[str, str]:
+def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: float = 0.01, 
+                     resignation_threshold: float = 0.10, consecutive_low_moves: int = 3) -> Tuple[str, str]:
     """Play a single game using 1-visit neural network evaluation.
     
     Returns:
@@ -422,6 +423,9 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
     # Track consecutive passes for game termination
     consecutive_passes = 0
     max_moves = 400  # Safety limit to prevent infinite games
+    
+    # Track winrates for resignation logic
+    winrate_history = []  # List of (player, winrate) tuples
     
     print(f"Starting game {game_id}...")
     
@@ -437,6 +441,24 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
             print(f"No legal moves available for {player_str} at move {move_number}")
             break
         
+        # Get current winrate for resignation logic
+        current_winrate = float(outputs["value"][0])  # Winrate from current player's perspective
+        winrate_history.append((current_player, current_winrate))
+        
+        # Check for resignation condition (winrate < 10% for 3 consecutive moves by current player)
+        if len(winrate_history) >= consecutive_low_moves:
+            # Get the last few moves by the current player
+            current_player_recent_winrates = [
+                winrate for player, winrate in winrate_history[-consecutive_low_moves*2:]  # Look at last 6 moves
+                if player == current_player
+            ]
+            
+            # If we have at least 3 moves by current player and all are below threshold
+            if (len(current_player_recent_winrates) >= consecutive_low_moves and
+                all(wr < resignation_threshold for wr in current_player_recent_winrates[-consecutive_low_moves:])):
+                print(f"Game {game_id}: {player_str} resigns (winrate {current_winrate:.1%} < {resignation_threshold:.1%} for {consecutive_low_moves} consecutive moves)")
+                break
+        
         # For 1-visit play, sample from moves within prob_threshold of the best move
         best_move, best_prob, was_sampled = select_move_with_sampling(moves_and_probs, prob_threshold)
         
@@ -448,12 +470,12 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
         if best_move == Board.PASS_LOC:
             consecutive_passes += 1
             sampling_info = " [sampled]" if was_sampled else ""
-            print(f"Move {move_number + 1}: {player_str} passes (prob: {best_prob:.3f}){sampling_info}")
+            print(f"Move {move_number + 1}: {player_str} passes (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}")
         else:
             consecutive_passes = 0
             move_str = loc_to_sgf_coords(best_move, gs.board)
             sampling_info = " [sampled]" if was_sampled else ""
-            print(f"Move {move_number + 1}: {player_str} plays {move_str} (prob: {best_prob:.3f}){sampling_info}")
+            print(f"Move {move_number + 1}: {player_str} plays {move_str} (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}")
         
         # Game ends after two consecutive passes
         if consecutive_passes >= 2:
@@ -519,6 +541,8 @@ def play_and_analyze_games(
     prob_threshold: float = 0.01,
     analysis_threshold: float = -0.005,
     max_moves_per_position: int = 10,
+    resignation_threshold: float = 0.10,
+    consecutive_low_moves: int = 3,
 ) -> None:
     """Play N games, save them as SGF files, and analyze them."""
     
@@ -531,7 +555,8 @@ def play_and_analyze_games(
     for game_id in range(1, num_games + 1):
         try:
             # Play the game
-            sgf_content, result = play_single_game(model, game_id, board_size, prob_threshold)
+            sgf_content, result = play_single_game(model, game_id, board_size, prob_threshold, 
+                                                 resignation_threshold, consecutive_low_moves)
             
             # Save SGF file
             sgf_file = output_dir / f"{uuid.uuid4()}.sgf"
@@ -587,6 +612,10 @@ Examples:
                        help="Winrate drop threshold for policy analysis (default: -0.005)")
     parser.add_argument("--max-moves-per-position", type=int, default=10,
                        help="Maximum number of moves to analyze per position (default: 10)")
+    parser.add_argument("--resignation-threshold", type=float, default=0.10,
+                       help="Winrate threshold for resignation (default: 0.10 = 10%%)")
+    parser.add_argument("--consecutive-low-moves", type=int, default=3,
+                       help="Number of consecutive low winrate moves before resignation (default: 3)")
     
     args = parser.parse_args()
     
@@ -609,7 +638,9 @@ Examples:
             board_size=args.board_size,
             prob_threshold=args.prob_threshold,
             analysis_threshold=args.analysis_threshold,
-            max_moves_per_position=args.max_moves_per_position
+            max_moves_per_position=args.max_moves_per_position,
+            resignation_threshold=args.resignation_threshold,
+            consecutive_low_moves=args.consecutive_low_moves
         )
         
     except KeyboardInterrupt:

@@ -730,21 +730,33 @@ function renderMarkers() {{
               let matchingElements = [];
               
               textElements.forEach((textEl, index) => {{
-                // Only style text elements that contain our winrate numbers
+                // Only style text elements that contain our winrate numbers AND are not board coordinates
+                // Board coordinates are typically single/double digit numbers or letters, winrates are percentages
                 if(textEl.textContent === winrateText) {{
-                  matchingElements.push(textEl);
+                  // Additional check: make sure this isn't a coordinate label
+                  // Coordinates are usually positioned at board edges, policy labels are on intersections
+                  const rect = textEl.getBoundingClientRect();
+                  const boardRect = boardElement.getBoundingClientRect();
+                  
+                  // Check if the text is within the main board area (not on edges where coordinates would be)
+                  const isInMainBoardArea = rect.left > boardRect.left + 20 && 
+                                          rect.right < boardRect.right - 20 &&
+                                          rect.top > boardRect.top + 10 && 
+                                          rect.bottom < boardRect.bottom - 10;
+                  
+                  if(isInMainBoardArea) {{
+                    matchingElements.push(textEl);
+                  }}
                 }}
               }});
               
-              // Style ALL matching elements (since we're now confident these are policy labels)
-              const elementsToStyle = matchingElements; // Style all matching elements
-              
-              elementsToStyle.forEach((elem) => {{
-                // Apply red styling
+              // Style only the elements that are actually policy labels
+              matchingElements.forEach((elem) => {{
+                // Apply red styling with smaller font size
                 elem.style.setProperty('fill', 'red', 'important');
                 elem.style.setProperty('color', 'red', 'important');
                 elem.style.setProperty('font-weight', 'bold', 'important');
-                elem.style.setProperty('font-size', '1px', 'important');
+                elem.style.setProperty('font-size', '0.8px', 'important');
                 elem.setAttribute('fill', 'red');
                 elem.classList.add('policy-label');
               }});
