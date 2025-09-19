@@ -145,16 +145,6 @@ def build_label_page(
     transform: scale(0.85);
     vertical-align: middle;
   }}
-  .tag-block .tag-points {{
-    display: inline-block;
-    line-height: 1;
-    font-size: 11px;
-    color: #666;
-    margin-left: 4px;
-  }}
-  .tag-block .tag-points:empty {{
-    display: none;
-  }}
   .labels-container .tag-block {{ 
     margin: 0 !important; 
   }}
@@ -214,11 +204,25 @@ def build_label_page(
     border-radius: 3px;
     font-size: 12px;
     border-left: 3px solid #007bff;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }}
+  .policy-move:hover {{
+    background: #f8f9fa;
+  }}
+  .policy-move.selected {{
+    background: #e3f2fd;
+    border-left-color: #2196f3;
+    font-weight: bold;
   }}
   .policy-move:has(★) {{
     background: #fff3cd;
     border-left-color: #ffc107;
     font-weight: bold;
+  }}
+  .policy-move.selected:has(★) {{
+    background: #fff8e1;
+    border-left-color: #ff9800;
   }}
   h3 {{ margin-top: 20px; margin-bottom: 10px; }}
   h4 {{ margin: 10px 0 5px 0; color: #333; }}
@@ -277,6 +281,9 @@ def build_label_page(
     </div>
   </div>
   <div class='controls-section'>
+    <div id='selected-move-info' style='background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; text-align: center; display: none;'>
+      Annotating move: <span id='selected-move-text'></span>
+    </div>
     <div class='labels-container'>
       <div class='label-column' id='global_column'></div>
       <div class='label-column' id='spatial_column'></div>
@@ -291,8 +298,8 @@ const SPATIAL_GROUPS = {spatial_groups_js};
 const POLICY = {policy_js};
 let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF }});
 let currentMove = 0;
-let labels = {{}};  // move index -> tag mapping
-let activeSpatialTags = new Set();  // Set of currently selected spatial tags
+let labels = {{}};  // move index -> move_id -> tag mapping
+let selectedMoveId = null;  // Currently selected candidate move for annotation
 
 // Try to sync with WGo.js player state changes
 function syncPlayerState() {{
@@ -310,6 +317,9 @@ function syncPlayerState() {{
   if(moveCount !== currentMove) {{
     console.log('Move changed from', currentMove, 'to', moveCount);
     currentMove = moveCount;
+    
+    // Reset selected move when navigating to a different position
+    selectedMoveId = null;
     
     // Update our custom UI
     updateMoveDisplay();
@@ -407,8 +417,30 @@ function renderForm() {{
   globalColumn.innerHTML = '';
   spatialColumn.innerHTML = '';
   
-  // Clear and restore active spatial tags for current move
-  activeSpatialTags.clear();
+  // Clear any previous form state
+  
+  // If no move is selected, select the first available move (actual move played or first candidate)
+  if (!selectedMoveId) {{
+    const positionKey = currentMove > 0 ? (currentMove - 1).toString() : null;
+    const positionData = positionKey ? POLICY[positionKey] : null;
+    const suggestions = positionData && positionData.suggestions ? positionData.suggestions : [];
+    
+    if (suggestions.length > 0) {{
+      // Prefer the actual move played, otherwise first suggestion
+      const actualMove = suggestions.find(s => s.is_actual_move);
+      selectedMoveId = actualMove ? actualMove.move : suggestions[0].move;
+    }}
+  }}
+  
+  // Update selected move indicator
+  const selectedMoveInfo = document.getElementById('selected-move-info');
+  const selectedMoveText = document.getElementById('selected-move-text');
+  if (selectedMoveId) {{
+    selectedMoveText.textContent = selectedMoveId;
+    selectedMoveInfo.style.display = 'block';
+  }} else {{
+    selectedMoveInfo.style.display = 'none';
+  }}
   
   // Render global groups (global, initiative, location, shape)
   Object.entries(GLOBAL_GROUPS).forEach(([groupName, tags]) => {{
@@ -420,7 +452,8 @@ function renderForm() {{
     
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
-      const checked = labels[currentMove] && labels[currentMove][tag] ? 'checked' : '';
+      const moveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? labels[currentMove][selectedMoveId] : {{}};
+      const checked = moveLabels[tag] ? 'checked' : '';
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
       tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
@@ -441,18 +474,12 @@ function renderForm() {{
     
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
-      const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
-      const isChecked = labels[currentMove] && labels[currentMove][tag + '_checked'] === true;
-      const checked = isChecked ? 'checked' : '';
-      
-      // Restore active spatial tags for checked spatial tags
-      if (isChecked) {{
-        activeSpatialTags.add(tag);
-      }}
+      const moveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? labels[currentMove][selectedMoveId] : {{}};
+      const checked = moveLabels[tag] ? 'checked' : '';
       
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
-      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label> <span class="tag-points" id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span>`;
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
       tagGrid.appendChild(tagBlock);
     }});
     
@@ -470,18 +497,12 @@ function renderForm() {{
     
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
-      const pts = (labels[currentMove] && labels[currentMove][tag]) || [];
-      const isChecked = labels[currentMove] && labels[currentMove][tag + '_checked'] === true;
-      const checked = isChecked ? 'checked' : '';
-      
-      // Restore active spatial tags for checked spatial tags
-      if (isChecked) {{
-        activeSpatialTags.add(tag);
-      }}
+      const moveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? labels[currentMove][selectedMoveId] : {{}};
+      const checked = moveLabels[tag] ? 'checked' : '';
       
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
-      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label> <span class="tag-points" id="${{tag}}_pts">${{pts.map(p => '(' + p[0] + ',' + p[1] + ')').join(' ')}}</span>`;
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
       tagGrid.appendChild(tagBlock);
     }});
     
@@ -681,14 +702,7 @@ function renderMarkers() {{
     
     console.log('Removed', objectsToRemove.length, 'custom objects, keeping game stones');
     
-    // Render user tags
-    const tags = labels[currentMove] || {{}};
-    Object.keys(tags).forEach(tag => {{
-      const pts = tags[tag];
-      if(Array.isArray(pts)) {{
-        pts.forEach(pt => board.addObject({{ x: pt[0], y: pt[1], type: 'MA' }}));
-      }}
-    }});
+    // No user markers to render - all tags are now simple booleans
     
          // Render policy suggestions for the position that was just played (not the upcoming move)
      // Show suggestions for the previous move (what AI suggested before this move was played)
@@ -863,83 +877,37 @@ function sgfToCoord(moveString) {{
       const winrateText = `${{(o.winrate * 100).toFixed(1)}}%`;
       const policyText = o.policy_prob ? `${{(o.policy_prob * 100).toFixed(1)}}%` : 'N/A';
       const actualMoveMarker = o.is_actual_move ? ' ★' : '';
-      return `<div class="policy-move">${{o.move}}: ${{winrateText}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
+      const selectedClass = selectedMoveId === o.move ? ' selected' : '';
+      return `<div class="policy-move${{selectedClass}}" data-move-id="${{o.move}}">${{o.move}}: ${{winrateText}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
     }});
     // Display move number as 1-indexed (currentMove is already the human-readable move number)
-    div.innerHTML = `<strong>AI suggestions for ${{playerWhoMoved}} at move ${{currentMove}}</strong><br/>${{lines.join('')}}`;
+    div.innerHTML = `<strong>AI suggestions for ${{playerWhoMoved}} at move ${{currentMove}} (click to select move for annotation)</strong><br/>${{lines.join('')}}`;
 }}
 
 // Set up event delegation for both columns
 document.getElementById('global_column').addEventListener('change', e => {{
   const tag = e.target.getAttribute('data-tag');
-  if(tag) {{
+  if(tag && selectedMoveId) {{
     labels[currentMove] = labels[currentMove] || {{}};
+    labels[currentMove][selectedMoveId] = labels[currentMove][selectedMoveId] || {{}};
     
-    // Check if this is a spatial tag (location or shape) or a regular global tag
-    const isSpatialTag = Object.values(SPATIAL_GROUPS).some(groupTags => groupTags.includes(tag));
-    
-    if(isSpatialTag) {{
-      if(e.target.checked) {{
-        // Add to active spatial tags for board clicking
-        activeSpatialTags.add(tag);
-        // Initialize as empty array if not exists
-        if(!labels[currentMove][tag]) {{
-          labels[currentMove][tag] = [];
-        }}
-        // Mark this tag as checked
-        labels[currentMove][tag + '_checked'] = true;
-      }} else {{
-        // Remove from active spatial tags
-        activeSpatialTags.delete(tag);
-        // Mark this tag as unchecked
-        labels[currentMove][tag + '_checked'] = false;
-      }}
-    }} else {{
-      // Regular global tag (boolean)
-      labels[currentMove][tag] = e.target.checked;
-    }}
+    // All tags are now simple boolean values
+    labels[currentMove][selectedMoveId][tag] = e.target.checked;
   }}
 }});
 
 document.getElementById('spatial_column').addEventListener('change', e => {{
   const tag = e.target.getAttribute('data-tag');
-  if(tag) {{
+  if(tag && selectedMoveId) {{
     labels[currentMove] = labels[currentMove] || {{}};
-    if(e.target.checked) {{
-      // Add to active spatial tags for board clicking
-      activeSpatialTags.add(tag);
-      // Initialize as empty array if not exists
-      if(!labels[currentMove][tag]) {{
-        labels[currentMove][tag] = [];
-      }}
-      // Mark this tag as checked
-      labels[currentMove][tag + '_checked'] = true;
-    }} else {{
-      // Remove from active spatial tags
-      activeSpatialTags.delete(tag);
-      // Mark this tag as unchecked
-      labels[currentMove][tag + '_checked'] = false;
-    }}
+    labels[currentMove][selectedMoveId] = labels[currentMove][selectedMoveId] || {{}};
+    
+    // All tags are now simple boolean values
+    labels[currentMove][selectedMoveId][tag] = e.target.checked;
   }}
 }});
 
-// Set up click handler for the board
-const board = player.board || (player.components && player.components.board);
-if(board && board.addEventListener) {{
-  board.addEventListener('click', (x, y) => {{
-    if(activeSpatialTags.size === 0) return;
-    labels[currentMove] = labels[currentMove] || {{}};
-    
-    // Add the clicked point to all active spatial tags
-    activeSpatialTags.forEach(tag => {{
-      labels[currentMove][tag] = labels[currentMove][tag] || [];
-      labels[currentMove][tag].push([x, y]);
-    }});
-    
-    renderForm();
-    renderMarkers();
-  }});
-}}
+// Board clicking is no longer needed - all tags are simple checkboxes
 
 function updateMoveDisplay() {{
   document.getElementById('move_idx').textContent = currentMove;
@@ -985,6 +953,22 @@ function gotoMove(idx) {{
 document.getElementById('next').onclick = () => gotoMove(currentMove + 1);
 document.getElementById('prev').onclick = () => gotoMove(currentMove - 1);
 
+// Set up click handler for move selection in policy suggestions
+document.getElementById('policy_suggestions').addEventListener('click', e => {{
+  if(e.target.classList.contains('policy-move')) {{
+    const moveId = e.target.getAttribute('data-move-id');
+    if(moveId) {{
+      selectedMoveId = moveId;
+      console.log('Selected move for annotation:', selectedMoveId);
+      
+      // Re-render the form and policy display to show selection
+      renderForm();
+      renderPolicy();
+      renderMarkers();
+    }}
+  }}
+}});
+
 document.getElementById('export').onclick = () => {{
   const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(labels));
   const a = document.createElement('a');
@@ -1028,5 +1012,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    #python label_page.py D:\KataGo\daniele_experiment\games\policy\[a531233903]vs[danielgen]1737762562030002806.json test_out.html
+    #python web\label_page.py D:\KataGo\daniele_experiment\games\policy\3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.json test_out.html
     
