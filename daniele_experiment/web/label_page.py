@@ -28,14 +28,14 @@ def load_tags(ontology_path: Path) -> tuple[dict[str, list[str]], dict[str, list
     # Handle new ontology structure with categories
     tags_data = data.get("tags", {})
     
-    # Global tags grouped by category
+    # Global tags grouped by category (only truly global tags)
     global_groups = {
-        "global": [t["name"] for t in tags_data.get("global", [])],
-        "initiative": [t["name"] for t in tags_data.get("initiative", [])]
+        "global": [t["name"] for t in tags_data.get("global", [])]
     }
     
-    # Spatial tags grouped by category
+    # Per-move tags grouped by category
     spatial_groups = {
+        "initiative": [t["name"] for t in tags_data.get("initiative", [])],
         "strategic": [t["name"] for t in tags_data.get("strategic", [])],
         "tactical": [t["name"] for t in tags_data.get("tactical", [])],
         "stress_area": [t["name"] for t in tags_data.get("stress_area", [])],
@@ -465,8 +465,8 @@ function renderForm() {{
     globalColumn.appendChild(groupDiv);
   }});
   
-  // Add stress_area and shape to the left column
-  ['stress_area', 'shape'].forEach(groupName => {{
+  // Add initiative, stress_area and shape to the left column
+  ['initiative', 'stress_area', 'shape'].forEach(groupName => {{
     const tags = SPATIAL_GROUPS[groupName] || [];
     if (tags.length === 0) return;
     
@@ -724,7 +724,7 @@ function renderMarkers() {{
            coord.x >= 0 && coord.x < 19 && coord.y >= 0 && coord.y < 19) {{
           try {{
             
-            // Add policy move marker with red styling
+            // Add policy move marker with conditional styling
             const winrateText = (move.winrate * 100).toFixed(0);
             console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText);
             
@@ -735,22 +735,33 @@ function renderMarkers() {{
             // Mark this as a policy label so we can style it differently
             labelObj.isPolicyLabel = true;
             labelObj.policyId = uniqueId;
+            labelObj.moveId = move.move; // Store the move ID for styling decisions
             
             board.addObject(labelObj);
             
-                        // Apply red styling after the object is added to the DOM
+                        // Apply conditional styling after the object is added to the DOM
             setTimeout(() => {{
               const boardElement = document.getElementById('board');
               const textElements = boardElement.querySelectorAll('text');
+              
+              // Check if this move has any annotations
+              const moveHasAnnotations = labels[currentMove] && labels[currentMove][move.move] && 
+                Object.values(labels[currentMove][move.move]).some(value => value === true);
+              
+              // Determine color based on selection and annotation status
+              let color = 'red'; // default
+              if(selectedMoveId === move.move) {{
+                color = '#FFD700'; // yellow for selected move
+              }} else if(moveHasAnnotations) {{
+                color = '#32CD32'; // green for annotated but not selected
+              }}
               
               let matchingElements = [];
               
               textElements.forEach((textEl, index) => {{
                 // Only style text elements that contain our winrate numbers AND are not board coordinates
-                // Board coordinates are typically single/double digit numbers or letters, winrates are percentages
                 if(textEl.textContent === winrateText) {{
                   // Additional check: make sure this isn't a coordinate label
-                  // Coordinates are usually positioned at board edges, policy labels are on intersections
                   const rect = textEl.getBoundingClientRect();
                   const boardRect = boardElement.getBoundingClientRect();
                   
@@ -766,14 +777,13 @@ function renderMarkers() {{
                 }}
               }});
               
-              // Style only the elements that are actually policy labels
+              // Style the elements with the determined color
               matchingElements.forEach((elem) => {{
-                // Apply red styling with smaller font size
-                elem.style.setProperty('fill', 'red', 'important');
-                elem.style.setProperty('color', 'red', 'important');
+                elem.style.setProperty('fill', color, 'important');
+                elem.style.setProperty('color', color, 'important');
                 elem.style.setProperty('font-weight', 'bold', 'important');
                 elem.style.setProperty('font-size', '0.8px', 'important');
-                elem.setAttribute('fill', 'red');
+                elem.setAttribute('fill', color);
                 elem.classList.add('policy-label');
               }});
             }}, 100);
@@ -913,6 +923,9 @@ document.getElementById('spatial_column').addEventListener('change', e => {{
     
     // All tags are now simple boolean values
     labels[currentMove][selectedMoveId][tag] = e.target.checked;
+    
+    // Re-render board to update move colors based on new annotations
+    renderMarkers();
   }}
 }});
 
@@ -970,10 +983,10 @@ document.getElementById('policy_suggestions').addEventListener('click', e => {{
       selectedMoveId = moveId;
       console.log('Selected move for annotation:', selectedMoveId);
       
-      // Re-render the form and policy display to show selection
-      renderForm();
-      renderPolicy();
-      renderMarkers();
+        // Re-render the form and policy display to show selection
+        renderForm();
+        renderPolicy();
+        renderMarkers(); // Re-render board to update move colors
     }}
   }}
 }});
