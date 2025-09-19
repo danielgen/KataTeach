@@ -38,7 +38,7 @@ def load_tags(ontology_path: Path) -> tuple[dict[str, list[str]], dict[str, list
     spatial_groups = {
         "strategic": [t["name"] for t in tags_data.get("strategic", [])],
         "tactical": [t["name"] for t in tags_data.get("tactical", [])],
-        "location": [t["name"] for t in tags_data.get("location", [])],
+        "stress_area": [t["name"] for t in tags_data.get("stress_area", [])],
         "shape": [t["name"] for t in tags_data.get("shape", [])]
     }
     
@@ -298,7 +298,8 @@ const SPATIAL_GROUPS = {spatial_groups_js};
 const POLICY = {policy_js};
 let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF }});
 let currentMove = 0;
-let labels = {{}};  // move index -> move_id -> tag mapping
+let labels = {{}};  // move index -> move_id -> tag mapping  
+let globalLabels = {{}};  // move index -> global tag mapping (shared across all moves)
 let selectedMoveId = null;  // Currently selected candidate move for annotation
 
 // Try to sync with WGo.js player state changes
@@ -452,19 +453,20 @@ function renderForm() {{
     
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
-      const moveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? labels[currentMove][selectedMoveId] : {{}};
-      const checked = moveLabels[tag] ? 'checked' : '';
+      // Global tags are stored at position level, not per-move
+      const positionGlobalLabels = globalLabels[currentMove] || {{}};
+      const checked = positionGlobalLabels[tag] ? 'checked' : '';
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
-      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" data-is-global="true" ${{checked}}/> ${{tag}}</label>`;
       tagGrid.appendChild(tagBlock);
     }});
     
     globalColumn.appendChild(groupDiv);
   }});
   
-  // Add location and shape to the left column
-  ['location', 'shape'].forEach(groupName => {{
+  // Add stress_area and shape to the left column
+  ['stress_area', 'shape'].forEach(groupName => {{
     const tags = SPATIAL_GROUPS[groupName] || [];
     if (tags.length === 0) return;
     
@@ -887,12 +889,19 @@ function sgfToCoord(moveString) {{
 // Set up event delegation for both columns
 document.getElementById('global_column').addEventListener('change', e => {{
   const tag = e.target.getAttribute('data-tag');
-  if(tag && selectedMoveId) {{
-    labels[currentMove] = labels[currentMove] || {{}};
-    labels[currentMove][selectedMoveId] = labels[currentMove][selectedMoveId] || {{}};
-    
-    // All tags are now simple boolean values
-    labels[currentMove][selectedMoveId][tag] = e.target.checked;
+  const isGlobal = e.target.getAttribute('data-is-global') === 'true';
+  
+  if(tag) {{
+    if(isGlobal) {{
+      // Global tags are stored at position level
+      globalLabels[currentMove] = globalLabels[currentMove] || {{}};
+      globalLabels[currentMove][tag] = e.target.checked;
+    }} else if(selectedMoveId) {{
+      // Non-global tags are stored per-move
+      labels[currentMove] = labels[currentMove] || {{}};
+      labels[currentMove][selectedMoveId] = labels[currentMove][selectedMoveId] || {{}};
+      labels[currentMove][selectedMoveId][tag] = e.target.checked;
+    }}
   }}
 }});
 
@@ -970,7 +979,12 @@ document.getElementById('policy_suggestions').addEventListener('click', e => {{
 }});
 
 document.getElementById('export').onclick = () => {{
-  const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(labels));
+  // Combine global labels and per-move labels in export
+  const exportData = {{
+    perMoveLabels: labels,
+    globalLabels: globalLabels
+  }};
+  const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData));
   const a = document.createElement('a');
   a.setAttribute('href', data);
   a.setAttribute('download', 'labels.json');

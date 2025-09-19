@@ -36,7 +36,7 @@ tags:
     - {name: capture_race,        desc: "Semeai"}
     - {name: use_aji,             desc: "Use aji"}
     - {name: ladder_breaker,      desc: "Ladder breaker"}
-  location: 
+  stress_area: 
     - {name: left_side,      desc: "Left side"}
     - {name: upper_side,     desc: "Upper side"}
     - {name: right_side,     desc: "Right side"}
