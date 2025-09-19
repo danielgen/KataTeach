@@ -251,9 +251,15 @@ def build_label_page(
     padding: 10px; 
     border-radius: 5px; 
     margin: 10px 0;
-    max-height: 200px;
+    max-height: 300px;
     overflow-y: auto;
     border: 1px solid #ddd;
+  }}
+  .policy-grid {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    margin-top: 5px;
   }}
   .policy-move {{ 
     margin: 2px 0; 
@@ -988,8 +994,8 @@ function sgfToCoord(moveString) {{
       const selectedClass = selectedMoveId === o.move ? ' selected' : '';
       return `<div class="policy-move${{selectedClass}}" data-move-id="${{o.move}}">${{o.move}}: ${{winrateText}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
     }});
-    // Display just the moves without redundant header
-    div.innerHTML = lines.join('');
+    // Display moves in a 2-column grid
+    div.innerHTML = `<div class="policy-grid">${{lines.join('')}}</div>`;
 }}
 
 // Set up event delegation for both columns
