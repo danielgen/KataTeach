@@ -45,6 +45,59 @@ def load_tags(ontology_path: Path) -> tuple[dict[str, list[str]], dict[str, list
     return global_groups, spatial_groups
 
 
+def load_presets(presets_path: Path) -> dict:
+    """Load annotation presets from YAML file."""
+    if not presets_path.exists():
+        return {}
+    
+    try:
+        with presets_path.open("r", encoding="utf-8") as f:
+            presets_data = yaml.safe_load(f) or {}
+        
+        # Convert YAML structure to JavaScript format
+        js_presets = {}
+        for preset_name, preset_config in presets_data.items():
+            if isinstance(preset_config, dict) and 'global_labels' in preset_config and 'move_labels' in preset_config:
+                js_presets[preset_name] = {
+                    'globalLabels': preset_config.get('global_labels', {}),
+                    'moveLabels': preset_config.get('move_labels', {})
+                }
+        
+        return js_presets
+    except Exception as e:
+        print(f"Warning: Could not load presets from {presets_path}: {e}")
+        return {}
+
+
+def save_preset_to_config(presets_path: Path, preset_name: str, global_labels: dict, move_labels: dict) -> bool:
+    """Save a new preset to the YAML config file."""
+    try:
+        # Load existing presets
+        if presets_path.exists():
+            with presets_path.open("r", encoding="utf-8") as f:
+                existing_presets = yaml.safe_load(f) or {}
+        else:
+            existing_presets = {}
+        
+        # Add the new preset
+        existing_presets[preset_name] = {
+            'description': f'User-defined preset: {preset_name}',
+            'global_labels': global_labels,
+            'move_labels': move_labels
+        }
+        
+        # Save back to file
+        with presets_path.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(existing_presets, f, default_flow_style=False, sort_keys=False)
+        
+        print(f"Successfully saved preset '{preset_name}' to {presets_path}")
+        return True
+        
+    except Exception as e:
+        print(f"Error saving preset to {presets_path}: {e}")
+        return False
+
+
 def build_label_page(
     combined_data_path: Path,
     html_path: Path,
@@ -70,11 +123,16 @@ def build_label_page(
     sgf_text = combined_data.get("sgf", "")
     policy: Mapping[str, object] = combined_data.get("policy", {})
     global_groups, spatial_groups = load_tags(ontology_path)
+    
+    # Load presets from config file
+    presets_path = ontology_path.parent / "annotations_presets.yaml"
+    presets = load_presets(presets_path)
 
     sgf_js = json.dumps(sgf_text)
     global_groups_js = json.dumps(global_groups)
     spatial_groups_js = json.dumps(spatial_groups)
     policy_js = json.dumps(policy)
+    presets_js = json.dumps(presets)
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -276,7 +334,7 @@ def build_label_page(
       <button id='next' class='nav-button'>Next →</button>
     </div>
     <div class='policy-info'>
-      <h4>AI Suggestions</h4>
+      <h4>AI Suggestions (click to annotate move)</h4>
       <div id='policy_suggestions'></div>
     </div>
   </div>
@@ -284,6 +342,18 @@ def build_label_page(
     <div id='selected-move-info' style='background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-weight: bold; text-align: center; display: none;'>
       Annotating move: <span id='selected-move-text'></span>
     </div>
+    
+    <div style='background: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px; border: 1px solid #dee2e6;'>
+      <div style='display: flex; gap: 10px; align-items: center; flex-wrap: wrap;'>
+        <label style='font-weight: bold; margin-right: 10px;'>Presets:</label>
+        <button id='save-preset' style='padding: 5px 10px; background: #6f42c1; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;'>Save Preset</button>
+        <select id='preset-dropdown' style='padding: 5px; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;'>
+          <option value=''>Apply Preset...</option>
+        </select>
+        <button id='reload-presets' style='padding: 5px 10px; background: #17a2b8; color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px;'>Reload Presets</button>
+      </div>
+    </div>
+    
     <div class='labels-container'>
       <div class='label-column' id='global_column'></div>
       <div class='label-column' id='spatial_column'></div>
@@ -296,11 +366,13 @@ const SGF = {sgf_js};
 const GLOBAL_GROUPS = {global_groups_js};
 const SPATIAL_GROUPS = {spatial_groups_js};
 const POLICY = {policy_js};
+const LOADED_PRESETS = {presets_js};
 let player = new WGo.SimplePlayer(document.getElementById('board'), {{ sgf: SGF }});
 let currentMove = 0;
 let labels = {{}};  // move index -> move_id -> tag mapping  
 let globalLabels = {{}};  // move index -> global tag mapping (shared across all moves)
 let selectedMoveId = null;  // Currently selected candidate move for annotation
+let savedPresets = {{...LOADED_PRESETS}};  // Store user-defined presets, initialized from config
 
 // Try to sync with WGo.js player state changes
 function syncPlayerState() {{
@@ -726,7 +798,8 @@ function renderMarkers() {{
             
             // Add policy move marker with conditional styling
             const winrateText = (move.winrate * 100).toFixed(0);
-            console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText);
+            const currentMoveId = move.move; // Capture the move ID for this iteration
+            console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText, 'for move:', currentMoveId);
             
             // Create label object with unique identifier
             const uniqueId = 'policy-' + coord.x + '-' + coord.y + '-' + index;
@@ -735,47 +808,70 @@ function renderMarkers() {{
             // Mark this as a policy label so we can style it differently
             labelObj.isPolicyLabel = true;
             labelObj.policyId = uniqueId;
-            labelObj.moveId = move.move; // Store the move ID for styling decisions
+            labelObj.moveId = currentMoveId; // Store the move ID for styling decisions
             
             board.addObject(labelObj);
             
                         // Apply conditional styling after the object is added to the DOM
-            setTimeout(() => {{
+            setTimeout((moveId, winrate) => {{
               const boardElement = document.getElementById('board');
               const textElements = boardElement.querySelectorAll('text');
               
               // Check if this move has any annotations
-              const moveHasAnnotations = labels[currentMove] && labels[currentMove][move.move] && 
-                Object.values(labels[currentMove][move.move]).some(value => value === true);
+              const moveHasAnnotations = labels[currentMove] && labels[currentMove][moveId] && 
+                Object.values(labels[currentMove][moveId]).some(value => value === true);
               
               // Determine color based on selection and annotation status
               let color = 'red'; // default
-              if(selectedMoveId === move.move) {{
+              if(selectedMoveId === moveId) {{
                 color = '#FFD700'; // yellow for selected move
               }} else if(moveHasAnnotations) {{
                 color = '#32CD32'; // green for annotated but not selected
               }}
               
+              console.log('Styling move', moveId, 'with color', color, 'selected:', selectedMoveId);
+              
               let matchingElements = [];
               
-              textElements.forEach((textEl, index) => {{
-                // Only style text elements that contain our winrate numbers AND are not board coordinates
-                if(textEl.textContent === winrateText) {{
-                  // Additional check: make sure this isn't a coordinate label
-                  const rect = textEl.getBoundingClientRect();
-                  const boardRect = boardElement.getBoundingClientRect();
-                  
-                  // Check if the text is within the main board area (not on edges where coordinates would be)
-                  const isInMainBoardArea = rect.left > boardRect.left + 20 && 
-                                          rect.right < boardRect.right - 20 &&
-                                          rect.top > boardRect.top + 10 && 
-                                          rect.bottom < boardRect.bottom - 10;
-                  
-                  if(isInMainBoardArea) {{
-                    matchingElements.push(textEl);
+              // Find the specific text element for this move by position
+              const targetCoord = sgfToCoord(moveId);
+              if(targetCoord) {{
+                textElements.forEach((textEl, textIndex) => {{
+                  // Only style text elements that contain our winrate numbers AND are not board coordinates
+                  if(textEl.textContent === winrate) {{
+                    // Additional check: make sure this isn't a coordinate label
+                    const rect = textEl.getBoundingClientRect();
+                    const boardRect = boardElement.getBoundingClientRect();
+                    
+                    // Check if the text is within the main board area (not on edges where coordinates would be)
+                    const isInMainBoardArea = rect.left > boardRect.left + 20 && 
+                                            rect.right < boardRect.right - 20 &&
+                                            rect.top > boardRect.top + 10 && 
+                                            rect.bottom < boardRect.bottom - 10;
+                    
+                    if(isInMainBoardArea) {{
+                      // Check if this text element is at approximately the right position for this move
+                      // This helps distinguish between moves with the same winrate
+                      const boardWidth = boardRect.width - 40; // Subtract margins
+                      const boardHeight = boardRect.height - 20; // Subtract margins
+                      const expectedX = boardRect.left + 20 + (targetCoord.x * boardWidth / 18);
+                      const expectedY = boardRect.top + 10 + (targetCoord.y * boardHeight / 18);
+                      
+                      const actualX = rect.left + rect.width / 2;
+                      const actualY = rect.top + rect.height / 2;
+                      
+                      // Allow some tolerance for positioning
+                      const tolerance = Math.min(boardWidth, boardHeight) / 19; // One grid spacing
+                      const distanceX = Math.abs(actualX - expectedX);
+                      const distanceY = Math.abs(actualY - expectedY);
+                      
+                      if(distanceX < tolerance && distanceY < tolerance) {{
+                        matchingElements.push(textEl);
+                      }}
+                    }}
                   }}
-                }}
-              }});
+                }});
+              }}
               
               // Style the elements with the determined color
               matchingElements.forEach((elem) => {{
@@ -786,7 +882,7 @@ function renderMarkers() {{
                 elem.setAttribute('fill', color);
                 elem.classList.add('policy-label');
               }});
-            }}, 100);
+            }}, 100, currentMoveId, winrateText);
             
             console.log('Successfully added red label at', coord.x, coord.y);
             
@@ -892,8 +988,8 @@ function sgfToCoord(moveString) {{
       const selectedClass = selectedMoveId === o.move ? ' selected' : '';
       return `<div class="policy-move${{selectedClass}}" data-move-id="${{o.move}}">${{o.move}}: ${{winrateText}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
     }});
-    // Display move number as 1-indexed (currentMove is already the human-readable move number)
-    div.innerHTML = `<strong>AI suggestions for ${{playerWhoMoved}} at move ${{currentMove}} (click to select move for annotation)</strong><br/>${{lines.join('')}}`;
+    // Display just the moves without redundant header
+    div.innerHTML = lines.join('');
 }}
 
 // Set up event delegation for both columns
@@ -1004,6 +1100,168 @@ document.getElementById('export').onclick = () => {{
   a.click();
 }};
 
+// Preset functionality
+function updatePresetDropdown() {{
+  const dropdown = document.getElementById('preset-dropdown');
+  // Clear existing options except the first one
+  dropdown.innerHTML = '<option value="">Apply Preset...</option>';
+  
+  // Add saved presets
+  Object.keys(savedPresets).forEach(presetName => {{
+    const option = document.createElement('option');
+    option.value = presetName;
+    option.textContent = presetName;
+    dropdown.appendChild(option);
+  }});
+}}
+
+document.getElementById('save-preset').onclick = () => {{
+  if(!selectedMoveId) {{
+    alert('Please select a move first');
+    return;
+  }}
+  
+  // Get current annotations
+  const currentGlobalLabels = globalLabels[currentMove] || {{}};
+  const currentMoveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? 
+                           labels[currentMove][selectedMoveId] : {{}};
+  
+  // Check if there are any annotations to save
+  const hasGlobalAnnotations = Object.values(currentGlobalLabels).some(val => val === true);
+  const hasMoveAnnotations = Object.values(currentMoveLabels).some(val => val === true);
+  
+  if(!hasGlobalAnnotations && !hasMoveAnnotations) {{
+    alert('No annotations to save. Please select some tags first.');
+    return;
+  }}
+  
+  // Prompt for preset name
+  const presetName = prompt('Enter a name for this preset:');
+  if(!presetName || presetName.trim() === '') {{
+    return;
+  }}
+  
+  const trimmedName = presetName.trim();
+  
+  // Save the preset locally
+  savedPresets[trimmedName] = {{
+    globalLabels: {{...currentGlobalLabels}},
+    moveLabels: {{...currentMoveLabels}}
+  }};
+  
+  console.log('Saved preset locally:', trimmedName);
+  
+  // Update dropdown immediately
+  updatePresetDropdown();
+  
+  // Save to config file via server
+  const presetData = {{
+    name: trimmedName,
+    global_labels: Object.fromEntries(
+      Object.entries(currentGlobalLabels).filter(([key, value]) => value === true)
+    ),
+    move_labels: Object.fromEntries(
+      Object.entries(currentMoveLabels).filter(([key, value]) => value === true)
+    )
+  }};
+  
+  fetch('http://localhost:8001/save_preset', {{
+    method: 'POST',
+    headers: {{
+      'Content-Type': 'application/json',
+    }},
+    body: JSON.stringify(presetData)
+  }})
+  .then(response => response.json())
+  .then(data => {{
+    console.log('Preset saved to config file:', data.message);
+  }})
+  .catch(error => {{
+    console.warn('Could not save preset to config file. Make sure preset server is running:', error);
+    console.log('To save manually, run: python web/preset_server.py');
+  }});
+  
+  // Visual feedback
+  const btn = document.getElementById('save-preset');
+  const originalText = btn.textContent;
+  btn.textContent = 'Saved!';
+  btn.style.background = '#28a745';
+  setTimeout(() => {{
+    btn.textContent = originalText;
+    btn.style.background = '#6f42c1';
+  }}, 1000);
+}};
+
+document.getElementById('preset-dropdown').onchange = (e) => {{
+  const presetName = e.target.value;
+  if(!presetName || !selectedMoveId) {{
+    if(!selectedMoveId) alert('Please select a move first');
+    return;
+  }}
+  
+  const preset = savedPresets[presetName];
+  if(!preset) return;
+  
+  // Clear existing labels first, then apply preset
+  globalLabels[currentMove] = globalLabels[currentMove] || {{}};
+  
+  // Clear all global labels for this position
+  Object.keys(globalLabels[currentMove]).forEach(key => {{
+    globalLabels[currentMove][key] = false;
+  }});
+  // Apply preset global labels
+  Object.assign(globalLabels[currentMove], preset.globalLabels);
+  
+  // Clear existing move-specific labels first
+  labels[currentMove] = labels[currentMove] || {{}};
+  labels[currentMove][selectedMoveId] = labels[currentMove][selectedMoveId] || {{}};
+  
+  // Clear all move labels for this move
+  Object.keys(labels[currentMove][selectedMoveId]).forEach(key => {{
+    labels[currentMove][selectedMoveId][key] = false;
+  }});
+  // Apply preset move labels
+  Object.assign(labels[currentMove][selectedMoveId], preset.moveLabels);
+  
+  console.log('Applied preset:', presetName);
+  
+  // Reset dropdown and refresh UI
+  e.target.value = '';
+  renderForm();
+  renderMarkers();
+}};
+
+// Reload presets functionality
+document.getElementById('reload-presets').onclick = () => {{
+  fetch('http://localhost:8001/get_presets')
+  .then(response => response.json())
+  .then(data => {{
+    // Update savedPresets with fresh data from server
+    savedPresets = {{...data}};
+    console.log('Reloaded presets from server:', Object.keys(savedPresets));
+    
+    // Update dropdown
+    updatePresetDropdown();
+    
+    // Visual feedback
+    const btn = document.getElementById('reload-presets');
+    const originalText = btn.textContent;
+    btn.textContent = 'Reloaded!';
+    btn.style.background = '#28a745';
+    setTimeout(() => {{
+      btn.textContent = originalText;
+      btn.style.background = '#17a2b8';
+    }}, 1000);
+  }})
+  .catch(error => {{
+    console.warn('Could not reload presets. Make sure preset server is running:', error);
+    alert('Could not reload presets. Make sure the preset server is running.');
+  }});
+}};
+
+// Initialize presets dropdown on page load
+updatePresetDropdown();
+
 console.log('Player object:', player);
 console.log('Player kifu:', player.kifu);
 console.log('Player available methods:', Object.getOwnPropertyNames(player));
@@ -1040,4 +1298,7 @@ def main() -> None:
 if __name__ == "__main__":
     main()
     #python web\label_page.py D:\KataGo\daniele_experiment\games\policy\3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.json test_out.html
+    
+    # To enable automatic preset saving, run the preset server in another terminal:
+    # python web/preset_server.py
     
