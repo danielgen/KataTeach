@@ -137,12 +137,33 @@ def evaluate_moves_batched(gs: GameState, moves: List[int], model) -> List[float
     return batch_winrates
 
 
-def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_threshold: float = 0.01) -> Tuple[int, float, bool]:
+def calculate_dynamic_threshold(move_number: int, initial_threshold: float = 0.05, final_threshold: float = 0.01, transition_moves: int = 50) -> float:
+    """Calculate probability threshold that decreases as game progresses.
+    
+    Args:
+        move_number: Current move number (0-based)
+        initial_threshold: Starting threshold for early game (default 5% = 0.05)
+        final_threshold: Final threshold for late game (default 1% = 0.01)
+        transition_moves: Number of moves over which to transition (default 50)
+    
+    Returns:
+        Current probability threshold
+    """
+    if move_number >= transition_moves:
+        return final_threshold
+    
+    # Linear interpolation from initial to final threshold
+    progress = move_number / transition_moves
+    return initial_threshold - (initial_threshold - final_threshold) * progress
+
+
+def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_threshold: float = 0.01, move_number: int = 0) -> Tuple[int, float, bool]:
     """Select a move by sampling from moves within prob_threshold of the best move.
     
     Args:
         moves_and_probs: List of (move, probability) tuples
         prob_threshold: Probability threshold (default 1% = 0.01)
+        move_number: Current move number for dynamic threshold calculation (optional)
     
     Returns:
         Tuple of (selected_move, its_probability, was_sampled)
@@ -410,7 +431,8 @@ def compute_policy_analysis(
 
 
 def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: float = 0.01, 
-                     resignation_threshold: float = 0.10, consecutive_low_moves: int = 3) -> Tuple[str, str]:
+                     resignation_threshold: float = 0.10, consecutive_low_moves: int = 3,
+                     initial_prob_threshold: float = 0.05, transition_moves: int = 50) -> Tuple[str, str]:
     """Play a single game using 1-visit neural network evaluation.
     
     Returns:
@@ -459,8 +481,11 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
                 print(f"Game {game_id}: {player_str} resigns (winrate {current_winrate:.1%} < {resignation_threshold:.1%} for {consecutive_low_moves} consecutive moves)")
                 break
         
-        # For 1-visit play, sample from moves within prob_threshold of the best move
-        best_move, best_prob, was_sampled = select_move_with_sampling(moves_and_probs, prob_threshold)
+        # Calculate dynamic probability threshold based on game progress
+        current_threshold = calculate_dynamic_threshold(move_number, initial_prob_threshold, prob_threshold, transition_moves)
+        
+        # For 1-visit play, sample from moves within current_threshold of the best move
+        best_move, best_prob, was_sampled = select_move_with_sampling(moves_and_probs, current_threshold, move_number)
         
         # Play the move
         gs.play(current_player, best_move)
@@ -470,12 +495,14 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
         if best_move == Board.PASS_LOC:
             consecutive_passes += 1
             sampling_info = " [sampled]" if was_sampled else ""
-            print(f"Move {move_number + 1}: {player_str} passes (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}")
+            threshold_info = f" (threshold: {current_threshold:.1%})" if move_number < transition_moves else ""
+            print(f"Move {move_number + 1}: {player_str} passes (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}{threshold_info}")
         else:
             consecutive_passes = 0
             move_str = loc_to_sgf_coords(best_move, gs.board)
             sampling_info = " [sampled]" if was_sampled else ""
-            print(f"Move {move_number + 1}: {player_str} plays {move_str} (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}")
+            threshold_info = f" (threshold: {current_threshold:.1%})" if move_number < transition_moves else ""
+            print(f"Move {move_number + 1}: {player_str} plays {move_str} (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}{threshold_info}")
         
         # Game ends after two consecutive passes
         if consecutive_passes >= 2:
@@ -543,6 +570,8 @@ def play_and_analyze_games(
     max_moves_per_position: int = 10,
     resignation_threshold: float = 0.10,
     consecutive_low_moves: int = 3,
+    initial_prob_threshold: float = 0.05,
+    transition_moves: int = 50,
 ) -> None:
     """Play N games, save them as SGF files, and analyze them."""
     
@@ -556,7 +585,8 @@ def play_and_analyze_games(
         try:
             # Play the game
             sgf_content, result = play_single_game(model, game_id, board_size, prob_threshold, 
-                                                 resignation_threshold, consecutive_low_moves)
+                                                 resignation_threshold, consecutive_low_moves,
+                                                 initial_prob_threshold, transition_moves)
             
             # Save SGF file
             sgf_file = output_dir / f"{uuid.uuid4()}.sgf"
@@ -587,11 +617,14 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Play and analyze 5 new games
+  # Play and analyze 5 new games with dynamic thresholds (5% -> 1% over 50 moves)
   python play_and_analyze.py model.ckpt 5
   
-  # Play games with custom settings
-  python play_and_analyze.py model.ckpt 3 --output-dir my_games --board-size 13 --prob-threshold 0.02
+  # Play games with custom dynamic threshold settings
+  python play_and_analyze.py model.ckpt 3 --initial-prob-threshold 0.08 --transition-moves 30
+  
+  # Use fixed threshold (no dynamics) by setting initial = final
+  python play_and_analyze.py model.ckpt 2 --initial-prob-threshold 0.02 --prob-threshold 0.02
   
   # Use CPU instead of GPU
   python play_and_analyze.py model.ckpt 2 --device cpu
@@ -616,6 +649,10 @@ Examples:
                        help="Winrate threshold for resignation (default: 0.10 = 10%%)")
     parser.add_argument("--consecutive-low-moves", type=int, default=3,
                        help="Number of consecutive low winrate moves before resignation (default: 3)")
+    parser.add_argument("--initial-prob-threshold", type=float, default=0.05,
+                       help="Initial probability threshold for early game diversity (default: 0.05 = 5%%)")
+    parser.add_argument("--transition-moves", type=int, default=50,
+                       help="Number of moves over which to transition from initial to final threshold (default: 50)")
     
     args = parser.parse_args()
     
@@ -640,7 +677,9 @@ Examples:
             analysis_threshold=args.analysis_threshold,
             max_moves_per_position=args.max_moves_per_position,
             resignation_threshold=args.resignation_threshold,
-            consecutive_low_moves=args.consecutive_low_moves
+            consecutive_low_moves=args.consecutive_low_moves,
+            initial_prob_threshold=args.initial_prob_threshold,
+            transition_moves=args.transition_moves
         )
         
     except KeyboardInterrupt:
