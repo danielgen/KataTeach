@@ -146,7 +146,13 @@ def build_label_page(
 <title>Go Position Labeler</title>
 <script src='{relative_wgo_path}'></script>
 <style>
-  body {{ margin: 20px; font-family: Arial, sans-serif; }}
+  body {{ 
+    margin: 20px; 
+    font-family: Arial, sans-serif; 
+    zoom: 0.85; /* Default zoom to 85% */
+    -moz-transform: scale(0.85); /* Firefox fallback */
+    -moz-transform-origin: 0 0;
+  }}
   .container {{ display: flex; gap: 20px; max-width: 100%; }}
   .board-section {{ flex: 0 0 520px; }}
   .controls-section {{ flex: 1; min-width: 500px; }}
