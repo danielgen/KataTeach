@@ -1353,7 +1353,7 @@ renderMarkers();
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build SGF labeling web page")
     parser.add_argument("combined_data", type=Path, help="Combined JSON file with SGF and policy data")
-    parser.add_argument("html", type=Path, help="Output HTML file")
+    parser.add_argument("html", type=Path, nargs='?', help="Output HTML file (default: auto-generated from input filename)")
     parser.add_argument(
         "--ontology",
         type=Path,
@@ -1361,12 +1361,25 @@ def main() -> None:
         help="Ontology YAML path",
     )
     args = parser.parse_args()
+    
+    # Auto-generate output filename if not provided
+    if args.html is None:
+        # Extract the base filename (UUID) from the input file
+        input_stem = args.combined_data.stem  # e.g., "3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c"
+        args.html = args.combined_data.parent / f"{input_stem}.html"
+    
     build_label_page(args.combined_data, args.html, args.ontology)
 
 
 if __name__ == "__main__":
     main()
-    #python web\label_page.py D:\KataGo\daniele_experiment\games\policy\3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.json test_out.html
+    # Examples:
+    # Auto-generate HTML filename from input UUID:
+    # python web/label_page.py games/policy/3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.json
+    # Output: games/policy/3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.html
+    #
+    # Or specify custom output filename:
+    # python web/label_page.py games/policy/uuid.json custom_output.html
     
     # To enable automatic preset saving, run the preset server in another terminal:
     # python web/preset_server.py
