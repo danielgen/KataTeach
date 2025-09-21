@@ -830,7 +830,7 @@ function renderMarkers() {{
               // Determine color based on selection and annotation status
               let color = 'red'; // default
               if(selectedMoveId === moveId) {{
-                color = '#FFD700'; // yellow for selected move
+                color = '#FF8C00'; // orange for selected move
               }} else if(moveHasAnnotations) {{
                 color = '#32CD32'; // green for annotated but not selected
               }}
