@@ -671,8 +671,8 @@ function renderMarkers() {
             const currentMoveId = move.move; // Capture the move ID for this iteration
             console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText, 'for move:', currentMoveId);
             
-            // Create label object with unique identifier
-            const uniqueId = 'policy-' + coord.x + '-' + coord.y + '-' + index;
+            // Create label object with unique identifier that includes the move ID
+            const uniqueId = 'policy-' + currentMoveId + '-' + coord.x + '-' + coord.y;
             const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
             
             // Mark this as a policy label so we can style it differently
@@ -703,44 +703,60 @@ function renderMarkers() {
               
               let matchingElements = [];
               
-              // Find the specific text element for this move by position
+              // Find the specific text element for this exact move
               const targetCoord = sgfToCoord(moveId);
               if(targetCoord) {
+                // First try to find by exact position and content match
+                let exactMatch = null;
+                const expectedUniqueId = 'policy-' + moveId + '-' + targetCoord.x + '-' + targetCoord.y;
+                
                 textElements.forEach((textEl, textIndex) => {
-                  // Only style text elements that contain our winrate numbers AND are not board coordinates
+                  // Only consider text elements with the exact winrate content
                   if(textEl.textContent === winrate) {
-                    // Additional check: make sure this isn't a coordinate label
+                    // Check if this text element is within the main board area
                     const rect = textEl.getBoundingClientRect();
                     const boardRect = boardElement.getBoundingClientRect();
                     
-                    // Check if the text is within the main board area (not on edges where coordinates would be)
                     const isInMainBoardArea = rect.left > boardRect.left + 20 && 
                                             rect.right < boardRect.right - 20 &&
                                             rect.top > boardRect.top + 10 && 
                                             rect.bottom < boardRect.bottom - 10;
                     
                     if(isInMainBoardArea) {
-                      // Check if this text element is at approximately the right position for this move
-                      // This helps distinguish between moves with the same winrate
-                      const boardWidth = boardRect.width - 40; // Subtract margins
-                      const boardHeight = boardRect.height - 20; // Subtract margins
+                      // Calculate expected position for this move
+                      const boardWidth = boardRect.width - 40;
+                      const boardHeight = boardRect.height - 20;
                       const expectedX = boardRect.left + 20 + (targetCoord.x * boardWidth / 18);
                       const expectedY = boardRect.top + 10 + (targetCoord.y * boardHeight / 18);
                       
                       const actualX = rect.left + rect.width / 2;
                       const actualY = rect.top + rect.height / 2;
                       
-                      // Allow some tolerance for positioning
-                      const tolerance = Math.min(boardWidth, boardHeight) / 19; // One grid spacing
+                      // Calculate distance from expected position
                       const distanceX = Math.abs(actualX - expectedX);
                       const distanceY = Math.abs(actualY - expectedY);
+                      const totalDistance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
                       
-                      if(distanceX < tolerance && distanceY < tolerance) {
-                        matchingElements.push(textEl);
+                      // If this is the closest match so far, or we don't have a match yet
+                      if(!exactMatch || totalDistance < exactMatch.distance) {
+                        exactMatch = {
+                          element: textEl,
+                          distance: totalDistance,
+                          moveId: moveId,
+                          position: `(${actualX.toFixed(1)}, ${actualY.toFixed(1)})`
+                        };
                       }
                     }
                   }
                 });
+                
+                // Only add the single closest match to avoid multiple highlights
+                if(exactMatch) {
+                  matchingElements.push(exactMatch.element);
+                  console.log(`Single match found for move ${moveId} with winrate ${winrate} at ${exactMatch.position}, distance: ${exactMatch.distance.toFixed(1)}`);
+                } else {
+                  console.log(`No match found for move ${moveId} with winrate ${winrate}`);
+                }
               }
               
               // Style the elements with the determined color

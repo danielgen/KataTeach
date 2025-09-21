@@ -807,8 +807,8 @@ function renderMarkers() {{
             const currentMoveId = move.move; // Capture the move ID for this iteration
             console.log('Adding policy label at:', coord.x, coord.y, 'with text:', winrateText, 'for move:', currentMoveId);
             
-            // Create label object with unique identifier
-            const uniqueId = 'policy-' + coord.x + '-' + coord.y + '-' + index;
+            // Create label object with unique identifier that includes the move ID
+            const uniqueId = 'policy-' + currentMoveId + '-' + coord.x + '-' + coord.y;
             const labelObj = new WGo.LabelBoardObject(winrateText, coord.x, coord.y);
             
             // Mark this as a policy label so we can style it differently
@@ -839,44 +839,60 @@ function renderMarkers() {{
               
               let matchingElements = [];
               
-              // Find the specific text element for this move by position
+              // Find the specific text element for this exact move
               const targetCoord = sgfToCoord(moveId);
               if(targetCoord) {{
+                // First try to find by exact position and content match
+                let exactMatch = null;
+                const expectedUniqueId = 'policy-' + moveId + '-' + targetCoord.x + '-' + targetCoord.y;
+                
                 textElements.forEach((textEl, textIndex) => {{
-                  // Only style text elements that contain our winrate numbers AND are not board coordinates
+                  // Only consider text elements with the exact winrate content
                   if(textEl.textContent === winrate) {{
-                    // Additional check: make sure this isn't a coordinate label
+                    // Check if this text element is within the main board area
                     const rect = textEl.getBoundingClientRect();
                     const boardRect = boardElement.getBoundingClientRect();
                     
-                    // Check if the text is within the main board area (not on edges where coordinates would be)
                     const isInMainBoardArea = rect.left > boardRect.left + 20 && 
                                             rect.right < boardRect.right - 20 &&
                                             rect.top > boardRect.top + 10 && 
                                             rect.bottom < boardRect.bottom - 10;
                     
                     if(isInMainBoardArea) {{
-                      // Check if this text element is at approximately the right position for this move
-                      // This helps distinguish between moves with the same winrate
-                      const boardWidth = boardRect.width - 40; // Subtract margins
-                      const boardHeight = boardRect.height - 20; // Subtract margins
+                      // Calculate expected position for this move
+                      const boardWidth = boardRect.width - 40;
+                      const boardHeight = boardRect.height - 20;
                       const expectedX = boardRect.left + 20 + (targetCoord.x * boardWidth / 18);
                       const expectedY = boardRect.top + 10 + (targetCoord.y * boardHeight / 18);
                       
                       const actualX = rect.left + rect.width / 2;
                       const actualY = rect.top + rect.height / 2;
                       
-                      // Allow some tolerance for positioning
-                      const tolerance = Math.min(boardWidth, boardHeight) / 19; // One grid spacing
+                      // Calculate distance from expected position
                       const distanceX = Math.abs(actualX - expectedX);
                       const distanceY = Math.abs(actualY - expectedY);
+                      const totalDistance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
                       
-                      if(distanceX < tolerance && distanceY < tolerance) {{
-                        matchingElements.push(textEl);
+                      // If this is the closest match so far, or we don't have a match yet
+                      if(!exactMatch || totalDistance < exactMatch.distance) {{
+                        exactMatch = {{
+                          element: textEl,
+                          distance: totalDistance,
+                          moveId: moveId,
+                          position: `(${{actualX.toFixed(1)}}, ${{actualY.toFixed(1)}})`
+                        }};
                       }}
                     }}
                   }}
                 }});
+                
+                // Only add the single closest match to avoid multiple highlights
+                if(exactMatch) {{
+                  matchingElements.push(exactMatch.element);
+                  console.log(`Single match found for move ${{moveId}} with winrate ${{winrate}} at ${{exactMatch.position}}, distance: ${{exactMatch.distance.toFixed(1)}}`);
+                }} else {{
+                  console.log(`No match found for move ${{moveId}} with winrate ${{winrate}}`);
+                }}
               }}
               
               // Style the elements with the determined color
@@ -1097,16 +1113,60 @@ document.getElementById('policy_suggestions').addEventListener('click', e => {{
 }});
 
 document.getElementById('export').onclick = () => {{
-  // Combine global labels and per-move labels in export
-  const exportData = {{
-    perMoveLabels: labels,
-    globalLabels: globalLabels
+  // Extract game metadata from SGF
+  const gameMetadata = {{}};
+  try {{
+    if(player.rootNode && player.rootNode.properties) {{
+      const props = player.rootNode.properties;
+      if(props.PB) gameMetadata.black_player = Array.isArray(props.PB) ? props.PB[0] : props.PB;
+      if(props.PW) gameMetadata.white_player = Array.isArray(props.PW) ? props.PW[0] : props.PW;
+      if(props.DT) gameMetadata.date = Array.isArray(props.DT) ? props.DT[0] : props.DT;
+      if(props.RE) gameMetadata.result = Array.isArray(props.RE) ? props.RE[0] : props.RE;
+      if(props.GN) gameMetadata.game_name = Array.isArray(props.GN) ? props.GN[0] : props.GN;
+    }}
+  }} catch(e) {{
+    console.log('Could not extract game metadata:', e);
+  }}
+  
+  // Calculate annotation statistics
+  const annotationStats = {{
+    total_positions_annotated: Object.keys(labels).length,
+    total_move_annotations: Object.values(labels).reduce((sum, pos) => 
+      sum + Object.keys(pos).length, 0),
+    total_global_annotations: Object.keys(globalLabels).length,
+    annotation_timestamp: new Date().toISOString()
   }};
-  const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData));
+  
+  const exportData = {{
+    format_version: "1.0",
+    exported_at: new Date().toISOString(),
+    game_metadata: gameMetadata,
+    annotation_statistics: annotationStats,
+    annotations: {{
+      per_move_labels: labels,
+      global_labels: globalLabels
+    }},
+    // Include source data references for traceability
+    source_info: {{
+      sgf_preview: SGF.substring(0, 200) + (SGF.length > 200 ? "..." : ""),
+      policy_positions: Object.keys(POLICY).length
+    }}
+  }};
+  
+  // Create more descriptive filename
+  const gameInfo = gameMetadata.game_name || 
+    `${{gameMetadata.black_player || 'Black'}}_vs_${{gameMetadata.white_player || 'White'}}` ||
+    'game';
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+  const filename = `${{gameInfo}}_annotations_${{timestamp}}.json`;
+  
+  const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
   const a = document.createElement('a');
   a.setAttribute('href', data);
-  a.setAttribute('download', 'labels.json');
+  a.setAttribute('download', filename);
   a.click();
+  
+  console.log('Exported annotations with metadata:', exportData);
 }};
 
 // Preset functionality
