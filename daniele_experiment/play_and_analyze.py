@@ -463,9 +463,30 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
             print(f"No legal moves available for {player_str} at move {move_number}")
             break
         
-        # Get current winrate for resignation logic
-        current_winrate = float(outputs["value"][0])  # Winrate from current player's perspective
-        winrate_history.append((current_player, current_winrate))
+        # Calculate dynamic probability threshold based on game progress
+        current_threshold = calculate_dynamic_threshold(move_number, initial_prob_threshold, prob_threshold, transition_moves)
+        
+        # For 1-visit play, sample from moves within current_threshold of the best move
+        best_move, best_prob, was_sampled = select_move_with_sampling(moves_and_probs, current_threshold, move_number)
+        
+        # Play the move
+        gs.play(current_player, best_move)
+        moves.append((current_player, best_move))
+        
+        # Calculate the winrate after making the selected move (to match analysis output)
+        try:
+            move_outputs = gs.get_model_outputs(model)
+            move_value = move_outputs["value"]
+            # Since we played a move, perspective flipped - take 1 - opponent_winrate
+            opponent_winrate = float(move_value[0])
+            move_winrate = 1.0 - opponent_winrate
+        except:
+            # Fallback: use position evaluation before the move
+            position_winrate = float(outputs["value"][0])
+            move_winrate = position_winrate
+        
+        # Store move winrate for resignation logic (same as what we display)
+        winrate_history.append((current_player, move_winrate))
         
         # Check for resignation condition (winrate < 10% for 3 consecutive moves by current player)
         if len(winrate_history) >= consecutive_low_moves:
@@ -478,31 +499,21 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
             # If we have at least 3 moves by current player and all are below threshold
             if (len(current_player_recent_winrates) >= consecutive_low_moves and
                 all(wr < resignation_threshold for wr in current_player_recent_winrates[-consecutive_low_moves:])):
-                print(f"Game {game_id}: {player_str} resigns (winrate {current_winrate:.1%} < {resignation_threshold:.1%} for {consecutive_low_moves} consecutive moves)")
+                print(f"Game {game_id}: {player_str} resigns (winrate {move_winrate:.1%} < {resignation_threshold:.1%} for {consecutive_low_moves} consecutive moves)")
                 break
-        
-        # Calculate dynamic probability threshold based on game progress
-        current_threshold = calculate_dynamic_threshold(move_number, initial_prob_threshold, prob_threshold, transition_moves)
-        
-        # For 1-visit play, sample from moves within current_threshold of the best move
-        best_move, best_prob, was_sampled = select_move_with_sampling(moves_and_probs, current_threshold, move_number)
-        
-        # Play the move
-        gs.play(current_player, best_move)
-        moves.append((current_player, best_move))
         
         # Check for pass
         if best_move == Board.PASS_LOC:
             consecutive_passes += 1
             sampling_info = " [sampled]" if was_sampled else ""
             threshold_info = f" (threshold: {current_threshold:.1%})" if move_number < transition_moves else ""
-            print(f"Move {move_number + 1}: {player_str} passes (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}{threshold_info}")
+            print(f"Move {move_number + 1}: {player_str} passes (prob: {best_prob:.3f}, winrate: {move_winrate:.1%}){sampling_info}{threshold_info}")
         else:
             consecutive_passes = 0
             move_str = loc_to_sgf_coords(best_move, gs.board)
             sampling_info = " [sampled]" if was_sampled else ""
             threshold_info = f" (threshold: {current_threshold:.1%})" if move_number < transition_moves else ""
-            print(f"Move {move_number + 1}: {player_str} plays {move_str} (prob: {best_prob:.3f}, winrate: {current_winrate:.1%}){sampling_info}{threshold_info}")
+            print(f"Move {move_number + 1}: {player_str} plays {move_str} (prob: {best_prob:.3f}, winrate: {move_winrate:.1%}){sampling_info}{threshold_info}")
         
         # Game ends after two consecutive passes
         if consecutive_passes >= 2:
@@ -639,8 +650,8 @@ Examples:
                        help="Board size (default: 19)")
     parser.add_argument("--device", type=str, default="cuda", 
                        help="PyTorch device (default: cuda)")
-    parser.add_argument("--prob-threshold", type=float, default=0.01,
-                       help="Probability threshold for move sampling (default: 0.01 = 1%%)")
+    parser.add_argument("--prob-threshold", type=float, default=0.05,
+                       help="Probability threshold for move sampling (default: 0.05 = 5%%)")
     parser.add_argument("--analysis-threshold", type=float, default=-0.005,
                        help="Winrate drop threshold for policy analysis (default: -0.005)")
     parser.add_argument("--max-moves-per-position", type=int, default=10,

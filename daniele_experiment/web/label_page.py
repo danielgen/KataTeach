@@ -988,11 +988,14 @@ function sgfToCoord(moveString) {{
        // The player who was to move at the previous position (before current move was played)
     const playerWhoMoved = (currentMove - 1) % 2 === 0 ? 'Black' : 'White';
     const lines = opts.map(o => {{
+      // Winrates in the data are from the perspective of the player who would make the move
+      // Display them consistently from the moving player's perspective with clear labeling
       const winrateText = `${{(o.winrate * 100).toFixed(1)}}%`;
       const policyText = o.policy_prob ? `${{(o.policy_prob * 100).toFixed(1)}}%` : 'N/A';
       const actualMoveMarker = o.is_actual_move ? ' ★' : '';
       const selectedClass = selectedMoveId === o.move ? ' selected' : '';
-      return `<div class="policy-move${{selectedClass}}" data-move-id="${{o.move}}">${{o.move}}: ${{winrateText}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
+      const playerLabel = playerWhoMoved === 'Black' ? '⚫' : '⚪';
+      return `<div class="policy-move${{selectedClass}}" data-move-id="${{o.move}}">${{o.move}}: ${{winrateText}} ${{playerLabel}} win, ${{policyText}} prob${{actualMoveMarker}}</div>`;
     }});
     // Display moves in a 2-column grid
     div.innerHTML = `<div class="policy-grid">${{lines.join('')}}</div>`;
