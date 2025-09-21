@@ -694,7 +694,7 @@ function renderMarkers() {
               // Determine color based on selection and annotation status
               let color = 'red'; // default
               if(selectedMoveId === moveId) {
-                color = '#FFD700'; // yellow for selected move
+                color = '#FF8C00'; // orange for selected move
               } else if(moveHasAnnotations) {
                 color = '#32CD32'; // green for annotated but not selected
               }
@@ -977,16 +977,60 @@ document.getElementById('policy_suggestions').addEventListener('click', e => {
 });
 
 document.getElementById('export').onclick = () => {
-  // Combine global labels and per-move labels in export
-  const exportData = {
-    perMoveLabels: labels,
-    globalLabels: globalLabels
+  // Extract game metadata from SGF
+  const gameMetadata = {};
+  try {
+    if(player.rootNode && player.rootNode.properties) {
+      const props = player.rootNode.properties;
+      if(props.PB) gameMetadata.black_player = Array.isArray(props.PB) ? props.PB[0] : props.PB;
+      if(props.PW) gameMetadata.white_player = Array.isArray(props.PW) ? props.PW[0] : props.PW;
+      if(props.DT) gameMetadata.date = Array.isArray(props.DT) ? props.DT[0] : props.DT;
+      if(props.RE) gameMetadata.result = Array.isArray(props.RE) ? props.RE[0] : props.RE;
+      if(props.GN) gameMetadata.game_name = Array.isArray(props.GN) ? props.GN[0] : props.GN;
+    }
+  } catch(e) {
+    console.log('Could not extract game metadata:', e);
+  }
+  
+  // Calculate annotation statistics
+  const annotationStats = {
+    total_positions_annotated: Object.keys(labels).length,
+    total_move_annotations: Object.values(labels).reduce((sum, pos) => 
+      sum + Object.keys(pos).length, 0),
+    total_global_annotations: Object.keys(globalLabels).length,
+    annotation_timestamp: new Date().toISOString()
   };
-  const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData));
+  
+  const exportData = {
+    format_version: "1.0",
+    exported_at: new Date().toISOString(),
+    game_metadata: gameMetadata,
+    annotation_statistics: annotationStats,
+    annotations: {
+      per_move_labels: labels,
+      global_labels: globalLabels
+    },
+    // Include source data references for traceability
+    source_info: {
+      sgf_preview: SGF.substring(0, 200) + (SGF.length > 200 ? "..." : ""),
+      policy_positions: Object.keys(POLICY).length
+    }
+  };
+  
+  // Create more descriptive filename
+  const gameInfo = gameMetadata.game_name || 
+    `${gameMetadata.black_player || 'Black'}_vs_${gameMetadata.white_player || 'White'}` ||
+    'game';
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+  const filename = `${gameInfo}_annotations_${timestamp}.json`;
+  
+  const data = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportData, null, 2));
   const a = document.createElement('a');
   a.setAttribute('href', data);
-  a.setAttribute('download', 'labels.json');
+  a.setAttribute('download', filename);
   a.click();
+  
+  console.log('Exported annotations with metadata:', exportData);
 };
 
 // Preset functionality

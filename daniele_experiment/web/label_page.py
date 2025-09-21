@@ -128,6 +128,11 @@ def build_label_page(
     presets_path = ontology_path.parent / "annotations_presets.yaml"
     presets = load_presets(presets_path)
 
+    # Simple relative path calculation
+    # HTML files are in games/annotation_pages/, web files are in web/
+    # So we need to go up two levels: ../../../web/wgo.min.js
+    relative_wgo_path = "../../web/wgo.min.js"
+
     sgf_js = json.dumps(sgf_text)
     global_groups_js = json.dumps(global_groups)
     spatial_groups_js = json.dumps(spatial_groups)
@@ -139,7 +144,7 @@ def build_label_page(
 <head>
 <meta charset='utf-8' />
 <title>Go Position Labeler</title>
-<script src='web/wgo.min.js'></script>
+<script src='{relative_wgo_path}'></script>
 <style>
   body {{ margin: 20px; font-family: Arial, sans-serif; }}
   .container {{ display: flex; gap: 20px; max-width: 100%; }}
@@ -788,8 +793,38 @@ function renderMarkers() {{
      // Show suggestions for the previous move (what AI suggested before this move was played)
      const positionKey = currentMove > 0 ? (currentMove - 1).toString() : null;
      const positionData = positionKey ? POLICY[positionKey] : null;
-     const policyMoves = positionData && positionData.suggestions ? positionData.suggestions : [];
+     let policyMoves = positionData && positionData.suggestions ? positionData.suggestions : [];
+     
+     // If there's a separate actual_move that's not in suggestions, add it
+     if(positionData && positionData.actual_move && positionData.actual_move.move) {{
+       const actualMove = positionData.actual_move;
+       const actualMoveInSuggestions = policyMoves.some(m => m.move === actualMove.move);
+       
+       if(!actualMoveInSuggestions) {{
+         // Add the actual move to the policy moves for rendering
+         const actualMoveData = {{
+           move: actualMove.move,
+           winrate: actualMove.winrate || 0.5, // fallback winrate
+           policy_prob: actualMove.policy_prob || 0.0,
+           is_actual_move: true
+         }};
+         policyMoves = [...policyMoves, actualMoveData];
+         console.log('Added missing actual move to rendering:', actualMoveData);
+       }}
+     }}
      console.log('Rendering', policyMoves.length, 'policy moves for position', positionKey, 'Position data:', positionData);
+     
+     // Debug: Check if any moves are marked as actual moves
+     if(policyMoves.length > 0) {{
+       const actualMoves = policyMoves.filter(m => m.is_actual_move);
+       console.log('Actual moves found:', actualMoves.length, actualMoves.map(m => m.move));
+       console.log('All moves in suggestions:', policyMoves.map(m => `${{m.move}}${{m.is_actual_move ? ' ★' : ''}}`));
+     }}
+     
+     // Debug: Check if actual_move is stored separately
+     if(positionData && positionData.actual_move) {{
+       console.log('Separate actual_move data:', positionData.actual_move);
+     }}
     
     if(policyMoves.length > 0) {{
       const playerToMove = currentMove % 2 === 0 ? 'black' : 'white';
@@ -835,7 +870,7 @@ function renderMarkers() {{
                 color = '#32CD32'; // green for annotated but not selected
               }}
               
-              console.log('Styling move', moveId, 'with color', color, 'selected:', selectedMoveId);
+              console.log('Styling move', moveId, 'with color', color, 'selected:', selectedMoveId, 'currentMove:', currentMove, 'positionKey:', positionKey);
               
               let matchingElements = [];
               
@@ -987,7 +1022,25 @@ function sgfToCoord(moveString) {{
     // Show policy suggestions for the position that was just played (not the upcoming move)
     const positionKey = currentMove > 0 ? (currentMove - 1).toString() : null;
     const positionData = positionKey ? POLICY[positionKey] : null;
-    const opts = positionData && positionData.suggestions ? positionData.suggestions : [];
+    let opts = positionData && positionData.suggestions ? positionData.suggestions : [];
+    
+    // If there's a separate actual_move that's not in suggestions, add it
+    if(positionData && positionData.actual_move && positionData.actual_move.move) {{
+      const actualMove = positionData.actual_move;
+      const actualMoveInSuggestions = opts.some(m => m.move === actualMove.move);
+      
+      if(!actualMoveInSuggestions) {{
+        // Add the actual move to the suggestions for display
+        const actualMoveData = {{
+          move: actualMove.move,
+          winrate: actualMove.winrate || 0.5, // fallback winrate
+          policy_prob: actualMove.policy_prob || 0.0,
+          is_actual_move: true
+        }};
+        opts = [...opts, actualMoveData];
+        console.log('Added missing actual move to policy display:', actualMoveData);
+      }}
+    }}
     
     console.log('Current move:', currentMove, 'Policy data for position:', positionKey, 'Position data:', positionData, 'Suggestions:', opts);
   
@@ -1366,7 +1419,14 @@ def main() -> None:
     if args.html is None:
         # Extract the base filename (UUID) from the input file
         input_stem = args.combined_data.stem  # e.g., "3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c"
-        args.html = args.combined_data.parent / f"{input_stem}.html"
+        
+        # Create annotation_pages directory in the games folder
+        # Navigate up from policy directory to games directory
+        games_dir = args.combined_data.parent.parent  # From games/policy/ to games/
+        annotation_pages_dir = games_dir / "annotation_pages"
+        annotation_pages_dir.mkdir(exist_ok=True)
+        
+        args.html = annotation_pages_dir / f"{input_stem}.html"
     
     build_label_page(args.combined_data, args.html, args.ontology)
 
@@ -1376,7 +1436,7 @@ if __name__ == "__main__":
     # Examples:
     # Auto-generate HTML filename from input UUID:
     # python web/label_page.py games/policy/3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.json
-    # Output: games/policy/3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.html
+    # Output: games/annotation_pages/3212f8f3-c7be-4fc7-80c8-7a9e87f8be9c.html
     #
     # Or specify custom output filename:
     # python web/label_page.py games/policy/uuid.json custom_output.html
