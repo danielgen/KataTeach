@@ -40,7 +40,7 @@ def load_tags(ontology_path: Path) -> tuple[dict[str, list[str]], dict[str, list
         "tactical": [t["name"] for t in tags_data.get("tactical", [])],
         "stress_area": [t["name"] for t in tags_data.get("stress_area", [])],
         "reduce_area": [t["name"] for t in tags_data.get("reduce_area", [])],
-        "shape": [t["name"] for t in tags_data.get("shape", [])]
+        "move_attributes": [t["name"] for t in tags_data.get("move_attributes", [])]
     }
     
     return global_groups, spatial_groups
@@ -303,6 +303,27 @@ def build_label_page(
   h3 {{ margin-top: 20px; margin-bottom: 10px; }}
   h4 {{ margin: 10px 0 5px 0; color: #333; }}
   
+  /* Export/Import button styling */
+  #export, #import {{
+    padding: 10px 20px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+  }}
+  #export:hover, #import:hover {{
+    background: #0056b3;
+  }}
+  #import {{
+    background: #28a745;
+  }}
+  #import:hover {{
+    background: #1e7e34;
+  }}
+  
   /* Hide WGo.js default controls that appear at bottom */
   .wgo-player-wrapper .wgo-player-control {{ display: none !important; }}
   .wgo-player-wrapper .wgo-comments {{ display: none !important; }}
@@ -376,7 +397,11 @@ def build_label_page(
       <div class='label-column' id='global_column'></div>
       <div class='label-column' id='spatial_column'></div>
     </div>
-    <button id='export'>Export Labels</button>
+    <div style='display: flex; gap: 10px; margin-top: 10px;'>
+      <button id='export'>Export Labels</button>
+      <button id='import'>Import Labels</button>
+      <input type='file' id='import-file' accept='.json' style='display: none;' />
+    </div>
   </div>
 </div>
 <script>
@@ -533,7 +558,7 @@ function renderForm() {{
     selectedMoveInfo.style.display = 'none';
   }}
   
-  // Render global groups (global, initiative, location, shape)
+  // Render global groups (global, initiative, location, move_attributes)
   Object.entries(GLOBAL_GROUPS).forEach(([groupName, tags]) => {{
     if (tags.length === 0) return;
     
@@ -555,8 +580,8 @@ function renderForm() {{
     globalColumn.appendChild(groupDiv);
   }});
   
-  // Add initiative, stress_area, reduce_area and shape to the left column
-  ['initiative', 'stress_area', 'reduce_area', 'shape'].forEach(groupName => {{
+  // Add initiative, stress_area, reduce_area and move_attributes to the left column
+  ['initiative', 'stress_area', 'reduce_area', 'move_attributes'].forEach(groupName => {{
     const tags = SPATIAL_GROUPS[groupName] || [];
     if (tags.length === 0) return;
     
@@ -1229,6 +1254,77 @@ document.getElementById('export').onclick = () => {{
   a.click();
   
   console.log('Exported annotations with metadata:', exportData);
+}};
+
+// Import functionality
+document.getElementById('import').onclick = () => {{
+  document.getElementById('import-file').click();
+}};
+
+document.getElementById('import-file').onchange = (e) => {{
+  const file = e.target.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = (event) => {{
+    try {{
+      const importedData = JSON.parse(event.target.result);
+      
+      // Validate the imported data structure
+      if (!importedData.annotations) {{
+        alert('Invalid annotation file: missing annotations section');
+        return;
+      }}
+      
+      const importedLabels = importedData.annotations.per_move_labels || {{}};
+      const importedGlobalLabels = importedData.annotations.global_labels || {{}};
+      
+      // Confirm before overwriting existing annotations
+      const hasExistingAnnotations = Object.keys(labels).length > 0 || Object.keys(globalLabels).length > 0;
+      if (hasExistingAnnotations) {{
+        const confirmed = confirm('This will overwrite your current annotations. Are you sure you want to continue?');
+        if (!confirmed) return;
+      }}
+      
+      // Load the annotations
+      labels = {{...importedLabels}};
+      globalLabels = {{...importedGlobalLabels}};
+      
+      // Calculate import statistics
+      const totalPositions = Object.keys(labels).length;
+      const totalMoveAnnotations = Object.values(labels).reduce((sum, pos) => 
+        sum + Object.keys(pos).length, 0);
+      const totalGlobalAnnotations = Object.keys(globalLabels).length;
+      
+      // Refresh the UI to show the imported annotations
+      renderForm();
+      renderPolicy();
+      renderMarkers();
+      
+      // Show success message with statistics
+      const gameInfo = importedData.game_metadata ? 
+        `${{importedData.game_metadata.black_player || 'Black'}} vs ${{importedData.game_metadata.white_player || 'White'}}` : 
+        'Unknown game';
+      
+      alert(`Successfully imported annotations!\\n\\nGame: ${{gameInfo}}\\nPositions: ${{totalPositions}}\\nMove annotations: ${{totalMoveAnnotations}}\\nGlobal annotations: ${{totalGlobalAnnotations}}`);
+      
+      console.log('Successfully imported annotations:', {{
+        totalPositions,
+        totalMoveAnnotations, 
+        totalGlobalAnnotations,
+        gameInfo
+      }});
+      
+    }} catch (error) {{
+      console.error('Error importing annotations:', error);
+      alert(`Error importing annotations: ${{error.message}}\\n\\nPlease make sure you selected a valid annotation JSON file.`);
+    }}
+  }};
+  
+  reader.readAsText(file);
+  
+  // Reset the file input so the same file can be selected again
+  e.target.value = '';
 }};
 
 // Preset functionality
