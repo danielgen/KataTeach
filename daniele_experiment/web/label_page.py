@@ -39,6 +39,7 @@ def load_tags(ontology_path: Path) -> tuple[dict[str, list[str]], dict[str, list
         "strategic": [t["name"] for t in tags_data.get("strategic", [])],
         "tactical": [t["name"] for t in tags_data.get("tactical", [])],
         "stress_area": [t["name"] for t in tags_data.get("stress_area", [])],
+        "reduce_area": [t["name"] for t in tags_data.get("reduce_area", [])],
         "shape": [t["name"] for t in tags_data.get("shape", [])]
     }
     
@@ -554,8 +555,8 @@ function renderForm() {{
     globalColumn.appendChild(groupDiv);
   }});
   
-  // Add initiative, stress_area and shape to the left column
-  ['initiative', 'stress_area', 'shape'].forEach(groupName => {{
+  // Add initiative, stress_area, reduce_area and shape to the left column
+  ['initiative', 'stress_area', 'reduce_area', 'shape'].forEach(groupName => {{
     const tags = SPATIAL_GROUPS[groupName] || [];
     if (tags.length === 0) return;
     

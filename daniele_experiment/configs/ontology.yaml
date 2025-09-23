@@ -3,20 +3,19 @@ tags:
     - {name: tenuki_ok,           desc: "Local urgency low; safe to play elsewhere"}
     - {name: urgent_local,        desc: "Local response required"}
   initiative:
-    - {name: play_sente,    desc: "Play a sente move"}
-    - {name: take_sente,    desc: "Follow-up opponent must answer"}
-    - {name: reverse_sente, desc: "Take away sente for opponent later"}
-    - {name: play_gote,     desc: "Take points"}
+    - {name: sente,    desc: "Follow-up opponent must answer"}
+    - {name: gote,     desc: "Take points"}
   strategic:
-    - {name: building_viable,     desc: "Building moyo is viable"}
-    - {name: influence_viable,    desc: "Influence is viable"}
-    - {name: profit_viable,       desc: "Take profit"}
-    - {name: invasion_viable,     desc: "Inside enemy sphere can live/reduce"}
-    - {name: reduction_viable,    desc: "Should reduce from outside"}
-    - {name: fight_viable,        desc: "Starts a fight"}
-    - {name: must_live,           desc: "Safety first"}
+    - {name: building_move,     desc: "Building moyo is viable"}
+    - {name: influence_move,    desc: "Influence is viable"}
+    - {name: profit_move,       desc: "Take profit"}
+    - {name: invasion_move,     desc: "Inside enemy sphere can live/reduce"}
+    - {name: reduction_move,    desc: "Should reduce from outside"}
+    - {name: fight_move,        desc: "Starts a fight"}
+    - {name: must_live_move,    desc: "Safety first"}
   tactical:
     - {name: approach_opp_corner,    desc: "Large-point move near a corner"}
+    - {name: play_empty_corner,      desc: "Play in an empty corner"}
     - {name: enclose_own_corner,     desc: "Enclose a corner"}
     - {name: inside_opp_corner,      desc: "Invade opponent's corner"}
     - {name: extend_side,            desc: "Extension on the side"}
@@ -30,14 +29,25 @@ tags:
     - {name: pincer,              desc: "Pincer attack"}
     - {name: cut_available,       desc: "Cut threatens to separate groups"}
     - {name: peep_available,      desc: "Can peep at opp's weakness"}
-    - {name: ladder_present,      desc: "A certain situation depends on ladder"}
-    - {name: atari_available,     desc: "Immediate atari can be played"}
+    - {name: ladder_favourable,   desc: "There is a favourable ladder"}
+    - {name: ladder_against,      desc: "There is an unfavourable ladder"}
+    - {name: atari,               desc: "This move is an atari"}
     - {name: ko_threat,           desc: "Move threatens to win ko if ignored"}
     - {name: capture_race,        desc: "Semeai"}
     - {name: use_aji,             desc: "Use aji"}
     - {name: sacrifice,           desc: "Sacrificing a group"}
     - {name: ladder_breaker,      desc: "Ladder breaker"}
   stress_area: 
+    - {name: left_side,      desc: "Left side"}
+    - {name: upper_side,     desc: "Upper side"}
+    - {name: right_side,     desc: "Right side"}
+    - {name: lower_side,     desc: "Lower side"}
+    - {name: tl_corner,      desc: "Top left corner"}
+    - {name: tr_corner,      desc: "Top right corner"}
+    - {name: bl_corner,      desc: "Bottom left corner"}
+    - {name: br_corner,      desc: "Bottom right corner"}
+    - {name: center,         desc: "Center"}
+  reduce_area:
     - {name: left_side,      desc: "Left side"}
     - {name: upper_side,     desc: "Upper side"}
     - {name: right_side,     desc: "Right side"}
@@ -55,4 +65,9 @@ tags:
     - {name: hane,           desc: "Hane"}
     - {name: extension,      desc: "Extend next to stone, horizontally"}
     - {name: descend,        desc: "Descend/Ascend, vertically"}
+    - {name: keima,          desc: "Keima"}
+    - {name: ogeima,         desc: "Ogeima"}
+    - {name: one_space_jump, desc: "One space jump"}
+    - {name: two_space_jump, desc: "Two space jump"}
+    - {name: kosumi,         desc: "Kosumi"}
     - {name: tesuji,         desc: "net, etc"}
