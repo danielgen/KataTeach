@@ -39,6 +39,7 @@ tags:
     - {name: sacrifice,           desc: "Sacrificing a group"}
     - {name: ladder_breaker,      desc: "Ladder breaker"}
     - {name: wall,                desc: "Wall"}
+    - {name: tesuji,              desc: "Net, etc"}
   stress_area: 
     - {name: left_side,      desc: "Left side"}
     - {name: upper_side,     desc: "Upper side"}
@@ -79,4 +80,3 @@ tags:
     - {name: one_space_jump, desc: "One space jump"}
     - {name: two_space_jump, desc: "Two space jump"}
     - {name: kosumi,         desc: "Kosumi"}
-    - {name: tesuji,         desc: "net, etc"}
