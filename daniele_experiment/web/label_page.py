@@ -567,11 +567,12 @@ function renderForm() {{
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
       const moveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? labels[currentMove][selectedMoveId] : {{}};
-      const checked = moveLabels[tag] ? 'checked' : '';
+      const fullTagName = `${{groupName}}:${{tag}}`;
+      const checked = moveLabels[fullTagName] ? 'checked' : '';
       
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
-      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{fullTagName}}" ${{checked}}/> ${{tag}}</label>`;
       tagGrid.appendChild(tagBlock);
     }});
     
@@ -590,11 +591,12 @@ function renderForm() {{
     const tagGrid = groupDiv.querySelector('.tag-grid');
     tags.forEach(tag => {{
       const moveLabels = labels[currentMove] && labels[currentMove][selectedMoveId] ? labels[currentMove][selectedMoveId] : {{}};
-      const checked = moveLabels[tag] ? 'checked' : '';
+      const fullTagName = `${{groupName}}:${{tag}}`;
+      const checked = moveLabels[fullTagName] ? 'checked' : '';
       
       const tagBlock = document.createElement('div');
       tagBlock.className = 'tag-block';
-      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{tag}}" ${{checked}}/> ${{tag}}</label>`;
+      tagBlock.innerHTML = `<label><input type="checkbox" data-tag="${{fullTagName}}" ${{checked}}/> ${{tag}}</label>`;
       tagGrid.appendChild(tagBlock);
     }});
     

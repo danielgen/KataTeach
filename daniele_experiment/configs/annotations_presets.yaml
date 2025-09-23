@@ -1,13 +1,3 @@
-hoshi during opening:
-  description: 'User-defined preset: hoshi during opening'
-  global_labels:
-    tenuki_ok: true
-  move_labels:
-    play_gote: true
-    joseki: true
-    profit_viable: true
-    influence_viable: true
-    enclose_own_corner: true
 2-3 point opening:
   description: 'User-defined preset: 2-3 point opening'
   global_labels:
@@ -16,4 +6,10 @@ hoshi during opening:
     play_gote: true
     joseki: true
     profit_viable: true
-    enclose_own_corner: true
+    gote: true
+    profit_move: true
+    play_empty_corner: true
+    initiative:gote: true
+    shape:joseki: true
+    strategic:profit_move: true
+    tactical:play_empty_corner: true
