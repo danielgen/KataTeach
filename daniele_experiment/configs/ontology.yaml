@@ -40,6 +40,7 @@ tags:
     - {name: ladder_breaker,      desc: "Ladder breaker"}
     - {name: wall,                desc: "Wall"}
     - {name: tesuji,              desc: "Net, etc"}
+    - {name: joseki,              desc: "It is joseki"}
   stress_area: 
     - {name: left_side,      desc: "Left side"}
     - {name: upper_side,     desc: "Upper side"}
@@ -71,7 +72,6 @@ tags:
     - {name: fast_move,      desc: "Fast move"}
     - {name: big_move,      desc: "Big move"}
     - {name: small_move,      desc: "Small move"}
-    - {name: joseki,         desc: "It is joseki"}
     - {name: hane,           desc: "Hane"}
     - {name: extension,      desc: "Extend next to stone, horizontally"}
     - {name: descend,        desc: "Descend/Ascend, vertically"}
