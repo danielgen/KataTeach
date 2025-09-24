@@ -308,7 +308,7 @@ class GameState:
             "seki_by_loc2": seki_by_loc2,
             "scorebelief": scorebelief,
             "genmove_result": genmove_result,
-            **{ name:activation[0].numpy() for name, activation in extra_outputs.returned.items() },
+            **{ name:activation[0].cpu().numpy() for name, activation in extra_outputs.returned.items() },
             "available_extra_outputs": available_extra_outputs,
         }
 
