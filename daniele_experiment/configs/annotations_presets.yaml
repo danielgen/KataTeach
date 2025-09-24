@@ -13,6 +13,9 @@
     shape:joseki: true
     strategic:profit_move: true
     tactical:play_empty_corner: true
+    move_attributes:big_move: true
+    move_attributes:low_move: true
+    move_attributes:slow_move: true
 4-4 point opening:
   description: 'User-defined preset: 4-4 point opening'
   global_labels:
@@ -22,28 +25,20 @@
     strategic:influence_move: true
     tactical:play_empty_corner: true
     shape:joseki: true
-keima apperoach 4-4:
-  description: 'User-defined preset: keima apperoach 4-4'
-  global_labels:
-    tenuki_ok: true
-  move_labels:
-    initiative:gote: true
-    stress_area:right_side: true
-    reduce_area:lower_side: true
-    reduce_area:br_corner: true
-    shape:joseki: true
-    strategic:fight_move: true
-    strategic:reduction_move: true
-    strategic:building_move: true
-    tactical:approach_opp_corner: true
+    stress_area:center: true
+    move_attributes:high_move: true
+    move_attributes:big_move: true
+    move_attributes:fast_move: true
 3-3 invasion:
   description: 'User-defined preset: 3-3 invasion'
   global_labels:
     tenuki_ok: true
   move_labels:
     initiative:gote: true
-    shape:joseki: true
+    move_attributes:low_move: true
+    move_attributes:big_move: true
     strategic:profit_move: true
+    strategic:reduction_move: true
     strategic:invasion_move: true
     tactical:inside_opp_corner: true
 descend vs 3-3:
@@ -52,24 +47,40 @@ descend vs 3-3:
     urgent_local: true
   move_labels:
     initiative:sente: true
-    stress_area:left_side: true
-    reduce_area:lower_side: true
-    shape:joseki: true
-    shape:descend: true
-    strategic:influence_move: true
+    move_attributes:good_shape: true
+    move_attributes:high_move: true
+    move_attributes:thick_move: true
+    move_attributes:big_move: true
     strategic:fight_move: true
-    tactical:capture_race: true
+    strategic:influence_move: true
+    tactical:seal_in: true
+    tactical:joseki: true
+    move_attributes:descend: true
 extend from 3-3:
   description: 'User-defined preset: extend from 3-3'
   global_labels:
     urgent_local: true
   move_labels:
     initiative:sente: true
-    stress_area:left_side: true
-    reduce_area:bl_corner: true
-    shape:joseki: true
-    shape:extension: true
+    move_attributes:good_shape: true
+    move_attributes:low_move: true
+    move_attributes:thick_move: true
+    move_attributes:big_move: true
+    move_attributes:extension: true
     strategic:must_live_move: true
     strategic:profit_move: true
-    tactical:extend_side: true
     tactical:get_base: true
+keima 4-4 approach:
+  description: 'User-defined preset: keima 4-4 approach'
+  global_labels:
+    tenuki_ok: true
+  move_labels:
+    initiative:gote: true
+    shape:joseki: true
+    strategic:fight_move: true
+    strategic:reduction_move: true
+    strategic:building_move: true
+    tactical:approach_opp_corner: true
+    move_attributes:fast_move: true
+    move_attributes:low_move: true
+    move_attributes:big_move: true
