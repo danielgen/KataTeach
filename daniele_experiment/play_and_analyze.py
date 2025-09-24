@@ -54,7 +54,7 @@ def save_trunkfinal(trunkfinal_data: np.ndarray, game_uuid: str, move_number: in
     Args:
         trunkfinal_data: The trunkfinal tensor as numpy array
         game_uuid: UUID of the game
-        move_number: Move number (0-based)
+        move_number: Move number (1-based)
         trunkfinal_dir: Directory to save trunkfinal files
         
     Returns:
@@ -64,6 +64,27 @@ def save_trunkfinal(trunkfinal_data: np.ndarray, game_uuid: str, move_number: in
     filepath = trunkfinal_dir / filename
     np.save(filepath, trunkfinal_data)
     return filepath
+
+
+def _idx361_from_loc(loc: int, board: Board) -> int:
+    """Convert KataGo loc to 361-style index (0-360 for board positions, 361 for pass)."""
+    if loc == Board.PASS_LOC:
+        return 361
+    x, y = board.loc_x(loc), board.loc_y(loc)
+    return y * board.size + x
+
+
+def _xy_from_loc(loc: int, board: Board) -> List[int]:
+    """Convert KataGo loc to [x, y] coordinates."""
+    if loc == Board.PASS_LOC:
+        return [-1, -1]
+    return [board.loc_x(loc), board.loc_y(loc)]
+
+
+def _append_jsonl(path: Path, obj: dict) -> None:
+    """Append a JSON object to a JSONL file."""
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
 def _loc_to_sgf(loc: int, board: Board) -> str:
@@ -85,6 +106,26 @@ def loc_to_sgf_coords(loc: int, board: Board) -> str:
     sgf_x = chr(ord('a') + x)
     sgf_y = chr(ord('a') + y)
     return sgf_x + sgf_y
+
+
+def _loc_to_human_coord(loc: int, board: Board) -> str:
+    """Convert an internal location to human-readable coordinate string (e.g., 'Q16', 'D4')."""
+    if loc == Board.PASS_LOC:
+        return "pass"
+    x = board.loc_x(loc)
+    y = board.loc_y(loc)
+    
+    # Convert to human-readable format: A-T (skip I), 1-19
+    # x: 0->A, 1->B, ..., 7->H, 8->J, ..., 18->T
+    if x < 8:
+        letter = chr(ord('A') + x)
+    else:
+        letter = chr(ord('A') + x + 1)  # Skip 'I'
+    
+    # y: 0->19, 1->18, ..., 18->1
+    number = board.size - y
+    
+    return f"{letter}{number}"
 
 
 def evaluate_moves_batched(gs: GameState, moves: List[int], model) -> List[float]:
@@ -230,7 +271,8 @@ def compute_policy_analysis(
     verbose: bool = True,
     max_moves_per_position: int = 10,
     trunkfinal_dir: Path = None,
-    game_uuid: str = None
+    game_uuid: str = None,
+    output_dir: Path = None
 ) -> PolicyMap:
     """Analyze an SGF game and compute policy suggestions and actual move values.
     
@@ -276,6 +318,13 @@ def compute_policy_analysis(
     policy: PolicyMap = {}
     total_positions = len(plays) + 1
     
+    # Initialize JSONL files if output_dir is provided
+    slates_path = None
+    moves_path = None
+    if output_dir is not None:
+        slates_path = output_dir / "slates.jsonl"
+        moves_path = output_dir / "moves.jsonl"
+    
     for idx in range(total_positions):
         if verbose:
             print(f"Analyzing position {idx + 1}/{total_positions}...")
@@ -287,7 +336,7 @@ def compute_policy_analysis(
         # Save trunkfinal data if directory is provided
         if trunkfinal_dir is not None and game_uuid is not None and "trunkfinal" in outputs:
             trunkfinal_data = outputs["trunkfinal"]
-            save_trunkfinal(trunkfinal_data, game_uuid, idx, trunkfinal_dir)
+            save_trunkfinal(trunkfinal_data, game_uuid, idx + 1, trunkfinal_dir)
         if not moves_probs:
             break
         
@@ -337,6 +386,91 @@ def compute_policy_analysis(
                 except:
                     move_winrates.append((mv, prob))  # Fallback to policy probability
         
+        # Generate JSONL records if paths are provided
+        if slates_path is not None and moves_path is not None and game_uuid is not None:
+            # Prepare candidate data for JSONL
+            raw_probs = [prob for _, prob in candidate_moves]
+            denom = sum(raw_probs) if raw_probs else 1.0
+            slate_probs = [p / denom for p in raw_probs]
+            
+            # Create winrate map
+            winrate_map = {candidate_move_locs[i]: float(winrates[i]) for i in range(len(winrates))} if move_winrates else {}
+            
+            # Determine played move for this position
+            played_loc = None
+            if idx < len(plays) and plays[idx][1] is not None:
+                row, col = plays[idx][1]
+                played_loc = gs.board.loc(col, row)
+            
+            # Build candidates array
+            cands_json = []
+            for rank, (mv, p_raw) in enumerate(candidate_moves):
+                p_slate = slate_probs[rank] if rank < len(slate_probs) else 0.0
+                cands_json.append({
+                    "move_loc": int(mv),
+                    "coord_sgf": _loc_to_sgf(mv, gs.board),
+                    "coord_human": _loc_to_human_coord(mv, gs.board),
+                    "xy": _xy_from_loc(mv, gs.board),
+                    "idx361": _idx361_from_loc(mv, gs.board),
+                    "policy_raw": float(p_raw),
+                    "policy_slate": float(p_slate),
+                    "winrate": float(winrate_map.get(mv, float("nan"))),
+                    "rank": rank,
+                    "is_actual": bool(played_loc == mv),
+                })
+            
+            # Build played move info
+            played_info = None
+            if played_loc is not None:
+                played_policy_raw = next((prob for (mv, prob) in moves_probs if mv == played_loc), None)
+                played_info = {
+                    "move_loc": int(played_loc),
+                    "coord_sgf": _loc_to_sgf(played_loc, gs.board),
+                    "coord_human": _loc_to_human_coord(played_loc, gs.board),
+                    "xy": _xy_from_loc(played_loc, gs.board),
+                    "idx361": _idx361_from_loc(played_loc, gs.board),
+                    "policy_raw": float(played_policy_raw) if played_policy_raw is not None else None,
+                    "policy_slate": float(next((p["policy_slate"] for p in cands_json if p["move_loc"] == played_loc), 0.0)),
+                    "winrate": float(winrate_map.get(played_loc, float("nan"))),
+                }
+            
+            # Create slate record
+            slate_id = f"{game_uuid}:{idx}"
+            slate_json = {
+                "game_uuid": game_uuid,
+                "pos_idx": idx,
+                "player": "b" if gs.board.pla == Board.BLACK else "w",
+                "board_size": gs.board.size,
+                "trunkfinal_path": str(trunkfinal_dir / f"{game_uuid}_move_{idx+1:03d}.npy") if trunkfinal_dir else None,
+                "slate_id": slate_id,
+                "candidates": cands_json,
+                "played": played_info
+            }
+            
+            # Write slate record
+            _append_jsonl(slates_path, slate_json)
+            
+            # Write flattened move records
+            for c in cands_json:
+                flat = {
+                    "slate_id": slate_id,
+                    "game_uuid": game_uuid,
+                    "pos_idx": idx,
+                    "player": slate_json["player"],
+                    "trunkfinal_path": slate_json["trunkfinal_path"],
+                    "move_loc": c["move_loc"],
+                    "coord_sgf": c["coord_sgf"],
+                    "coord_human": c["coord_human"],
+                    "xy": c["xy"],
+                    "idx361": c["idx361"],
+                    "rank": c["rank"],
+                    "policy_raw": c["policy_raw"],
+                    "policy_slate": c["policy_slate"],
+                    "winrate": c["winrate"],
+                    "is_actual": c["is_actual"]
+                }
+                _append_jsonl(moves_path, flat)
+
         # Find best winrate and collect moves within threshold
         position_data = {}
         if move_winrates:
@@ -489,7 +623,7 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
         # Save trunkfinal data if directory is provided
         if trunkfinal_dir is not None and game_uuid is not None and "trunkfinal" in outputs:
             trunkfinal_data = outputs["trunkfinal"]
-            save_trunkfinal(trunkfinal_data, game_uuid, move_number, trunkfinal_dir)
+            save_trunkfinal(trunkfinal_data, game_uuid, move_number + 1, trunkfinal_dir)
         
         if not moves_and_probs:
             print(f"No legal moves available for {player_str} at move {move_number}")
@@ -648,7 +782,8 @@ def play_and_analyze_games(
             print(f"  Analyzing game {game_id}...")
             policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=True, 
                                            max_moves_per_position=max_moves_per_position,
-                                           trunkfinal_dir=trunkfinal_dir, game_uuid=game_uuid)
+                                           trunkfinal_dir=trunkfinal_dir, game_uuid=game_uuid,
+                                           output_dir=output_dir)
             
             # Save policy analysis
             policy_file = policy_dir / f"{sgf_file.stem}.json"
@@ -659,7 +794,12 @@ def play_and_analyze_games(
             print(f"✗ Error in game {game_id}: {e}")
             continue
     
-    print(f"\nCompleted! Games saved to {output_dir}, analysis in {policy_dir}, trunkfinal data in {trunkfinal_dir}")
+    print(f"\nCompleted! Games saved to {output_dir}")
+    print(f"  - SGF files: {output_dir}")
+    print(f"  - Policy analysis: {policy_dir}")
+    print(f"  - Trunkfinal data: {trunkfinal_dir}")
+    print(f"  - Slates dataset: {output_dir}/slates.jsonl")
+    print(f"  - Moves dataset: {output_dir}/moves.jsonl")
 
 
 def main() -> None:
