@@ -20,6 +20,7 @@ import sys
 import time
 import uuid
 import random
+import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -45,6 +46,24 @@ def save_combined_data(sgf_data: str, policy: PolicyMap, path: Path | str) -> No
         "policy": policy
     }
     Path(path).write_text(json.dumps(combined_data, indent=2), encoding="utf-8")
+
+
+def save_trunkfinal(trunkfinal_data: np.ndarray, game_uuid: str, move_number: int, trunkfinal_dir: Path) -> Path:
+    """Save trunkfinal data to a numpy file.
+    
+    Args:
+        trunkfinal_data: The trunkfinal tensor as numpy array
+        game_uuid: UUID of the game
+        move_number: Move number (0-based)
+        trunkfinal_dir: Directory to save trunkfinal files
+        
+    Returns:
+        Path to the saved file
+    """
+    filename = f"{game_uuid}_move_{move_number:03d}.npy"
+    filepath = trunkfinal_dir / filename
+    np.save(filepath, trunkfinal_data)
+    return filepath
 
 
 def _loc_to_sgf(loc: int, board: Board) -> str:
@@ -209,7 +228,9 @@ def compute_policy_analysis(
     *,
     threshold: float = -0.005,
     verbose: bool = True,
-    max_moves_per_position: int = 10
+    max_moves_per_position: int = 10,
+    trunkfinal_dir: Path = None,
+    game_uuid: str = None
 ) -> PolicyMap:
     """Analyze an SGF game and compute policy suggestions and actual move values.
     
@@ -260,8 +281,13 @@ def compute_policy_analysis(
             print(f"Analyzing position {idx + 1}/{total_positions}...")
         
         start_time = time.time()
-        outputs = gs.get_model_outputs(model)
+        outputs = gs.get_model_outputs(model, extra_output_names=["trunkfinal"])
         moves_probs = outputs["moves_and_probs0"]
+        
+        # Save trunkfinal data if directory is provided
+        if trunkfinal_dir is not None and game_uuid is not None and "trunkfinal" in outputs:
+            trunkfinal_data = outputs["trunkfinal"]
+            save_trunkfinal(trunkfinal_data, game_uuid, idx, trunkfinal_dir)
         if not moves_probs:
             break
         
@@ -432,7 +458,8 @@ def compute_policy_analysis(
 
 def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: float = 0.01, 
                      resignation_threshold: float = 0.10, consecutive_low_moves: int = 3,
-                     initial_prob_threshold: float = 0.05, transition_moves: int = 50) -> Tuple[str, str]:
+                     initial_prob_threshold: float = 0.05, transition_moves: int = 50,
+                     trunkfinal_dir: Path = None, game_uuid: str = None) -> Tuple[str, str]:
     """Play a single game using 1-visit neural network evaluation.
     
     Returns:
@@ -455,9 +482,14 @@ def play_single_game(model, game_id: int, board_size: int = 19, prob_threshold: 
         current_player = gs.board.pla
         player_str = "Black" if current_player == Board.BLACK else "White"
         
-        # Get model outputs for current position
-        outputs = gs.get_model_outputs(model)
+        # Get model outputs for current position (including trunkfinal)
+        outputs = gs.get_model_outputs(model, extra_output_names=["trunkfinal"])
         moves_and_probs = outputs["moves_and_probs0"]
+        
+        # Save trunkfinal data if directory is provided
+        if trunkfinal_dir is not None and game_uuid is not None and "trunkfinal" in outputs:
+            trunkfinal_data = outputs["trunkfinal"]
+            save_trunkfinal(trunkfinal_data, game_uuid, move_number, trunkfinal_dir)
         
         if not moves_and_probs:
             print(f"No legal moves available for {player_str} at move {move_number}")
@@ -589,18 +621,24 @@ def play_and_analyze_games(
     output_dir.mkdir(exist_ok=True)
     policy_dir = output_dir / "policy"
     policy_dir.mkdir(exist_ok=True)
+    trunkfinal_dir = output_dir / "trunkfinal"
+    trunkfinal_dir.mkdir(exist_ok=True)
     
     print(f"Playing and analyzing {num_games} games...")
     
     for game_id in range(1, num_games + 1):
         try:
+            # Generate UUID for this game
+            game_uuid = str(uuid.uuid4())
+            
             # Play the game
             sgf_content, result = play_single_game(model, game_id, board_size, prob_threshold, 
                                                  resignation_threshold, consecutive_low_moves,
-                                                 initial_prob_threshold, transition_moves)
+                                                 initial_prob_threshold, transition_moves,
+                                                 trunkfinal_dir, game_uuid)
             
             # Save SGF file
-            sgf_file = output_dir / f"{uuid.uuid4()}.sgf"
+            sgf_file = output_dir / f"{game_uuid}.sgf"
             sgf_file.write_text(sgf_content, encoding='utf-8')
             
             print(f"✓ {result}")
@@ -608,7 +646,9 @@ def play_and_analyze_games(
             
             # Analyze the game
             print(f"  Analyzing game {game_id}...")
-            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=True, max_moves_per_position=max_moves_per_position)
+            policy = compute_policy_analysis(sgf_content, model, threshold=analysis_threshold, verbose=True, 
+                                           max_moves_per_position=max_moves_per_position,
+                                           trunkfinal_dir=trunkfinal_dir, game_uuid=game_uuid)
             
             # Save policy analysis
             policy_file = policy_dir / f"{sgf_file.stem}.json"
@@ -619,7 +659,7 @@ def play_and_analyze_games(
             print(f"✗ Error in game {game_id}: {e}")
             continue
     
-    print(f"\nCompleted! Games saved to {output_dir}, analysis in {policy_dir}")
+    print(f"\nCompleted! Games saved to {output_dir}, analysis in {policy_dir}, trunkfinal data in {trunkfinal_dir}")
 
 
 def main() -> None:
