@@ -28,15 +28,18 @@ tags:
     - {name: steal_eyes,          desc: "Steal eyespace"}
     - {name: pincer,              desc: "Pincer attack"}
     - {name: cut_available,       desc: "Cut threatens to separate groups"}
+    - {name: net_available,       desc: "Net available"}
     - {name: ladder_favourable,   desc: "There is a favourable ladder"}
     - {name: ladder_against,      desc: "There is an unfavourable ladder"}
     - {name: atari,               desc: "This move is an atari"}
     - {name: ko_threat,           desc: "Move threatens to win ko if ignored"}
     - {name: capture_race,        desc: "Semeai"}
+    - {name: squeeze,             desc: "Squeeze"}
     - {name: use_aji,             desc: "Use aji"}
     - {name: sacrifice,           desc: "Sacrificing a group"}
     - {name: leaning_attack,      desc: "Leaning attack"}
     - {name: splitting_attack,    desc: "Splitting attack"}
+    - {name: running_attack,      desc: "Running attack"}
     - {name: ladder_breaker,      desc: "Ladder breaker"}
     - {name: make_heavy,          desc: "Make opponent's group heavy"}
     - {name: wall,                desc: "Wall"}
@@ -76,7 +79,8 @@ tags:
     - {name: small_move,     desc: "Small move"}
     - {name: hane,           desc: "Hane"}
     - {name: extension,      desc: "Extend next to stone, horizontally"}
-    - {name: descend,        desc: "Descend/Ascend, vertically"}
+    - {name: big_extension,  desc: "Big extension, e.g. on side"}
+    - {name: a(de)scend,     desc: "Descend/Ascend, vertically"}
     - {name: keima,          desc: "Keima"}
     - {name: ogeima,         desc: "Ogeima"}
     - {name: attachment,     desc: "Attachment"}
@@ -86,3 +90,4 @@ tags:
     - {name: capping_move,   desc: "Capping move"}
     - {name: peep,           desc: "Peeping move"}
     - {name: kosumi,         desc: "Kosumi"}
+    - {name: wedge,          desc: "Wedge"}

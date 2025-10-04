@@ -15,7 +15,10 @@
     tactical:play_empty_corner: true
     move_attributes:big_move: true
     move_attributes:low_move: true
-    move_attributes:slow_move: true
+    stress_area:lower_side: true
+    stress_area:bl_corner: true
+    reduce_area:br_corner: true
+    reduce_area:right_side: true
 4-4 point opening:
   description: 'User-defined preset: 4-4 point opening'
   global_labels:
@@ -84,3 +87,79 @@ keima 4-4 approach:
     move_attributes:fast_move: true
     move_attributes:low_move: true
     move_attributes:big_move: true
+keima vs 3-3 sente line:
+  description: 'User-defined preset: keima vs 3-3 sente line'
+  global_labels:
+    tenuki_ok: true
+  move_labels:
+    initiative:sente: true
+    move_attributes:fast_move: true
+    move_attributes:thin_light_move: true
+    move_attributes:good_shape: true
+    move_attributes:big_move: true
+    move_attributes:keima: true
+    strategic:influence_move: true
+    strategic:fight_move: true
+    tactical:seal_in: true
+    tactical:joseki: true
+extend vs keima joseki 3-3:
+  description: 'User-defined preset: extend vs keima joseki 3-3'
+  global_labels:
+    urgent_local: true
+  move_labels:
+    initiative:sente: true
+    move_attributes:good_shape: true
+    move_attributes:thick_move: true
+    move_attributes:big_move: true
+    move_attributes:extension: true
+    strategic:must_live_move: true
+    tactical:get_base: true
+    tactical:joseki: true
+2nd line vs keima sente vs 3-3:
+  description: 'User-defined preset: 2nd line vs keima sente vs 3-3'
+  global_labels:
+    urgent_local: true
+  move_labels:
+    initiative:gote: true
+    move_attributes:low_move: true
+    move_attributes:thick_move: true
+    move_attributes:big_move: true
+    move_attributes:hane: true
+    strategic:must_live_move: true
+    strategic:profit_move: true
+atari vs tenuki keima 3-3:
+  description: 'User-defined preset: atari vs tenuki keima 3-3'
+  global_labels:
+    tenuki_ok: true
+  move_labels:
+    initiative:sente: true
+    stress_area:right_side: true
+    stress_area:tr_corner: true
+    reduce_area:center: true
+    move_attributes:slow_move: true
+    move_attributes:big_move: true
+    move_attributes:hane: true
+    strategic:profit_move: true
+    strategic:fight_move: true
+    tactical:expand_while_reducing: true
+    tactical:atari: true
+    tactical:joseki: true
+    tactical:make_heavy: true
+long L connect vs atari:
+  description: 'User-defined preset: long L connect vs atari'
+  global_labels:
+    urgent_local: true
+  move_labels:
+    initiative:gote: true
+    stress_area:right_side: true
+    stress_area:upper_side: true
+    stress_area:center: true
+    move_attributes:good_shape: true
+    move_attributes:thick_move: true
+    move_attributes:slow_move: true
+    move_attributes:big_move: true
+    strategic:influence_move: true
+    tactical:connect: true
+    tactical:wall: true
+    tactical:joseki: true
+    tactical:cut_available: true
