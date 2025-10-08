@@ -91,3 +91,4 @@ tags:
     - {name: peep,           desc: "Peeping move"}
     - {name: kosumi,         desc: "Kosumi"}
     - {name: wedge,          desc: "Wedge"}
+    - {name: probe,          desc: "Probe"}
