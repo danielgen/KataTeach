@@ -34,8 +34,19 @@ def read_json_any(path: Path) -> Iterable[dict]:
             if isinstance(item, dict):
                 yield item
     elif isinstance(obj, dict):
+        # Special handling for annotation files with nested structure
+        if "annotations" in obj and "per_move_labels" in obj["annotations"]:
+            # This is an annotation file with nested move labels
+            per_move_labels = obj["annotations"]["per_move_labels"]
+            for move_num, move_data in per_move_labels.items():
+                if isinstance(move_data, dict):
+                    for coord, coord_data in move_data.items():
+                        if isinstance(coord_data, dict):
+                            yield coord_data
+            return
+        
         # If looks like a container of records
-        # try common keys: data, items, annotations
+        # try common keys: data, items, annotations, records
         for key in ("data", "items", "annotations", "records"):
             val = obj.get(key)
             if isinstance(val, list):
@@ -78,6 +89,17 @@ def extract_tags(record: dict, *, key_hints: Optional[List[str]] = None) -> Set[
             for t in v:
                 if isinstance(t, str) and t.strip():
                     tags.add(t.strip())
+
+    # Special handling for boolean tag format (e.g., "initiative:gote": true)
+    # Look for keys that contain colons and have boolean true values
+    for k, v in record.items():
+        if isinstance(v, bool) and v is True:
+            # Check if key looks like a tag (contains colon, common tag prefixes)
+            if ":" in k:
+                tag_prefixes = ["initiative", "strategic", "tactical", "shape", "stress_area", 
+                              "reduce_area", "move_attributes", "global"]
+                if any(k.startswith(prefix + ":") for prefix in tag_prefixes):
+                    tags.add(k)
 
     return tags
 

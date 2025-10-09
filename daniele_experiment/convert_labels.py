@@ -9,6 +9,9 @@ Usage:
     # Convert label_page.py export to labels.jsonl
     python convert_labels.py to-jsonl game_annotations.json slates.jsonl moves.jsonl labels.jsonl
     
+    # Convert with concept filtering (exclude concepts with < 20 examples)
+    python convert_labels.py to-jsonl game_annotations.json slates.jsonl moves.jsonl labels.jsonl --min-concept-examples 20
+    
     # Convert labels.jsonl back to label_page.py import format
     python convert_labels.py from-jsonl labels.jsonl slates.jsonl game_annotations.json
 """
@@ -97,7 +100,8 @@ def convert_to_jsonl(
     slates_jsonl: Path,
     moves_jsonl: Path,
     output_labels_jsonl: Path,
-    game_uuid: str = None
+    game_uuid: str = None,
+    min_concept_examples: int = 0
 ) -> None:
     """Convert label_page.py export to labels.jsonl format.
     
@@ -107,6 +111,7 @@ def convert_to_jsonl(
         moves_jsonl: Moves JSONL file to match against  
         output_labels_jsonl: Output labels.jsonl file
         game_uuid: Game UUID (if None, will try to extract from slates)
+        min_concept_examples: Minimum number of examples required to keep a concept (0 = no filtering)
     """
     
     # Load label page export
@@ -135,6 +140,33 @@ def convert_to_jsonl(
                 move = json.loads(line.strip())
                 key = (move['slate_id'], move['coord_sgf'])
                 move_mapping[key] = move['move_loc']
+    
+    # Count concept frequencies if filtering is enabled
+    concept_counts = {}
+    if min_concept_examples > 0:
+        print(f"Counting concept frequencies (min_examples={min_concept_examples})...")
+        for pos_idx_str, move_labels in per_move_labels.items():
+            for sgf_coord, tags in move_labels.items():
+                for tag_name, is_set in tags.items():
+                    if is_set:
+                        concept_counts[tag_name] = concept_counts.get(tag_name, 0) + 1
+        
+        # Filter concepts
+        filtered_concepts = {concept: count for concept, count in concept_counts.items() 
+                           if count >= min_concept_examples}
+        excluded_concepts = {concept: count for concept, count in concept_counts.items() 
+                           if count < min_concept_examples}
+        
+        print(f"Total concepts: {len(concept_counts)}")
+        print(f"Concepts kept (>= {min_concept_examples} examples): {len(filtered_concepts)}")
+        print(f"Concepts excluded (< {min_concept_examples} examples): {len(excluded_concepts)}")
+        
+        if excluded_concepts:
+            print("Excluded concepts:")
+            for concept, count in sorted(excluded_concepts.items(), key=lambda x: x[1], reverse=True):
+                print(f"  {concept}: {count} examples")
+    else:
+        filtered_concepts = None
     
     # Convert to labels.jsonl format
     labels = []
@@ -171,6 +203,10 @@ def convert_to_jsonl(
             
             for tag_name, is_set in tags.items():
                 if not is_set:
+                    continue
+                
+                # Skip concept if it's filtered out
+                if filtered_concepts is not None and tag_name not in filtered_concepts:
                     continue
                     
                 # Parse category:tag format
@@ -308,6 +344,8 @@ def main():
     to_jsonl.add_argument('moves_jsonl', type=Path, help='Moves JSONL file for reference')
     to_jsonl.add_argument('output_labels', type=Path, help='Output labels.jsonl file')
     to_jsonl.add_argument('--game-uuid', help='Game UUID (auto-detected if not provided)')
+    to_jsonl.add_argument('--min-concept-examples', type=int, default=0, 
+                         help='Minimum number of examples required to keep a concept (default: 0 = no filtering)')
     
     # from-jsonl command
     from_jsonl = subparsers.add_parser('from-jsonl', help='Convert JSONL to label_page.py format')
@@ -324,7 +362,8 @@ def main():
             args.slates_jsonl,
             args.moves_jsonl,
             args.output_labels,
-            args.game_uuid
+            args.game_uuid,
+            args.min_concept_examples
         )
     elif args.command == 'from-jsonl':
         convert_from_jsonl(

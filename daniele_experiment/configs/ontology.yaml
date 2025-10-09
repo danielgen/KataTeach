@@ -36,6 +36,7 @@ tags:
     - {name: capture_race,        desc: "Semeai"}
     - {name: squeeze,             desc: "Squeeze"}
     - {name: use_aji,             desc: "Use aji"}
+    - {name: remove_aji,          desc: "Remove aji"}
     - {name: sacrifice,           desc: "Sacrificing a group"}
     - {name: leaning_attack,      desc: "Leaning attack"}
     - {name: splitting_attack,    desc: "Splitting attack"}
