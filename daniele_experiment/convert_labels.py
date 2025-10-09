@@ -23,6 +23,42 @@ from typing import Dict, Any, List
 import uuid
 
 
+def human_to_sgf(human_coord: str, board_size: int = 19) -> str:
+    """Convert human coordinate (like 'C16') to SGF coordinate (like 'cd').
+    
+    Args:
+        human_coord: Human coordinate like 'C16', 'Q4', etc.
+        board_size: Board size (default 19)
+    
+    Returns:
+        SGF coordinate like 'cd', 'pd', etc.
+    """
+    if not human_coord or len(human_coord) < 2:
+        return ""
+    
+    try:
+        # Parse human coordinate: letter + number
+        letter = human_coord[0].upper()
+        number = int(human_coord[1:])
+        
+        # Convert letter to x coordinate (A=0, B=1, ..., T=18, skip I)
+        if letter <= 'H':
+            x = ord(letter) - ord('A')
+        else:  # letter >= 'J' (skip I)
+            x = ord(letter) - ord('A') - 1
+        
+        # Convert number to y coordinate (1=18, 2=17, ..., 19=0)
+        y = board_size - number
+        
+        # Convert to SGF format (lowercase)
+        sgf_x = chr(ord('a') + x)
+        sgf_y = chr(ord('a') + y)
+        
+        return sgf_x + sgf_y
+    except:
+        return ""
+
+
 def sgf_to_move_loc(sgf_coord: str, board_size: int = 19) -> int:
     """Convert SGF coordinate to KataGo move_loc integer.
     
@@ -180,14 +216,20 @@ def convert_to_jsonl(
             print(f"Warning: No slate_id found for position {pos_idx}")
             continue
             
-        for sgf_coord, tags in move_labels.items():
+        for human_coord, tags in move_labels.items():
+            # Convert human coordinate to SGF format
+            sgf_coord = human_to_sgf(human_coord)
+            if not sgf_coord:
+                print(f"Warning: Could not convert human coordinate {human_coord} to SGF at position {pos_idx}")
+                continue
+            
             move_loc = move_mapping.get((slate_id, sgf_coord))
             
             if move_loc is None:
                 # Try to convert SGF coordinate directly
                 move_loc = sgf_to_move_loc(sgf_coord)
                 if move_loc == -1:
-                    print(f"Warning: Could not convert move {sgf_coord} at position {pos_idx}")
+                    print(f"Warning: Could not convert move {human_coord} (SGF: {sgf_coord}) at position {pos_idx}")
                     continue
             
             # Group tags by category
@@ -221,12 +263,28 @@ def convert_to_jsonl(
                     # Assume global tag if no category prefix
                     grouped_tags["global"].append(tag_name)
             
-            # Only create label record if there are actual tags
-            if any(grouped_tags.values()):
+            # Create concept vector for the filtered concepts
+            concept_vector = [0.0] * len(filtered_concepts) if filtered_concepts else []
+            
+            # Set active concepts based on filtered concept list
+            if filtered_concepts:
+                for i, (concept_name, _) in enumerate(sorted(filtered_concepts.items())):
+                    # Check if this concept is active in the current move
+                    concept_active = False
+                    for tag_name, is_set in tags.items():
+                        if is_set and tag_name == concept_name:
+                            concept_active = True
+                            break
+                    
+                    if concept_active:
+                        concept_vector[i] = 1.0
+            
+            # Only create label record if there are actual concept activations
+            if any(concept_vector):
                 label_record = {
                     "slate_id": slate_id,
-                    "move_loc": move_loc,
-                    "tags": grouped_tags
+                    "move_idx361": move_loc,
+                    "concept_labels": concept_vector
                 }
                 labels.append(label_record)
     

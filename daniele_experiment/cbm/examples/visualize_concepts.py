@@ -72,29 +72,40 @@ def coord_to_human(x: int, y: int) -> str:
     return f"{letter}{number}"
 
 
-def load_concept_names(ontology_path: Path) -> List[str]:
-    """Load concept names from ontology.yaml file."""
+def load_concept_names(ontology_path: Path, num_labeled_concepts: int = 0, num_latent_concepts: int = 0) -> Tuple[List[str], List[str]]:
+    """Load concept names from ontology.yaml file.
+    
+    Returns:
+        Tuple of (labeled_concept_names, latent_concept_names)
+    """
     if not ontology_path.exists():
-        return []
+        return [], []
     
     try:
         with ontology_path.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
         
-        concept_names = []
+        labeled_concept_names = []
         tags_data = data.get("tags", {})
         
-        # Collect all concept names from all categories
+        # Collect all concept names from all categories (these are labeled concepts)
         for category, concepts in tags_data.items():
             if isinstance(concepts, list):
                 for concept in concepts:
                     if isinstance(concept, dict) and "name" in concept:
-                        concept_names.append(concept["name"])
+                        labeled_concept_names.append(concept["name"])
         
-        return concept_names
+        # Truncate to the number of labeled concepts if specified
+        if num_labeled_concepts > 0:
+            labeled_concept_names = labeled_concept_names[:num_labeled_concepts]
+        
+        # Generate names for latent concepts
+        latent_concept_names = [f"latent_concept_{i}" for i in range(num_latent_concepts)]
+        
+        return labeled_concept_names, latent_concept_names
     except Exception as e:
         print(f"Warning: Could not load concept names from {ontology_path}: {e}")
-        return []
+        return [], []
 
 
 def create_concept_visualization_html(
@@ -104,7 +115,8 @@ def create_concept_visualization_html(
     output_path: Path,
     num_positions: int = 10,
     concept_threshold: float = 0.3,
-    concept_names: List[str] = None,
+    labeled_concept_names: List[str] = None,
+    latent_concept_names: List[str] = None,
     games_dir: Path = None
 ):
     """Create an HTML page visualizing concept activations on Go positions."""
@@ -175,8 +187,19 @@ def create_concept_visualization_html(
                 active_concepts = []
                 for concept_idx, activation in enumerate(concepts[0]):
                     if activation > concept_threshold:
-                        # Get concept name if available
-                        concept_name = concept_names[concept_idx] if concept_names and concept_idx < len(concept_names) else f"concept_{concept_idx}"
+                        # Get concept name based on whether it's labeled or latent
+                        if concept_idx < model.num_labeled_concepts:
+                            # This is a labeled concept
+                            concept_name = (labeled_concept_names[concept_idx] 
+                                          if labeled_concept_names and concept_idx < len(labeled_concept_names) 
+                                          else f"labeled_concept_{concept_idx}")
+                        else:
+                            # This is a latent concept
+                            latent_idx = concept_idx - model.num_labeled_concepts
+                            concept_name = (latent_concept_names[latent_idx] 
+                                          if latent_concept_names and latent_idx < len(latent_concept_names) 
+                                          else f"latent_concept_{latent_idx}")
+                        
                         active_concepts.append({
                             'concept_id': concept_idx,
                             'concept_name': concept_name,
@@ -795,8 +818,12 @@ def main():
     
     # Load concept names from ontology
     print("Loading concept names from ontology...")
-    concept_names = load_concept_names(args.ontology)
-    print(f"Loaded {len(concept_names)} concept names from ontology")
+    labeled_concept_names, latent_concept_names = load_concept_names(
+        args.ontology, 
+        model.num_labeled_concepts, 
+        model.num_latent_concepts
+    )
+    print(f"Loaded {len(labeled_concept_names)} labeled concept names and {len(latent_concept_names)} latent concept names from ontology")
     
     # Create output directory
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -805,7 +832,7 @@ def main():
     print("Generating concept visualization...")
     create_concept_visualization_html(
         model, dataset, device, args.output, 
-        args.num_positions, args.concept_threshold, concept_names, args.games_dir
+        args.num_positions, args.concept_threshold, labeled_concept_names, latent_concept_names, args.games_dir
     )
     
     print(f"Visualization complete! Open {args.output} in your browser to view the concepts.")
