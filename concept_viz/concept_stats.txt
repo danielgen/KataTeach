@@ -1,0 +1,21 @@
+TRM Concept Statistics
+==================================================
+
+Total samples: 5941
+Total concepts: 8
+
+Top 10 Most Active Concepts:
+ 1. Concept  0: 0.1378 ± 0.0000
+ 2. Concept  7: 0.1372 ± 0.0000
+ 3. Concept  5: 0.1364 ± 0.0000
+ 4. Concept  3: 0.1359 ± 0.0000
+ 5. Concept  2: 0.1350 ± 0.0000
+ 6. Concept  1: 0.1349 ± 0.0000
+ 7. Concept  6: 0.1334 ± 0.0000
+ 8. Concept  4: 0.0493 ± 0.0000
+
+Concept Activity Summary:
+Mean activity: 0.1250
+Std activity: 0.0306
+Max activity: 0.1378
+Min activity: 0.0493

@@ -20,6 +20,7 @@ from cbm.concept_utils import (
     analyze_concept_usage,
     print_concept_analysis
 )
+from daniele_experiment import get_device
 
 
 def evaluate_move_ranking(model, dataset, device, num_samples: int = 10):
@@ -230,7 +231,7 @@ def main():
     
     # Load model
     print("Loading trained model...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(get_device())
     model = load_model_with_concept_learning(args.model_path, device)
     print(f"Model loaded on {device}")
     print(f"Concepts: {model.num_labeled_concepts} labeled + {model.num_latent_concepts} latent")

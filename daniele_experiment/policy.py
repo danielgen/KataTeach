@@ -22,6 +22,7 @@ sys.path.append(str(Path(__file__).parent.parent / "python"))
 
 from load_model import load_model
 from gamestate import GameState, Board
+from daniele_experiment import get_device
 
 
 MoveInfo = Dict[str, float]
@@ -52,7 +53,7 @@ def compute_policy_suggestions(
     model_path: Path | str,
     *,
     threshold: float = -0.005,
-    device: str = "cuda",
+    device: str = "auto",
 ) -> None:
     """Run 1-visit policy evaluation for each SGF in ``sgf_paths``.
 
@@ -71,11 +72,14 @@ def compute_policy_suggestions(
         considered a top policy move.  The default of ``-0.005`` keeps
         moves within a 0.5% drop of the best move's probability.
     device:
-        Torch device on which to load the model (e.g. ``"cpu"`` or
-        ``"cuda"``).
+        Torch device on which to load the model (e.g. ``"auto"``, ``"mps"``, ``"cpu"`` or
+        ``"cuda"``). Default ``"auto"`` will auto-detect best available device.
     """
 
-    model, _, _ = load_model(model_path, use_swa=False, device=device, pos_len=19, verbose=False)
+    # Auto-detect device if needed
+    actual_device = get_device(device)
+    print(f"Using device: {actual_device}")
+    model, _, _ = load_model(model_path, use_swa=False, device=actual_device, pos_len=19, verbose=False)
     for sgf_path in sgf_paths:
         path = Path(sgf_path)
         with path.open("rb") as f:
@@ -226,7 +230,7 @@ def main() -> None:
     parser.add_argument("model", type=Path, help="KataGo model checkpoint")
     parser.add_argument("sgfs", nargs="+", help="SGF files to analyse (supports wildcards)")
     parser.add_argument("--threshold", type=float, default=-0.005, help="Probability drop from best move")
-    parser.add_argument("--device", type=str, default="cuda", help="Torch device for model")
+    parser.add_argument("--device", type=str, default="auto", help="Torch device for model (default: auto - will use mps/cuda/cpu as available)")
     args = parser.parse_args()
 
     # Expand wildcards in SGF paths
@@ -242,7 +246,9 @@ def main() -> None:
     # Convert to Path objects
     sgf_paths = [Path(p) for p in sgf_paths]
 
-    compute_policy_suggestions(sgf_paths, args.model, threshold=args.threshold, device=args.device)
+    # Auto-detect device if needed
+    actual_device = get_device(args.device)
+    compute_policy_suggestions(sgf_paths, args.model, threshold=args.threshold, device=actual_device)
 
 
 __all__ = ["save_combined_data", "compute_policy_suggestions"]
@@ -250,6 +256,6 @@ __all__ = ["save_combined_data", "compute_policy_suggestions"]
 
 if __name__ == "__main__":
     main()
-    # python policy.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt D:\KataGo\daniele_experiment\games\*.sgf
+    # python policy.py model.ckpt games/*.sgf
 
 

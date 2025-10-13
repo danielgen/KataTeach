@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from .move_conditioned_model import MoveConditionedConceptBottleneckModel
+from daniele_experiment import get_device
 
 
 def extract_concepts_for_topk_moves(
@@ -267,7 +268,7 @@ def load_model_with_concept_learning(
         Loaded model
     """
     if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device(get_device())
     
     checkpoint = torch.load(model_path, map_location=device)
     config = checkpoint['model_config']

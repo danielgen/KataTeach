@@ -2,6 +2,25 @@
 
 This guide explains how to create, export, and process game annotations with full traceability back to the original games.
 
+## MacBook Pro Setup
+
+This project now supports **MPS (Metal Performance Shaders)** for Apple Silicon Macs, providing GPU acceleration for PyTorch operations. The scripts will automatically detect and use the best available device:
+
+1. **MPS** (Apple Silicon Macs) - Fastest option
+2. **CUDA** (NVIDIA GPUs) - For Linux/Windows systems  
+3. **CPU** - Fallback for all systems
+
+### Installation
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# For Apple Silicon Macs, ensure you have PyTorch with MPS support
+# This should be included in the requirements.txt, but you can verify with:
+python -c "import torch; print('MPS available:', torch.backends.mps.is_available())"
+```
+
 ## Overview
 
 The annotation system now provides much better traceability and data management:
@@ -16,8 +35,13 @@ The annotation system now provides much better traceability and data management:
 ### 1. Generate Games and Analysis
 
 ```bash
-# Generate games with analysis
+# Generate games with analysis (auto-detects MPS/CUDA/CPU)
 python play_and_analyze.py model.ckpt 5 --output-dir games/
+
+# On MacBook Pro, this will automatically use MPS for faster processing
+# You can also explicitly specify device if needed:
+python play_and_analyze.py model.ckpt 5 --device mps  # Force MPS
+python play_and_analyze.py model.ckpt 5 --device cpu  # Force CPU
 
 # This creates:
 # games/
@@ -190,7 +214,7 @@ Position 1:
 ## Example Complete Workflow
 
 ```bash
-# 1. Generate games
+# 1. Generate games (auto-detects best device)
 python play_and_analyze.py model.ckpt 3 --output-dir games/
 
 # 2. Create annotation UIs  
@@ -212,3 +236,28 @@ ls enriched_games/
 ```
 
 This workflow ensures you never lose track of which annotations belong to which games, and provides rich, research-ready datasets for further analysis.
+
+## Performance Notes
+
+### MacBook Pro Performance
+- **MPS acceleration**: On Apple Silicon Macs, the scripts automatically use MPS for significant speedup
+- **Memory usage**: MPS may use more memory than CPU, but provides much faster inference
+- **Compatibility**: All scripts maintain backward compatibility - you can still force CPU with `--device cpu`
+
+### Device Selection
+The scripts now use intelligent device detection:
+- **Auto (default)**: Automatically selects the best available device
+- **MPS**: Apple Silicon GPU acceleration (recommended for MacBook Pro)
+- **CUDA**: NVIDIA GPU acceleration (for Linux/Windows with NVIDIA GPUs)
+- **CPU**: CPU-only processing (slower but most compatible)
+
+Example device usage:
+```bash
+# Auto-detect (recommended)
+python play_and_analyze.py model.ckpt 5
+
+# Force specific device
+python play_and_analyze.py model.ckpt 5 --device mps    # Apple Silicon
+python play_and_analyze.py model.ckpt 5 --device cuda   # NVIDIA GPU
+python play_and_analyze.py model.ckpt 5 --device cpu    # CPU only
+```

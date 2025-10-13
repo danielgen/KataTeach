@@ -28,10 +28,27 @@ from sgfmill import sgf, sgf_moves, common as sgf_common
 
 # Add python directory to path for KataGo modules
 sys.path.append(str(Path(__file__).parent.parent / "python"))
+sys.path.append(str(Path(__file__).parent))
 
 from load_model import load_model
 from gamestate import GameState, Board
 import torch
+# Import get_device function directly
+def get_device(device: str = "auto") -> str:
+    """Auto-detect the best available PyTorch device with fallback logic."""
+    if device != "auto":
+        return device
+
+    # Check for MPS (Apple Silicon Macs)
+    if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        return "mps"
+
+    # Check for CUDA (NVIDIA GPUs)
+    if torch.cuda.is_available():
+        return "cuda"
+
+    # Fallback to CPU
+    return "cpu"
 
 
 MoveInfo = Dict[str, float]
@@ -812,12 +829,12 @@ Examples:
   python play_and_analyze.py model.ckpt 5
   
   # Play games with custom dynamic threshold settings
-  python play_and_analyze.py model.ckpt 3 --initial-prob-threshold 0.08 --transition-moves 30
+  python play_and_analyze.py model.ckpt 3 --initial-prob-threshold 0.08 --transition-moves 30 --max-moves-per-position 3
   
   # Use fixed threshold (no dynamics) by setting initial = final
   python play_and_analyze.py model.ckpt 2 --initial-prob-threshold 0.02 --prob-threshold 0.02
   
-  # Use CPU instead of GPU
+  # Use specific device (auto-detection is default)
   python play_and_analyze.py model.ckpt 2 --device cpu
         """
     )
@@ -828,8 +845,8 @@ Examples:
                        help="Directory to save SGF files (default: games)")
     parser.add_argument("--board-size", type=int, default=19, choices=[9, 13, 19],
                        help="Board size (default: 19)")
-    parser.add_argument("--device", type=str, default="cuda", 
-                       help="PyTorch device (default: cuda)")
+    parser.add_argument("--device", type=str, default="auto", 
+                       help="PyTorch device (default: auto - will use mps/cuda/cpu as available)")
     parser.add_argument("--prob-threshold", type=float, default=0.05,
                        help="Probability threshold for move sampling (default: 0.05 = 5%%)")
     parser.add_argument("--analysis-threshold", type=float, default=-0.005,
@@ -856,8 +873,11 @@ Examples:
         sys.exit(1)
     
     try:
+        # Auto-detect device if needed
+        actual_device = get_device(args.device)
         print(f"Loading model from {args.model}...")
-        model, _, _ = load_model(args.model, use_swa=False, device=args.device, pos_len=19, verbose=False)
+        print(f"Using device: {actual_device}")
+        model, _, _ = load_model(args.model, use_swa=False, device=actual_device, pos_len=19, verbose=False)
         
         play_and_analyze_games(
             model=model,

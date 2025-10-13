@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cbm.move_candidate_dataset import MoveCandidateDataset, slate_group_collate
 from cbm.concept_utils import load_model_with_concept_learning
+from daniele_experiment import get_device
 
 
 def sgf_to_coord(move_string: str) -> Tuple[int, int]:
@@ -803,7 +804,7 @@ def main():
     
     # Load model
     print("Loading trained model...")
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(get_device())
     model = load_model_with_concept_learning(args.model_path, device)
     print(f"Model loaded on {device}")
     

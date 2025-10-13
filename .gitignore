@@ -99,6 +99,7 @@ daniele_experiment/web/Thumbs.db
 daniele_experiment/web/*.log
 daniele_experiment/games/
 daniele_experiment/.ipynb_checkpoints/
+daniele_experiment/model.ckpt
 
 bin/
 cbm_output/

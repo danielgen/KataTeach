@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from cbm.move_candidate_dataset import MoveCandidateDataset, slate_group_collate
 from cbm.move_conditioned_model import MoveConditionedConceptBottleneckModel
+from daniele_experiment import get_device
 
 
 def kl_over_candidates(logits: torch.Tensor, target_probs: torch.Tensor) -> torch.Tensor:
@@ -210,7 +211,7 @@ def main():
     )
     
     # Create model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(get_device())
     print(f"Using device: {device}")
     
     model = MoveConditionedConceptBottleneckModel(

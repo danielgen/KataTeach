@@ -23,6 +23,7 @@ sys.path.append(str(Path(__file__).parent.parent / "python"))
 from load_model import load_model
 from gamestate import GameState, Board
 from sgfmill import sgf
+from daniele_experiment import get_device
 
 
 def loc_to_sgf_coords(loc: int, board: Board) -> str:
@@ -82,7 +83,7 @@ def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_thr
     return selected_move, original_prob, was_sampled
 
 
-def play_single_game(model, game_id: int, board_size: int = 19, device: str = "cuda", prob_threshold: float = 0.01) -> Tuple[str, str]:
+def play_single_game(model, game_id: int, board_size: int = 19, device: str = "auto", prob_threshold: float = 0.01) -> Tuple[str, str]:
     """Play a single game using 1-visit neural network evaluation.
     
     Returns:
@@ -189,13 +190,16 @@ def play_n_games(
     num_games: int,
     output_dir: Path,
     board_size: int = 19,
-    device: str = "cuda",
+    device: str = "auto",
     prob_threshold: float = 0.01
 ) -> None:
     """Play N games and save them as SGF files."""
     
+    # Auto-detect device if needed
+    actual_device = get_device(device)
     print(f"Loading model from {model_path}...")
-    model, _, _ = load_model(model_path, use_swa=False, device=device, pos_len=board_size, verbose=False)
+    print(f"Using device: {actual_device}")
+    model, _, _ = load_model(model_path, use_swa=False, device=actual_device, pos_len=board_size, verbose=False)
     
     output_dir.mkdir(exist_ok=True)
     
@@ -238,8 +242,8 @@ Examples:
                        help="Directory to save SGF files (default: games)")
     parser.add_argument("--board-size", type=int, default=19, choices=[9, 13, 19],
                        help="Board size (default: 19)")
-    parser.add_argument("--device", type=str, default="cuda", 
-                       help="PyTorch device (default: cuda)")
+    parser.add_argument("--device", type=str, default="auto", 
+                       help="PyTorch device (default: auto - will use mps/cuda/cpu as available)")
     parser.add_argument("--prob-threshold", type=float, default=0.01,
                        help="Probability threshold for move sampling (default: 0.01 = 1%%)")
     
@@ -254,7 +258,9 @@ Examples:
         sys.exit(1)
     
     try:
-        play_n_games(args.model, args.num_games, args.output_dir, args.board_size, args.device, args.prob_threshold)
+        # Auto-detect device if needed
+        actual_device = get_device(args.device)
+        play_n_games(args.model, args.num_games, args.output_dir, args.board_size, actual_device, args.prob_threshold)
     except KeyboardInterrupt:
         print("\nInterrupted by user")
         sys.exit(1)
@@ -267,5 +273,5 @@ if __name__ == "__main__":
     main()
     
 # Example usage:
-# python play_games.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 5
-# python play_games.py D:\KataGo\kata1-b28c512nbt-s9584861952-d4960414494\model.ckpt 3 --prob-threshold 0.02 
+# python play_games.py model.ckpt 5
+# python play_games.py model.ckpt 3 --prob-threshold 0.02 
