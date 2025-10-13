@@ -101,5 +101,9 @@ daniele_experiment/games/
 daniele_experiment/.ipynb_checkpoints/
 daniele_experiment/model.ckpt
 
+board_gallery/
+concept_gallery/
+concept_viz/
+
 bin/
 cbm_output/
