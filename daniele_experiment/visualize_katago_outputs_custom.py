@@ -21,31 +21,14 @@ from model_pytorch import Model
 from load_model import load_model
 import torch
 
+# Import common utilities
+from common_utils import get_device as get_device_str, convert_numpy_to_python
+
 def get_device():
     """Get the appropriate device for model inference."""
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        return torch.device("mps")
-    else:
-        return torch.device("cpu")
+    device_str = get_device_str()
+    return torch.device(device_str)
 
-def convert_numpy_to_python(obj):
-    """Convert numpy arrays and other non-JSON-serializable objects to Python equivalents."""
-    if isinstance(obj, np.ndarray):
-        return obj.tolist()
-    elif isinstance(obj, np.integer):
-        return int(obj)
-    elif isinstance(obj, np.floating):
-        return float(obj)
-    elif isinstance(obj, dict):
-        return {key: convert_numpy_to_python(value) for key, value in obj.items()}
-    elif isinstance(obj, list):
-        return [convert_numpy_to_python(item) for item in obj]
-    elif isinstance(obj, tuple):
-        return tuple(convert_numpy_to_python(item) for item in obj)
-    else:
-        return obj
 
 def play_short_game(model, max_moves=10):
     """Play a short game and capture KataGo outputs at each step."""
@@ -55,6 +38,14 @@ def play_short_game(model, max_moves=10):
     board_size = 19
     game_state = GameState(board_size, GameState.RULES_TT)
     
+    # Diverse play and resignation settings
+    initial_prob_threshold = 0.05  # early game more diversity
+    final_prob_threshold = 0.01    # late game more greedy
+    transition_moves = 50          # moves over which to transition
+    resignation_threshold = 0.10   # 10% winrate
+    consecutive_low_moves = 3      # consecutive low-winrate moves per player before resigning
+    consecutive_lows_by_player = {Board.BLACK: 0, Board.WHITE: 0}
+
     game_data = []
     moves = []
     
@@ -90,14 +81,20 @@ def play_short_game(model, max_moves=10):
         # Use sampling to get more realistic moves (like in play_games.py)
         import random
         
+        # Dynamic probability threshold that decreases over time
+        if move_num - 1 >= transition_moves:
+            current_threshold = final_prob_threshold
+        else:
+            progress = (move_num - 1) / transition_moves
+            current_threshold = initial_prob_threshold - (initial_prob_threshold - final_prob_threshold) * progress
+
         # Find the best probability
         best_prob = max(prob for _, prob in moves_and_probs)
         
-        # Find all moves within 1% of the best move
-        prob_threshold = 0.01
+        # Find all moves within current_threshold of the best move
         candidate_moves = []
         for move, prob in moves_and_probs:
-            if prob >= best_prob - prob_threshold:
+            if prob >= best_prob - current_threshold:
                 candidate_moves.append((move, prob))
         
         # If only one candidate, return it (no sampling)
@@ -118,7 +115,7 @@ def play_short_game(model, max_moves=10):
         
         # Debug: print top moves
         print(f"  Top 5 moves: {moves_and_probs[:5]}")
-        print(f"  Selected move: {best_move} (prob: {best_prob:.6f})")
+        print(f"  Selected move: {best_move} (prob: {best_prob:.6f}, threshold: {current_threshold:.3f})")
         
         # Play the move
         game_state.play(current_player, best_move)
@@ -135,6 +132,32 @@ def play_short_game(model, max_moves=10):
         
         # Get outputs after the move
         post_move_outputs = game_state.get_model_outputs(model)
+        # Compute winrate for the move just played (perspective flipped)
+        try:
+            opponent_winrate = float(post_move_outputs["value"][0])
+            our_winrate = 1.0 - opponent_winrate
+        except Exception:
+            # Fallback: use position evaluation before the move
+            our_winrate = float(outputs["value"][0])
+        
+        # Resignation logic: track consecutive low winrates per player
+        if our_winrate < resignation_threshold:
+            consecutive_lows_by_player[current_player] += 1
+        else:
+            consecutive_lows_by_player[current_player] = 0
+        
+        if consecutive_lows_by_player[current_player] >= consecutive_low_moves:
+            print(f"{player_str} resigns: winrate < {resignation_threshold:.0%} for {consecutive_low_moves} consecutive moves")
+            # Store the post-move data before breaking
+            converted_outputs = convert_numpy_to_python(post_move_outputs)
+            game_data.append({
+                "move_number": move_num,
+                "player": player_str,
+                "last_move": (current_player, best_move),
+                "board_state": board_state,
+                **converted_outputs
+            })
+            break
         
         # Convert numpy arrays to Python objects for JSON serialization
         converted_outputs = convert_numpy_to_python(post_move_outputs)
@@ -156,7 +179,7 @@ def play_short_game(model, max_moves=10):
             x = game_state.board.loc_x(best_move)
             y = game_state.board.loc_y(best_move)
             sgf_coord = f"{chr(ord('a') + x)}{chr(ord('a') + y)}"
-            print(f"Move {move_num}: {player_str} plays at {best_move} ({sgf_coord}) (prob: {best_prob:.3f})")
+            print(f"Move {move_num}: {player_str} plays at {best_move} ({sgf_coord}) (prob: {best_prob:.3f}, winrate: {our_winrate:.1%})")
         
         # Debug: print board state
         black_count = sum(1 for x in board_state if x == 1)
@@ -440,6 +463,16 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             color: #333;
         }}
         
+        .snorkel-details {{
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px;
+            font-family: monospace;
+            font-size: 11px;
+            line-height: 1.3;
+        }}
+        
         .sticky-value-display {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -612,6 +645,72 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             container.appendChild(section);
         }}
         
+        function addSnorkelSection() {{
+            const container = document.getElementById('stickyValueContainer');
+            const section = document.createElement('div');
+            section.className = 'sticky-value-section';
+            section.id = 'snorkel-section';
+            
+            section.innerHTML = `
+                <h3>Snorkel Analysis</h3>
+                <div class="sticky-value-display">
+                    <div class="sticky-value-item">
+                        <strong>Groups (Det)</strong>
+                        <span id="groups-det">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Groups (Own)</strong>
+                        <span id="groups-own">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Potential Territory</strong>
+                        <span id="potential-territory">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Solid Territory</strong>
+                        <span id="solid-territory">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Direct Sacrifice</strong>
+                        <span id="direct-sacrifice">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Is Cut</strong>
+                        <span id="is-cut">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Is Connection</strong>
+                        <span id="is-connection">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Is Extension</strong>
+                        <span id="is-extension">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Liberties</strong>
+                        <span id="liberties">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Atari</strong>
+                        <span id="atari">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Is Only Move</strong>
+                        <span id="is-only-move">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Is Tenuki</strong>
+                        <span id="is-tenuki">-</span>
+                    </div>
+                </div>
+                <div class="snorkel-details" id="snorkel-details" style="margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto;">
+                    <!-- Detailed snorkel info will be populated here -->
+                </div>
+            `;
+            
+            container.appendChild(section);
+        }}
+        
         
         function updateBoards(data) {{
             // Update each board
@@ -626,6 +725,9 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             
             // Update value info
             updateValueInfo(data);
+            
+            // Update snorkel info
+            updateSnorkelInfo(data);
         }}
         
         function drawGridLines(board) {{
@@ -751,7 +853,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     if (prob > threshold) {{
                         const label = document.createElement('div');
                         label.className = 'label';
-                        label.textContent = (prob * 100).toFixed(1);
+                        label.textContent = Math.round(prob * 100);
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
@@ -808,7 +910,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     if (Math.abs(ownership) > 0.1) {{
                         const label = document.createElement('div');
                         label.className = 'label';
-                        label.textContent = Math.abs(ownership).toFixed(1);
+                        label.textContent = Math.round(Math.abs(ownership) * 10);
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
@@ -821,7 +923,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         const isGoodForBlack = adjustedOwnership > 0;
                         const shouldUseBlackText = isGoodForBlack;
                         
-                        label.style.color = shouldUseBlackText ? 'yellow' : 'grey';
+                        label.style.color = shouldUseBlackText ? 'red' : 'grey';
                         label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
                         label.style.zIndex = '15';
                         board.appendChild(label);
@@ -833,8 +935,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             if (info) {{
                 info.innerHTML = `
                     <div class="heatmap-legend">
-                        <span style="color: yellow; background: rgba(255,255,255,0.8);">Yellow Text: Good for Black</span>
-                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Good for White</span>
+                        <span style="color: red; background: rgba(255,255,255,0.8);">Red Text: White</span>
+                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Black</span>
                     </div>
                 `;
             }}
@@ -876,7 +978,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     if (Math.abs(scoring) > 0.1) {{
                         const label = document.createElement('div');
                         label.className = 'label';
-                        label.textContent = Math.abs(scoring).toFixed(1);
+                        label.textContent = Math.round(Math.abs(scoring) * 10);
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
@@ -888,7 +990,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         const adjustedScoring = isBlackPlayer ? scoring : -scoring;
                         const isGoodForBlack = adjustedScoring > 0;
                         const shouldUseBlackText = isGoodForBlack;
-                        label.style.color = shouldUseBlackText ? 'yellow' : 'grey';
+                        label.style.color = shouldUseBlackText ? 'red' : 'grey';
                         label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
                         label.style.zIndex = '15';
                         board.appendChild(label);
@@ -900,8 +1002,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             if (info) {{
                 info.innerHTML = `
                     <div class="heatmap-legend">
-                        <span style="color: yellow; background: rgba(255,255,255,0.8);">Yellow Text: Good for Black</span>
-                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Good for White</span>
+                        <span style="color: red; background: rgba(255,255,255,0.8);">Red Text: White</span>
+                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Black</span>
                     </div>
                 `;
             }}
@@ -943,7 +1045,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     if (Math.abs(futurepos) > 0.1) {{
                         const label = document.createElement('div');
                         label.className = 'label';
-                        label.textContent = Math.abs(futurepos).toFixed(1);
+                        label.textContent = Math.round(Math.abs(futurepos) * 10);
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
@@ -956,7 +1058,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         const isGoodForBlack = adjustedFuturepos > 0;
                         const shouldUseBlackText = isGoodForBlack;
                         
-                        label.style.color = shouldUseBlackText ? 'yellow' : 'grey';
+                        label.style.color = shouldUseBlackText ? 'red' : 'grey';
                         label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
                         label.style.zIndex = '15';
                         board.appendChild(label);
@@ -968,8 +1070,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             if (info) {{
                 info.innerHTML = `
                     <div class="heatmap-legend">
-                        <span style="color: yellow; background: rgba(255,255,255,0.8);">Yellow Text: Good for Black</span>
-                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Good for White</span>
+                        <span style="color: red; background: rgba(255,255,255,0.8);">Red Text: White</span>
+                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Black</span>
                     </div>
                 `;
             }}
@@ -1066,6 +1168,82 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             }}
         }}
         
+        function updateSnorkelInfo(data) {{
+            if (!data || !data.analysis) return;
+            
+            const analysis = data.analysis;
+            
+            // Update basic snorkel metrics
+            const elements = {{
+                'groups-det': analysis.groups_deterministic ? analysis.groups_deterministic.length : 0,
+                'groups-own': analysis.groups_ownership ? analysis.groups_ownership.length : 0,
+                'potential-territory': analysis.potential_territory || 0,
+                'solid-territory': analysis.solid_territory || 0,
+                'direct-sacrifice': analysis.direct_sacrifice ? 'Yes' : 'No',
+                'is-cut': analysis.is_cut ? 'Yes' : 'No',
+                'is-connection': analysis.is_connection ? 'Yes' : 'No',
+                'is-extension': analysis.is_extension ? 'Yes' : 'No',
+                'liberties': analysis.liberties || 0,
+                'atari': analysis.atari ? 'Yes' : 'No',
+                'is-only-move': analysis.is_only_move || 'False',
+                'is-tenuki': analysis.is_tenuki ? 'Yes' : 'No'
+            }};
+            
+            for (const [id, value] of Object.entries(elements)) {{
+                const element = document.getElementById(id);
+                if (element) {{
+                    element.textContent = value;
+                }}
+            }}
+            
+            // Update detailed snorkel info
+            const detailsDiv = document.getElementById('snorkel-details');
+            if (detailsDiv) {{
+                let detailsHtml = '';
+                
+                // Urgency by region
+                if (analysis.urgency_by_region) {{
+                    detailsHtml += '<div><strong>Urgency by Region:</strong><br>';
+                    for (const [region, urgency] of Object.entries(analysis.urgency_by_region)) {{
+                        detailsHtml += `${{region}}: ${{(urgency * 100).toFixed(1)}}%<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // Rough intent (show top 5 moves)
+                if (analysis.rough_intent) {{
+                    const intentEntries = Object.entries(analysis.rough_intent);
+                    if (intentEntries.length > 0) {{
+                        detailsHtml += '<div><strong>Top Move Intent:</strong><br>';
+                        intentEntries.slice(0, 5).forEach(([moveIdx, intent]) => {{
+                            const x = moveIdx % 19;
+                            const y = Math.floor(moveIdx / 19);
+                            const coord = String.fromCharCode(97 + x) + (19 - y);
+                            detailsHtml += `${{coord}}: Pot=${{intent.potential_territory}}, Solid=${{intent.solid_territory}}<br>`;
+                        }});
+                        detailsHtml += '</div><br>';
+                    }}
+                }}
+                
+                // Territory analysis
+                if (analysis.building_territory !== undefined || analysis.solidify_territory !== undefined) {{
+                    detailsHtml += '<div><strong>Territory Changes:</strong><br>';
+                    if (analysis.building_territory !== undefined) {{
+                        detailsHtml += `Building: ${{analysis.building_territory}}<br>`;
+                    }}
+                    if (analysis.solidify_territory !== undefined) {{
+                        detailsHtml += `Solidify: ${{analysis.solidify_territory.toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.reduce_territory !== undefined) {{
+                        detailsHtml += `Reduce: ${{analysis.reduce_territory}}<br>`;
+                    }}
+                    detailsHtml += '</div>';
+                }}
+                
+                detailsDiv.innerHTML = detailsHtml;
+            }}
+        }}
+        
         
         // Control functions
         function previousMove() {{
@@ -1138,6 +1316,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         
         // Initialize display
         addValueSection();
+        addSnorkelSection();
         initializeBoards();
         updateDisplay();
     </script>
@@ -1154,7 +1333,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
 def main():
     parser = argparse.ArgumentParser(description='Visualize KataGo model outputs')
     parser.add_argument('model_path', help='Path to the KataGo model file')
-    parser.add_argument('--max-moves', type=int, default=10, help='Maximum number of moves to play')
+    parser.add_argument('--max-moves', type=int, default=300, help='Maximum number of moves to play')
     parser.add_argument('--output', default='katago_visualization.html', help='Output HTML file')
     
     args = parser.parse_args()

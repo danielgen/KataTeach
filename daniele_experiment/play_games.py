@@ -23,64 +23,15 @@ sys.path.append(str(Path(__file__).parent.parent / "python"))
 from load_model import load_model
 from gamestate import GameState, Board
 from sgfmill import sgf
-from daniele_experiment import get_device
+
+# Import common utilities
+from common_utils import (
+    get_device, select_move_with_sampling, loc_to_sgf_coords, create_sgf
+)
 
 
-def loc_to_sgf_coords(loc: int, board: Board) -> str:
-    """Convert an internal location to SGF coordinate string."""
-    if loc == Board.PASS_LOC:
-        return ""  # Pass move in SGF
-    x = board.loc_x(loc)
-    y = board.loc_y(loc)
-    # SGF uses lowercase letters for coordinates
-    sgf_x = chr(ord('a') + x)
-    sgf_y = chr(ord('a') + y)
-    return sgf_x + sgf_y
 
 
-def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_threshold: float = 0.01) -> Tuple[int, float, bool]:
-    """Select a move by sampling from moves within prob_threshold of the best move.
-    
-    Args:
-        moves_and_probs: List of (move, probability) tuples
-        prob_threshold: Probability threshold (default 1% = 0.01)
-    
-    Returns:
-        Tuple of (selected_move, its_probability, was_sampled)
-    """
-    if not moves_and_probs:
-        raise ValueError("No moves available")
-    
-    # Find the best probability
-    best_prob = max(prob for _, prob in moves_and_probs)
-    
-    # Find all moves within the threshold
-    candidate_moves = []
-    for move, prob in moves_and_probs:
-        if prob >= best_prob - prob_threshold:
-            candidate_moves.append((move, prob))
-    
-    # If only one candidate, return it (no sampling)
-    if len(candidate_moves) == 1:
-        return candidate_moves[0][0], candidate_moves[0][1], False
-    
-    # Sample from candidates using their probabilities as weights
-    moves, probs = zip(*candidate_moves)
-    
-    # Normalize probabilities within the candidate set
-    total_prob = sum(probs)
-    normalized_probs = [p / total_prob for p in probs]
-    
-    # Sample based on normalized probabilities
-    selected_idx = random.choices(range(len(moves)), weights=normalized_probs)[0]
-    selected_move = moves[selected_idx]
-    original_prob = probs[selected_idx]
-    
-    # Check if we selected the best move or an alternative
-    best_move = max(candidate_moves, key=lambda x: x[1])[0]
-    was_sampled = selected_move != best_move
-    
-    return selected_move, original_prob, was_sampled
 
 
 def play_single_game(model, game_id: int, board_size: int = 19, device: str = "auto", prob_threshold: float = 0.01) -> Tuple[str, str]:
@@ -145,44 +96,6 @@ def play_single_game(model, game_id: int, board_size: int = 19, device: str = "a
     return sgf_content, result
 
 
-def create_sgf(moves: List[Tuple[int, int]], board_size: int, game_id: int) -> str:
-    """Create SGF content from a list of moves."""
-    # Create SGF game
-    game = sgf.Sgf_game(size=board_size)
-    
-    # Set game info
-    root = game.get_root()
-    root.set("FF", 4)
-    root.set("GM", 1) 
-    root.set("SZ", board_size)
-    root.set("KM", 7.5)  # Standard komi
-    root.set("RU", "Tromp-Taylor")
-    root.set("PB", f"KataGo-1visit")
-    root.set("PW", f"KataGo-1visit")
-    root.set("GN", f"1-visit-game-{game_id}")
-    root.set("DT", time.strftime("%Y-%m-%d"))
-    
-    # Create a temporary board to use the coordinate conversion methods
-    temp_board = Board(board_size)
-    
-    # Add moves
-    for pla, loc in moves:
-        color = "b" if pla == Board.BLACK else "w"
-        
-        if loc == Board.PASS_LOC:
-            # Pass move
-            node = game.extend_main_sequence()
-            node.set_move(color, None)
-        else:
-            # Convert loc to board coordinates using Board methods
-            x = temp_board.loc_x(loc)
-            y = temp_board.loc_y(loc)
-            
-            if 0 <= x < board_size and 0 <= y < board_size:  # Validate coordinates
-                node = game.extend_main_sequence() 
-                node.set_move(color, (y, x))
-    
-    return game.serialise().decode('utf-8')
 
 
 def play_n_games(

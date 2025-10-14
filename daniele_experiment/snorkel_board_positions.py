@@ -1,425 +1,790 @@
 #!/usr/bin/env python3
 """
-Snorkel-based weak supervision for Go board positions.
+Comprehensive spatial concepts and metrics for Go board analysis.
 
-This script applies Snorkel's weak supervision framework to Go board positions
-using the existing labeling functions and data structures in the daniele_experiment
-package. It provides a complete pipeline for:
-
-1. Loading board position data from policy files
-2. Applying weak labeling functions using Snorkel
-3. Training a label model to combine weak labels
-4. Generating probabilistic labels for downstream tasks
-
-Usage:
-    python snorkel_board_positions.py --input-dir games/policy/ --output-dir snorkel_output/
-    python snorkel_board_positions.py --input-file games/policy/game.json --output-dir snorkel_output/
+This module implements all 28 concepts as specified:
+1. Board coordinates: aa (top-left/S19) to ss (bottom-right)
+2. Regions: 4 corners, 4 sides, center
+3. Groups: deterministic connection OR ownership-based (>=0.1)
+4. Group strength: average ownership of group stones
+5. Group connectivity: average ownership of empty intersections within bounds
+6. Group influence area: count of own ownership around group
+7. Influence strength: average ownership around group
+8. Building territory: empty -> own ownership >0.1
+9. Solidify territory: increase existing ownership values
+10. Reduce territory: reduce opponent's owned intersections
+11. Invasion: reduce opponent + increase own territory
+12. Weakening territory: reduce opponent's average ownership in area
+13. Leaving weakness: own -> opponent ownership
+14. Potential territory: ownership <0.7
+15. Solid territory: ownership >=0.7
+16. Direct sacrifice: played stone becomes opponent's
+17. Indirect sacrifice: own stone becomes opponent's
+18. Urgency: sum of policy mass by area
+19. Cut: w-b/b-w configuration separating groups
+20. Only move: policy has only 1 value
+21. Rough intent: policy move -> ownership effect
+22. Tenuki: different area + closer candidates exist
+23. Connection: connects stones OR increases connectivity
+24. Extension: next to existing own stone
+25. Liberties: number of liberties for group
+26. Atari: opponent group with 1 liberty
+27. Reduce aji: increase own ownership over opponent group
+28. Attack: decrease opponent group strength
+29. Killing attack: opponent group >=0.5 own ownership
 """
 
-import argparse
+from dataclasses import dataclass
+from typing import Dict, List, Tuple, Optional, Set, Iterable, Any
 import json
-import sys
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
-import warnings
 
 import numpy as np
-import pandas as pd
-from snorkel.labeling import LabelingFunction, labeling_function
-from snorkel.labeling import PandasLFApplier
-from snorkel.labeling import LabelModel
-from snorkel.labeling import filter_unlabeled_dataframe
 
-# Add the current directory to path for imports
-sys.path.append(str(Path(__file__).parent))
+# Allow importing sibling python modules (board)
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent / "python"))
+
+from board import Board
 
 
-class BoardPositionData:
-    """Container for board position data with KataGo analysis."""
+# -------------------------
+# Configuration thresholds
+# -------------------------
+
+OWN_MIN = 0.10            # minimal magnitude to consider owned/influenced
+TERRITORY_SOLID = 0.70    # threshold for solid territory
+
+
+@dataclass
+class Group:
+    color: int                 # Board.BLACK or Board.WHITE
+    head: int                  # representative loc (board.group_head)
+    stones: List[int]          # list of locs belonging to the group
+    liberties: int             # number of liberties
+    bbox: Tuple[int,int,int,int]  # (min_x, min_y, max_x, max_y)
+    strength: float            # average ownership value on group stones (signed from perspective of 'color')
+    connectivity: float        # average ownership of empty intersections within bounds
+    influence_area: int        # count of own ownership around group
+    influence_strength: float  # average ownership around group
+
+
+# -------------------------
+# Coordinate and Region Functions
+# -------------------------
+
+def xy_to_loc(board: Board, x: int, y: int) -> int:
+    """Convert (x,y) coordinates to board location."""
+    return board.loc(x, y)
+
+
+def loc_to_xy(board: Board, loc: int) -> Tuple[int, int]:
+    """Convert board location to (x,y) coordinates."""
+    return board.loc_x(loc), board.loc_y(loc)
+
+
+def in_bounds(x: int, y: int, size: int = 19) -> bool:
+    """Check if coordinates are within board bounds."""
+    return 0 <= x < size and 0 <= y < size
+
+
+def classify_region(x: int, y: int, size: int = 19) -> str:
+    """
+    Classify region into 9 distinct areas:
+    - 4 Corners: top-left, top-right, bottom-left, bottom-right
+    - 4 Sides: left, right, upper, lower
+    - 1 Center: middle area
     
-    def __init__(self, position_data: Dict[str, Any]):
-        self.position_data = position_data
-        self.suggestions = position_data.get("suggestions", [])
-        self.actual_move = position_data.get("actual_move", {})
-        
-        # Extract features for labeling functions
-        self._extract_features()
+    Using bands a-f (0-5) and n-s (size-6 to size-1) for corner/side boundaries
+    """
+    corner_band = set(range(0, 6)) | set(range(size-6, size))  # a-f and n-s
+    in_x_corner = x in corner_band
+    in_y_corner = y in corner_band
     
-    def _extract_features(self):
-        """Extract features needed by labeling functions."""
-        # Extract Q-values (winrates) from suggestions
-        self.Q = [s.get("winrate", 0.0) for s in self.suggestions]
-        
-        # Extract policy probabilities
-        self.policy_probs = [s.get("policy_prob", 0.0) for s in self.suggestions]
-        
-        # Extract visits (approximate from policy probabilities)
-        # In a real implementation, you'd want actual visit counts
-        self.visits = [max(1, int(p * 1000)) for p in self.policy_probs]
-        
-        # For now, we'll use placeholder values for features not available
-        # In a full implementation, you'd extract these from KataGo analysis
-        self.O_T = np.array([0.0] * 361)  # Ownership tensor (placeholder)
-        self.ladder_works = 0.0  # Ladder flag (placeholder)
+    # Determine corner regions
+    if in_x_corner and in_y_corner:
+        if x < 6 and y < 6:  # top-left
+            return "corner_top_left"
+        elif x >= size-6 and y < 6:  # top-right
+            return "corner_top_right"
+        elif x < 6 and y >= size-6:  # bottom-left
+            return "corner_bottom_left"
+        elif x >= size-6 and y >= size-6:  # bottom-right
+            return "corner_bottom_right"
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary format expected by labeling functions."""
-        return {
-            "Q": self.Q,
-            "visits": self.visits,
-            "O_T": self.O_T,
-            "ladder_works": self.ladder_works,
-            "suggestions": self.suggestions,
-            "actual_move": self.actual_move
-        }
-
-
-# Snorkel Labeling Functions
-@labeling_function()
-def lf_tenuki_ok(x):
-    """Labeling function for tenuki_ok concept."""
-    try:
-        return 1 if tenuki_ok(x) > 0.5 else 0
-    except:
-        return -1  # Abstain
-
-@labeling_function()
-def lf_invasion_viable(x):
-    """Labeling function for invasion_viable concept."""
-    try:
-        return 1 if invasion_viable(x) > 0.5 else 0
-    except:
-        return -1  # Abstain
-
-@labeling_function()
-def lf_cut_available(x):
-    """Labeling function for cut_available concept."""
-    try:
-        return 1 if cut_available(x) > 0.5 else 0
-    except:
-        return -1  # Abstain
-
-@labeling_function()
-def lf_ladder_works(x):
-    """Labeling function for ladder_works concept."""
-    try:
-        return 1 if ladder_works(x) > 0.5 else 0
-    except:
-        return -1  # Abstain
-
-@labeling_function()
-def lf_sente_line(x):
-    """Labeling function for sente_line concept."""
-    try:
-        return 1 if sente_line(x) > 0.5 else 0
-    except:
-        return -1  # Abstain
-
-# Additional heuristic labeling functions
-@labeling_function()
-def lf_high_winrate_move(x):
-    """Label if the best move has very high winrate (>0.7)."""
-    try:
-        q_values = x.get("Q", [])
-        if not q_values:
-            return -1
-        max_q = max(q_values)
-        return 1 if max_q > 0.7 else 0
-    except:
-        return -1
-
-@labeling_function()
-def lf_close_competition(x):
-    """Label if multiple moves have similar winrates (close competition)."""
-    try:
-        q_values = x.get("Q", [])
-        if len(q_values) < 2:
-            return -1
-        sorted_q = sorted(q_values, reverse=True)
-        diff = sorted_q[0] - sorted_q[1]
-        return 1 if diff < 0.05 else 0  # Within 5% winrate
-    except:
-        return -1
-
-@labeling_function()
-def lf_policy_concentration(x):
-    """Label if policy is highly concentrated on few moves."""
-    try:
-        policy_probs = x.get("policy_probs", [])
-        if not policy_probs:
-            return -1
-        # Check if top 3 moves have >80% of policy mass
-        sorted_probs = sorted(policy_probs, reverse=True)
-        top3_mass = sum(sorted_probs[:3])
-        return 1 if top3_mass > 0.8 else 0
-    except:
-        return -1
-
-@labeling_function()
-def lf_many_candidates(x):
-    """Label if there are many candidate moves (>5 with >1% policy)."""
-    try:
-        policy_probs = x.get("policy_probs", [])
-        if not policy_probs:
-            return -1
-        candidates = sum(1 for p in policy_probs if p > 0.01)
-        return 1 if candidates > 5 else 0
-    except:
-        return -1
-
-
-class SnorkelBoardPositionProcessor:
-    """Main processor for applying Snorkel to board positions."""
+    # Determine side regions
+    elif in_x_corner or in_y_corner:
+        if in_x_corner and not in_y_corner:  # left or right side
+            if x < 6:
+                return "side_left"
+            else:
+                return "side_right"
+        elif in_y_corner and not in_x_corner:  # upper or lower side
+            if y < 6:
+                return "side_upper"
+            else:
+                return "side_lower"
     
-    def __init__(self, output_dir: Path):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Define labeling functions
-        self.labeling_functions = [
-            lf_tenuki_ok,
-            lf_invasion_viable,
-            lf_cut_available,
-            lf_ladder_works,
-            lf_sente_line,
-            lf_high_winrate_move,
-            lf_close_competition,
-            lf_policy_concentration,
-            lf_many_candidates,
-        ]
-        
-        self.lf_names = [lf.name for lf in self.labeling_functions]
+    # Center region
+    return "center"
+
+
+def region_map(size: int = 19) -> np.ndarray:
+    """Create a map of regions for the board."""
+    m = np.empty((size, size), dtype=object)
+    for y in range(size):
+        for x in range(size):
+            m[y, x] = classify_region(x, y, size)
+    return m
+
+
+# -------------------------
+# Group Analysis Functions
+# -------------------------
+
+def enumerate_groups_deterministic(board: Board) -> List[Group]:
+    """Enumerate groups using deterministic stone connections."""
+    seen_heads: Set[int] = set()
+    groups: List[Group] = []
+    size = board.size
     
-    def load_policy_data(self, input_path: Path) -> List[Dict[str, Any]]:
-        """Load board position data from policy files."""
-        positions = []
+    for y in range(size):
+        for x in range(size):
+            loc = board.loc(x, y)
+            stone = board.board[loc]
+            if stone != Board.BLACK and stone != Board.WHITE:
+                continue
+            head = board.group_head[loc]
+            if head in seen_heads:
+                continue
+            seen_heads.add(head)
+            
+            # Walk the circular linked list to gather stones
+            stones: List[int] = []
+            cur = loc
+            while True:
+                if board.group_head[cur] == head:
+                    stones.append(cur)
+                cur = board.group_next[cur]
+                if cur == loc:
+                    break
+            
+            # Compute bbox
+            xs = [board.loc_x(s) for s in stones]
+            ys = [board.loc_y(s) for s in stones]
+            bbox = (min(xs), min(ys), max(xs), max(ys))
+            
+            groups.append(Group(
+                color=stone,
+                head=head,
+                stones=stones,
+                liberties=board.group_liberty_count[head],
+                bbox=bbox,
+                strength=0.0,
+                connectivity=0.0,
+                influence_area=0,
+                influence_strength=0.0,
+            ))
+    
+    return groups
+
+
+def enumerate_groups_ownership(board: Board, ownership: np.ndarray, color: int) -> List[Group]:
+    """Enumerate groups using ownership map (>=0.1 threshold) but only where actual stones exist."""
+    size = board.size
+    visited = np.zeros((size, size), dtype=bool)
+    groups: List[Group] = []
+    
+    def flood_fill(x: int, y: int) -> List[Tuple[int, int]]:
+        """Flood fill to find connected ownership area with actual stones."""
+        stack = [(x, y)]
+        group_stones = []
         
-        if input_path.is_file():
-            # Single file
-            with open(input_path, 'r') as f:
-                data = json.load(f)
-                policy_data = data.get("policy", {})
+        while stack:
+            cx, cy = stack.pop()
+            if (not in_bounds(cx, cy, size) or visited[cy, cx] or 
+                abs(ownership[cy, cx]) < OWN_MIN or 
+                (ownership[cy, cx] > 0) != (color == Board.BLACK)):
+                continue
+            
+            # Only include if there's actually a stone at this location
+            loc = board.loc(cx, cy)
+            if board.board[loc] != color:
+                continue
                 
-                for pos_idx, pos_data in policy_data.items():
-                    position = BoardPositionData(pos_data)
-                    positions.append({
-                        "position_id": f"{input_path.stem}_{pos_idx}",
-                        "game_id": input_path.stem,
-                        "position_idx": int(pos_idx),
-                        **position.to_dict()
-                    })
+            visited[cy, cx] = True
+            group_stones.append((cx, cy))
+            
+            # Add neighbors
+            for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+                stack.append((cx + dx, cy + dy))
         
-        elif input_path.is_dir():
-            # Directory of policy files
-            for policy_file in input_path.glob("*.json"):
-                with open(policy_file, 'r') as f:
-                    data = json.load(f)
-                    policy_data = data.get("policy", {})
+        return group_stones
+    
+    for y in range(size):
+        for x in range(size):
+            loc = board.loc(x, y)
+            # Only consider positions that have actual stones of the right color
+            if (board.board[loc] == color and 
+                not visited[y, x] and 
+                abs(ownership[y, x]) >= OWN_MIN and
+                (ownership[y, x] > 0) == (color == Board.BLACK)):
+                
+                group_stones = flood_fill(x, y)
+                if group_stones:
+                    # Convert to board locations
+                    stones = [board.loc(cx, cy) for cx, cy in group_stones]
+                    xs, ys = zip(*group_stones)
+                    bbox = (min(xs), min(ys), max(xs), max(ys))
                     
-                    for pos_idx, pos_data in policy_data.items():
-                        position = BoardPositionData(pos_data)
-                        positions.append({
-                            "position_id": f"{policy_file.stem}_{pos_idx}",
-                            "game_id": policy_file.stem,
-                            "position_idx": int(pos_idx),
-                            **position.to_dict()
-                        })
-        
-        return positions
+                    # Calculate liberties (simplified)
+                    liberties = 0
+                    for cx, cy in group_stones:
+                        for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+                            nx, ny = cx + dx, cy + dy
+                            if (in_bounds(nx, ny, size) and 
+                                board.board[board.loc(nx, ny)] == Board.EMPTY):
+                                liberties += 1
+                    
+                    groups.append(Group(
+                        color=color,
+                        head=stones[0],  # Use first stone as head
+                        stones=stones,
+                        liberties=liberties,
+                        bbox=bbox,
+                        strength=0.0,
+                        connectivity=0.0,
+                        influence_area=0,
+                        influence_strength=0.0,
+                    ))
     
-    def create_dataframe(self, positions: List[Dict[str, Any]]) -> pd.DataFrame:
-        """Convert positions to pandas DataFrame for Snorkel."""
-        df = pd.DataFrame(positions)
+    return groups
+
+
+def compute_group_strengths(groups: List[Group], ownership: np.ndarray, player_perspective: int, board: Board) -> None:
+    """Compute group strength as average ownership of group stones."""
+    for g in groups:
+        vals: List[float] = []
+        sign = +1.0 if g.color == player_perspective else -1.0
+        for loc in g.stones:
+            x, y = loc_to_xy(board, loc)
+            vals.append(sign * float(ownership[y, x]))
+        g.strength = float(np.mean(vals)) if vals else 0.0
+
+
+def compute_group_connectivity(groups: List[Group], ownership: np.ndarray, board: Board) -> None:
+    """Compute group connectivity as average ownership of empty intersections within bounds."""
+    for g in groups:
+        min_x, min_y, max_x, max_y = g.bbox
+        vals: List[float] = []
+        sign = 1.0 if g.color == Board.BLACK else -1.0
         
-        # Add some derived features
-        df['num_suggestions'] = df['suggestions'].apply(len)
-        df['best_winrate'] = df['Q'].apply(lambda q: max(q) if q else 0.0)
-        df['winrate_spread'] = df['Q'].apply(
-            lambda q: max(q) - min(q) if len(q) > 1 else 0.0
-        )
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                loc = xy_to_loc(board, x, y)
+                if board.board[loc] == Board.EMPTY:
+                    v = ownership[y, x] * sign
+                    vals.append(v)
         
-        return df
+        g.connectivity = float(np.mean(vals)) if vals else 0.0
+
+
+def compute_group_influence(groups: List[Group], ownership: np.ndarray, board: Board) -> None:
+    """Compute group influence area and strength."""
+    for g in groups:
+        sign = 1.0 if g.color == Board.BLACK else -1.0
+        influence_points = []
+        
+        # Find all points around the group with same-sign ownership
+        for loc in g.stones:
+            x, y = loc_to_xy(board, loc)
+            for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+                nx, ny = x + dx, y + dy
+                if (in_bounds(nx, ny, board.size) and 
+                    board.board[xy_to_loc(board, nx, ny)] == Board.EMPTY and
+                    ownership[ny, nx] * sign > OWN_MIN):
+                    influence_points.append(ownership[ny, nx] * sign)
+        
+        g.influence_area = len(influence_points)
+        g.influence_strength = float(np.mean(influence_points)) if influence_points else 0.0
+
+
+# -------------------------
+# Territory Analysis Functions
+# -------------------------
+
+def count_building_territory(before: np.ndarray, after: np.ndarray, color: int) -> int:
+    """Count intersections that changed from empty (<0.1) to own ownership (>0.1)."""
+    same_sign = (1 if color == Board.BLACK else -1)
+    prev = before * same_sign
+    post = after * same_sign
+    return int(np.sum((np.abs(prev) < OWN_MIN) & (post > OWN_MIN)))
+
+
+def solidify_territory_delta(before: np.ndarray, after: np.ndarray, color: int) -> float:
+    """Calculate increase in ownership values of previously owned intersections."""
+    same_sign = (1 if color == Board.BLACK else -1)
+    prev = before * same_sign
+    post = after * same_sign
+    owned_mask = prev > OWN_MIN
+    return float(np.sum((post - prev)[owned_mask]))
+
+
+def reduce_opponent_territory_count(before: np.ndarray, after: np.ndarray, color: int) -> int:
+    """Count reduction in opponent's owned intersections."""
+    opp_sign = (-1 if color == Board.BLACK else 1)
+    prev = before * opp_sign
+    post = after * opp_sign
+    return int(np.sum((prev > OWN_MIN) & (post <= OWN_MIN)))
+
+
+def invasion_effect(before: np.ndarray, after: np.ndarray, color: int) -> Tuple[int, float]:
+    """Calculate invasion effect: reduced opponent territory + built own territory."""
+    built = count_building_territory(before, after, color)
+    reduced = reduce_opponent_territory_count(before, after, color)
+    return reduced, float(built)
+
+
+def weakening_territory_in_region(before: np.ndarray, after: np.ndarray, region: str, color: int) -> float:
+    """Calculate weakening of opponent territory in specific region."""
+    m = region_map(before.shape[0])
+    opp_sign = (-1 if color == Board.BLACK else 1)
+    prev = before * opp_sign
+    post = after * opp_sign
+    mask = (m == region)
+    if not np.any(mask):
+        return 0.0
+    return float(np.mean(post[mask]) - np.mean(prev[mask]))
+
+
+def leaving_weakness(before: np.ndarray, after: np.ndarray, color: int) -> int:
+    """Count intersections that flipped from own to opponent ownership."""
+    own_sign = (1 if color == Board.BLACK else -1)
+    prev = before * own_sign
+    post = after * own_sign
+    return int(np.sum((prev > OWN_MIN) & (post < -OWN_MIN)))
+
+
+def territory_sizes(ownership: np.ndarray, color: int) -> Tuple[int, int]:
+    """Calculate potential and solid territory sizes."""
+    sign = (1 if color == Board.BLACK else -1)
+    v = ownership * sign
+    potential = int(np.sum(v > OWN_MIN) - np.sum(v >= TERRITORY_SOLID))
+    solid = int(np.sum(v >= TERRITORY_SOLID))
+    return potential, solid
+
+
+def direct_sacrifice(move_loc: int, after: np.ndarray, color: int, board: Board) -> bool:
+    """Check if the played stone becomes opponent's territory."""
+    if move_loc == Board.PASS_LOC:
+        return False
+    x, y = loc_to_xy(board, move_loc)
+    sign = (1 if color == Board.BLACK else -1)
+    return bool((after[y, x] * sign) < -OWN_MIN)
+
+
+def indirect_sacrifice(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> bool:
+    """Check if any own stone becomes opponent's territory."""
+    sign = (1 if color == Board.BLACK else -1)
+    prev = before * sign
+    post = after * sign
+    return bool(np.any((prev > OWN_MIN) & (post < -OWN_MIN)))
+
+
+# -------------------------
+# Policy and Move Analysis Functions
+# -------------------------
+
+def urgency_by_region(policy: np.ndarray) -> Dict[str, float]:
+    """Calculate urgency as sum of policy mass by region."""
+    urg: Dict[str, float] = {
+        "corner_top_left": 0.0,
+        "corner_top_right": 0.0,
+        "corner_bottom_left": 0.0,
+        "corner_bottom_right": 0.0,
+        "side_left": 0.0,
+        "side_right": 0.0,
+        "side_upper": 0.0,
+        "side_lower": 0.0,
+        "center": 0.0
+    }
+    size = 19
+    for y in range(size):
+        for x in range(size):
+            idx = y * size + x
+            if idx < len(policy):
+                r = classify_region(x, y, size)
+                urg[r] += float(policy[idx])
+    return urg
+
+
+def is_cut_move(board: Board, move_loc: int) -> bool:
+    """Check if move creates a cut (w-b/b-w configuration separating groups)."""
+    if move_loc == Board.PASS_LOC:
+        return False
+    pla = board.pla
+    opp = Board.get_opp(pla)
+    x, y = loc_to_xy(board, move_loc)
+    adj_opp_heads: Set[int] = set()
     
-    def apply_labeling_functions(self, df: pd.DataFrame) -> np.ndarray:
-        """Apply all labeling functions to the dataframe."""
-        applier = PandasLFApplier(lfs=self.labeling_functions)
-        L_train = applier.apply(df=df)
-        return L_train
+    for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+        nx, ny = x + dx, y + dy
+        if not in_bounds(nx, ny, board.size):
+            continue
+        nloc = xy_to_loc(board, nx, ny)
+        if board.board[nloc] == opp:
+            adj_opp_heads.add(board.group_head[nloc])
     
-    def train_label_model(self, L_train: np.ndarray) -> LabelModel:
-        """Train Snorkel's label model to combine weak labels."""
-        label_model = LabelModel(cardinality=2, verbose=True)
-        
-        # Filter out positions where all LFs abstained
-        L_train_filtered = L_train[~np.all(L_train == -1, axis=1)]
-        
-        if len(L_train_filtered) == 0:
-            raise ValueError("No positions with non-abstaining labels found!")
-        
-        print(f"Training label model on {len(L_train_filtered)} positions...")
-        label_model.fit(L_train=L_train_filtered, n_epochs=500, log_freq=100, seed=123)
-        
-        return label_model
+    return len(adj_opp_heads) >= 2
+
+
+def is_only_move(policy: np.ndarray, eps: float = 1e-12) -> bool:
+    """Check if policy has only one non-zero value."""
+    non_zero = np.sum(policy > eps)
+    return non_zero == 1
+
+
+def rough_intent_effects(ownership: np.ndarray, policy: np.ndarray, color: int, threshold: float = 0.001) -> Dict[int, Dict[str, float]]:
+    """Calculate rough intent effects for candidate moves only (policy > threshold)."""
+    size = 19
+    sign = (1 if color == Board.BLACK else -1)
+    effects: Dict[int, Dict[str, float]] = {}
     
-    def generate_probabilistic_labels(self, df: pd.DataFrame, label_model: LabelModel) -> pd.DataFrame:
-        """Generate probabilistic labels for all positions."""
-        L_train = self.apply_labeling_functions(df)
-        
-        # Get probabilistic predictions
-        probs_train = label_model.predict_proba(L=L_train)
-        
-        # Add predictions to dataframe
-        df_result = df.copy()
-        df_result['snorkel_prob_positive'] = probs_train[:, 1]
-        df_result['snorkel_prob_negative'] = probs_train[:, 0]
-        df_result['snorkel_prediction'] = label_model.predict(L=L_train)
-        
-        # Add individual LF outputs for analysis
-        for i, lf_name in enumerate(self.lf_names):
-            df_result[f'lf_{lf_name}'] = L_train[:, i]
-        
-        return df_result
-    
-    def save_results(self, df_result: pd.DataFrame, label_model: LabelModel):
-        """Save results and model to output directory."""
-        # Save dataframe with results
-        df_result.to_csv(self.output_dir / "snorkel_results.csv", index=False)
-        
-        # Save label model
-        label_model.save(self.output_dir / "label_model.pkl")
-        
-        # Save labeling function statistics
-        L_train = self.apply_labeling_functions(df_result)
-        lf_stats = self._compute_lf_statistics(L_train)
-        
-        with open(self.output_dir / "lf_statistics.json", 'w') as f:
-            json.dump(lf_stats, f, indent=2)
-        
-        # Save summary report
-        self._save_summary_report(df_result, lf_stats)
-    
-    def _compute_lf_statistics(self, L_train: np.ndarray) -> Dict[str, Any]:
-        """Compute statistics for each labeling function."""
-        stats = {}
-        
-        for i, lf_name in enumerate(self.lf_names):
-            lf_outputs = L_train[:, i]
+    for y in range(size):
+        for x in range(size):
+            idx = y * size + x
+            if idx >= len(policy) or policy[idx] <= threshold:
+                continue
             
-            stats[lf_name] = {
-                "total_positions": len(lf_outputs),
-                "positive_labels": int(np.sum(lf_outputs == 1)),
-                "negative_labels": int(np.sum(lf_outputs == 0)),
-                "abstentions": int(np.sum(lf_outputs == -1)),
-                "coverage": float(np.sum(lf_outputs != -1) / len(lf_outputs)),
-                "positive_rate": float(np.sum(lf_outputs == 1) / np.sum(lf_outputs != -1)) if np.sum(lf_outputs != -1) > 0 else 0.0
+            # Simulate placing stone with ownership=1.0
+            after = ownership.copy()
+            after[y, x] = 1.0 * sign
+            
+            # Simple local smoothing (cross shape)
+            for dx, dy, w in [(1,0,0.5), (-1,0,0.5), (0,1,0.5), (0,-1,0.5)]:
+                nx, ny = x + dx, y + dy
+                if in_bounds(nx, ny, size):
+                    after[ny, nx] = np.clip(after[ny, nx] + w * sign, -1.0, 1.0)
+            
+            # Measure territorial effects
+            potential, solid = territory_sizes(after, color)
+            effects[idx] = {
+                "potential_territory": float(potential), 
+                "solid_territory": float(solid)
             }
-        
-        return stats
     
-    def _save_summary_report(self, df_result: pd.DataFrame, lf_stats: Dict[str, Any]):
-        """Save a human-readable summary report."""
-        report_path = self.output_dir / "summary_report.txt"
-        
-        with open(report_path, 'w') as f:
-            f.write("SNORKEL BOARD POSITION ANALYSIS REPORT\n")
-            f.write("=" * 50 + "\n\n")
-            
-            f.write(f"Total positions analyzed: {len(df_result)}\n")
-            f.write(f"Number of labeling functions: {len(self.lf_names)}\n\n")
-            
-            f.write("LABELING FUNCTION STATISTICS:\n")
-            f.write("-" * 30 + "\n")
-            for lf_name, stats in lf_stats.items():
-                f.write(f"{lf_name}:\n")
-                f.write(f"  Coverage: {stats['coverage']:.2%}\n")
-                f.write(f"  Positive rate: {stats['positive_rate']:.2%}\n")
-                f.write(f"  Abstentions: {stats['abstentions']}\n\n")
-            
-            f.write("SNORKEL PREDICTIONS SUMMARY:\n")
-            f.write("-" * 30 + "\n")
-            pred_counts = df_result['snorkel_prediction'].value_counts()
-            f.write(f"Positive predictions: {pred_counts.get(1, 0)}\n")
-            f.write(f"Negative predictions: {pred_counts.get(0, 0)}\n")
-            f.write(f"Average positive probability: {df_result['snorkel_prob_positive'].mean():.3f}\n")
-    
-    def process(self, input_path: Path):
-        """Main processing pipeline."""
-        print(f"Loading data from {input_path}...")
-        positions = self.load_policy_data(input_path)
-        
-        if not positions:
-            raise ValueError(f"No positions found in {input_path}")
-        
-        print(f"Loaded {len(positions)} positions")
-        
-        print("Creating dataframe...")
-        df = self.create_dataframe(positions)
-        
-        print("Applying labeling functions...")
-        L_train = self.apply_labeling_functions(df)
-        
-        print("Training label model...")
-        label_model = self.train_label_model(L_train)
-        
-        print("Generating probabilistic labels...")
-        df_result = self.generate_probabilistic_labels(df, label_model)
-        
-        print("Saving results...")
-        self.save_results(df_result, label_model)
-        
-        print(f"Results saved to {self.output_dir}")
-        return df_result, label_model
+    return effects
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Apply Snorkel weak supervision to Go board positions"
-    )
-    parser.add_argument(
-        "--input-dir", 
-        type=Path, 
-        help="Directory containing policy JSON files"
-    )
-    parser.add_argument(
-        "--input-file", 
-        type=Path, 
-        help="Single policy JSON file to process"
-    )
-    parser.add_argument(
-        "--output-dir", 
-        type=Path, 
-        required=True,
-        help="Output directory for results"
-    )
+def is_tenuki(selected_idx: int, last_move_loc: Optional[int], policy: np.ndarray, board: Board) -> bool:
+    """Check if move is tenuki (different area + closer candidates exist)."""
+    if last_move_loc is None or selected_idx is None:
+        return False
     
-    args = parser.parse_args()
+    size = 19
+    x_sel, y_sel = selected_idx % size, selected_idx // size
+    x_last, y_last = loc_to_xy(board, last_move_loc)
     
-    if not args.input_dir and not args.input_file:
-        parser.error("Must specify either --input-dir or --input-file")
+    region_sel = classify_region(x_sel, y_sel, size)
+    region_last = classify_region(x_last, y_last, size)
     
-    if args.input_dir and args.input_file:
-        parser.error("Cannot specify both --input-dir and --input-file")
+    if region_sel == region_last:
+        return False
     
-    input_path = args.input_dir or args.input_file
+    # Check if there are candidates in last region with higher probability
+    selected_prob = policy[selected_idx]
+    for y in range(size):
+        for x in range(size):
+            if classify_region(x, y, size) == region_last:
+                idx = y * size + x
+                if idx < len(policy) and policy[idx] > selected_prob:
+                    return True
     
-    if not input_path.exists():
-        parser.error(f"Input path does not exist: {input_path}")
-    
-    # Suppress warnings for cleaner output
-    warnings.filterwarnings("ignore")
-    
-    try:
-        processor = SnorkelBoardPositionProcessor(args.output_dir)
-        df_result, label_model = processor.process(input_path)
-        
-        print("\nProcessing completed successfully!")
-        print(f"Results saved to: {args.output_dir}")
-        print(f"Summary report: {args.output_dir / 'summary_report.txt'}")
-        
-    except Exception as e:
-        print(f"Error during processing: {e}")
-        sys.exit(1)
+    return False
 
 
-if __name__ == "__main__":
-    main()
+def is_connection_move(board: Board, move_loc: int, color: int) -> bool:
+    """Check if move connects stones or increases connectivity."""
+    if move_loc == Board.PASS_LOC:
+        return False
+    x, y = loc_to_xy(board, move_loc)
+    heads: List[int] = []
+    
+    for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+        nx, ny = x + dx, y + dy
+        if not in_bounds(nx, ny, board.size):
+            continue
+        nloc = xy_to_loc(board, nx, ny)
+        if board.board[nloc] == color:
+            h = board.group_head[nloc]
+            if h not in heads:
+                heads.append(h)
+    
+    return len(heads) >= 2
+
+
+def is_extension_move(board: Board, move_loc: int, color: int) -> bool:
+    """Check if move is next to existing own stone."""
+    if move_loc == Board.PASS_LOC:
+        return False
+    x, y = loc_to_xy(board, move_loc)
+    
+    for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+        nx, ny = x + dx, y + dy
+        if not in_bounds(nx, ny, board.size):
+            continue
+        nloc = xy_to_loc(board, nx, ny)
+        if board.board[nloc] == color:
+            return True
+    
+    return False
+
+
+def liberties_of_group(board: Board, any_stone_loc: int) -> int:
+    """Get number of liberties for a group."""
+    if any_stone_loc == Board.PASS_LOC or board.board[any_stone_loc] == Board.EMPTY:
+        return 0
+    return int(board.num_liberties(any_stone_loc))
+
+
+def atari_move(board: Board, move_loc: int) -> bool:
+    """Check if move leaves opponent group in atari (1 liberty)."""
+    if move_loc == Board.PASS_LOC:
+        return False
+    
+    pla = board.pla
+    opp = Board.get_opp(pla)
+    size = board.size
+    seen: Set[int] = set()
+    
+    for y in range(size):
+        for x in range(size):
+            loc = xy_to_loc(board, x, y)
+            if board.board[loc] == opp:
+                head = board.group_head[loc]
+                if head in seen:
+                    continue
+                seen.add(head)
+                if board.group_liberty_count[head] == 1:
+                    return True
+    
+    return False
+
+
+def reduce_aji(before: np.ndarray, after: np.ndarray, board: Board, color: int) -> float:
+    """Calculate aji reduction (increase in own ownership over opponent groups)."""
+    opp = Board.get_opp(color)
+    size = board.size
+    delta: List[float] = []
+    
+    for y in range(size):
+        for x in range(size):
+            loc = xy_to_loc(board, x, y)
+            if board.board[loc] == opp:
+                delta.append((after[y, x] - before[y, x]) * (1 if color == Board.BLACK else -1))
+    
+    return float(np.mean(delta)) if delta else 0.0
+
+
+def attack_strength_delta(groups_before: List[Group], groups_after: List[Group], opp_color: int) -> float:
+    """Calculate attack strength (negative change in opponent group strengths)."""
+    before_map = {g.head: g for g in groups_before if g.color == opp_color}
+    after_map = {g.head: g for g in groups_after if g.color == opp_color}
+    common_heads = set(before_map.keys()) & set(after_map.keys())
+    
+    if not common_heads:
+        return 0.0
+    
+    deltas = [after_map[h].strength - before_map[h].strength for h in common_heads]
+    return float(np.mean(deltas))
+
+
+def killing_attack(groups_after: List[Group], opp_color: int) -> bool:
+    """Check if any opponent group has strength <= -0.5 (>=0.5 own ownership)."""
+    for g in groups_after:
+        if g.color == opp_color and g.strength <= -0.5:
+            return True
+    return False
+
+
+# -------------------------
+# Comprehensive Analysis Function
+# -------------------------
+
+def analyze_position_comprehensive(
+    board: Board, 
+    ownership: np.ndarray, 
+    policy: np.ndarray,
+    player: int,
+    move_loc: Optional[int] = None,
+    last_move_loc: Optional[int] = None,
+    before_ownership: Optional[np.ndarray] = None
+) -> Dict[str, Any]:
+    """
+    Perform comprehensive analysis of a position using all 28 concepts.
+    
+    Args:
+        board: Current board state
+        ownership: Current ownership map (19x19)
+        policy: Policy distribution (361)
+        player: Current player (Board.BLACK or Board.WHITE)
+        move_loc: Location of current move (optional)
+        last_move_loc: Location of last move (optional)
+        before_ownership: Ownership before current move (optional)
+    
+    Returns:
+        Dictionary containing all analysis results matching the specification
+    """
+    results = {}
+    
+    # 1-2. Urgency by region (regions are static, not needed in output)
+    results["urgency_by_region"] = urgency_by_region(policy)
+    
+    # 3-7. Groups and influence
+    groups_det = enumerate_groups_deterministic(board)
+    groups_own = enumerate_groups_ownership(board, ownership, player)
+    
+    compute_group_strengths(groups_det, ownership, player, board)
+    compute_group_strengths(groups_own, ownership, player, board)
+    compute_group_connectivity(groups_det, ownership, board)
+    compute_group_connectivity(groups_own, ownership, board)
+    compute_group_influence(groups_det, ownership, board)
+    compute_group_influence(groups_own, ownership, board)
+    
+    results["groups_deterministic"] = [
+        {
+            "color": g.color,
+            "head": g.head,
+            "stones": g.stones,
+            "liberties": g.liberties,
+            "bbox": g.bbox,
+            "strength": g.strength,
+            "connectivity": g.connectivity,
+            "influence_area": g.influence_area,
+            "influence_strength": g.influence_strength
+        } for g in groups_det
+    ]
+    
+    results["groups_ownership"] = [
+        {
+            "color": g.color,
+            "head": g.head,
+            "stones": g.stones,
+            "liberties": g.liberties,
+            "bbox": g.bbox,
+            "strength": g.strength,
+            "connectivity": g.connectivity,
+            "influence_area": g.influence_area,
+            "influence_strength": g.influence_strength
+        } for g in groups_own
+    ]
+    
+    # 8-16. Territory analysis
+    if before_ownership is not None:
+        results["building_territory"] = count_building_territory(before_ownership, ownership, player)
+        results["solidify_territory"] = solidify_territory_delta(before_ownership, ownership, player)
+        results["reduce_territory"] = reduce_opponent_territory_count(before_ownership, ownership, player)
+        results["invasion_effect"] = invasion_effect(before_ownership, ownership, player)
+        results["leaving_weakness"] = leaving_weakness(before_ownership, ownership, player)
+        
+        # Regional weakening
+        for region in ["corner_top_left", "corner_top_right", "corner_bottom_left", "corner_bottom_right",
+                       "side_left", "side_right", "side_upper", "side_lower", "center"]:
+            results[f"weakening_{region}"] = weakening_territory_in_region(
+                before_ownership, ownership, region, player
+            )
+    else:
+        # Set defaults when no before_ownership available
+        results["building_territory"] = 0
+        results["solidify_territory"] = 0.0
+        results["reduce_territory"] = 0
+        results["invasion_effect"] = (0, 0.0)
+        results["leaving_weakness"] = 0
+    
+    # 14-16. Territory sizes and sacrifices
+    potential, solid = territory_sizes(ownership, player)
+    results["potential_territory"] = potential
+    results["solid_territory"] = solid
+    
+    if move_loc is not None:
+        results["direct_sacrifice"] = direct_sacrifice(move_loc, ownership, player, board)
+        if before_ownership is not None:
+            results["indirect_sacrifice"] = indirect_sacrifice(before_ownership, ownership, player, board)
+        else:
+            results["indirect_sacrifice"] = False
+    else:
+        results["direct_sacrifice"] = False
+        results["indirect_sacrifice"] = False
+    
+    # 18-25. Tactical concepts
+    if move_loc is not None:
+        results["is_cut"] = is_cut_move(board, move_loc)
+        results["is_connection"] = is_connection_move(board, move_loc, player)
+        results["is_extension"] = is_extension_move(board, move_loc, player)
+        results["liberties"] = liberties_of_group(board, move_loc)
+        results["atari"] = atari_move(board, move_loc)
+    else:
+        results["is_cut"] = False
+        results["is_connection"] = False
+        results["is_extension"] = False
+        results["liberties"] = 0
+        results["atari"] = False
+    
+    results["is_only_move"] = str(is_only_move(policy))
+    results["rough_intent"] = rough_intent_effects(ownership, policy, player)
+    
+    if last_move_loc is not None and move_loc is not None:
+        move_idx = loc_to_xy(board, move_loc)[1] * 19 + loc_to_xy(board, move_loc)[0]
+        results["is_tenuki"] = is_tenuki(move_idx, last_move_loc, policy, board)
+    else:
+        results["is_tenuki"] = False
+    
+    # 26-28. Attack concepts
+    if before_ownership is not None:
+        results["reduce_aji"] = reduce_aji(before_ownership, ownership, board, player)
+        
+        # Calculate attack effects
+        groups_before = enumerate_groups_deterministic(board)  # Would need before board state
+        results["attack_strength"] = attack_strength_delta(groups_before, groups_det, Board.get_opp(player))
+        results["killing_attack"] = killing_attack(groups_det, Board.get_opp(player))
+    else:
+        results["reduce_aji"] = 0.0
+        results["attack_strength"] = 0.0
+        results["killing_attack"] = False
+    
+    return results
+
+
+# Export all functions for use in other modules
+__all__ = [
+    "Group",
+    "classify_region",
+    "region_map",
+    "enumerate_groups_deterministic",
+    "enumerate_groups_ownership",
+    "compute_group_strengths",
+    "compute_group_connectivity",
+    "compute_group_influence",
+    "count_building_territory",
+    "solidify_territory_delta",
+    "reduce_opponent_territory_count",
+    "invasion_effect",
+    "weakening_territory_in_region",
+    "leaving_weakness",
+    "territory_sizes",
+    "direct_sacrifice",
+    "indirect_sacrifice",
+    "urgency_by_region",
+    "is_cut_move",
+    "is_only_move",
+    "rough_intent_effects",
+    "is_tenuki",
+    "is_connection_move",
+    "is_extension_move",
+    "liberties_of_group",
+    "atari_move",
+    "reduce_aji",
+    "attack_strength_delta",
+    "killing_attack",
+    "analyze_position_comprehensive",
+]
