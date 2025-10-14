@@ -460,21 +460,6 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             color: #333;
         }}
         
-        .policy-moves {{
-            max-height: 300px;
-            overflow-y: auto;
-        }}
-        
-        .move-item {{
-            display: flex;
-            justify-content: space-between;
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
-        }}
-        
-        .move-item:last-child {{
-            border-bottom: none;
-        }}
     </style>
 </head>
 <body>
@@ -556,8 +541,6 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             // Seki
             addBoardSection('Seki', 'seki');
             
-            // Policy moves
-            addPolicyMovesSection();
         }}
         
         function addBoardSection(title, type) {{
@@ -629,32 +612,6 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             container.appendChild(section);
         }}
         
-        function addPolicyMovesSection() {{
-            const container = document.getElementById('boardsContainer');
-            const section = document.createElement('div');
-            section.className = 'board-section';
-            section.id = 'policy-moves-section';
-            
-            section.innerHTML = `
-                <h3>Top Policy Moves</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div>
-                        <h4>Policy 0 (Current Player)</h4>
-                        <div class="policy-moves" id="policy-moves-0">
-                            <!-- Will be populated by updatePolicyMoves -->
-                        </div>
-                    </div>
-                    <div>
-                        <h4>Policy 1 (Next Player)</h4>
-                        <div class="policy-moves" id="policy-moves-1">
-                            <!-- Will be populated by updatePolicyMoves -->
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            container.appendChild(section);
-        }}
         
         function updateBoards(data) {{
             // Update each board
@@ -667,9 +624,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             updateFuturePos(data, 'futurepos1', 1);
             updateSeki(data);
             
-            // Update value and policy info
+            // Update value info
             updateValueInfo(data);
-            updatePolicyMoves(data);
         }}
         
         function drawGridLines(board) {{
@@ -1110,32 +1066,6 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             }}
         }}
         
-        function updatePolicyMoves(data) {{
-            if (!data) return;
-            
-            const topMoves0 = data.moves_and_probs0.slice(0, 8);
-            const topMoves1 = data.moves_and_probs1.slice(0, 8);
-            
-            const moves0Element = document.getElementById('policy-moves-0');
-            if (moves0Element) {{
-                moves0Element.innerHTML = topMoves0.map((move, i) => `
-                    <div class="move-item">
-                        <span>${{i+1}}. ${{getMoveString([0, move[0]])}}</span>
-                        <span>${{(move[1] * 100).toFixed(1)}}%</span>
-                    </div>
-                `).join('');
-            }}
-            
-            const moves1Element = document.getElementById('policy-moves-1');
-            if (moves1Element) {{
-                moves1Element.innerHTML = topMoves1.map((move, i) => `
-                    <div class="move-item">
-                        <span>${{i+1}}. ${{getMoveString([0, move[0]])}}</span>
-                        <span>${{(move[1] * 100).toFixed(1)}}%</span>
-                    </div>
-                `).join('');
-            }}
-        }}
         
         // Control functions
         function previousMove() {{
