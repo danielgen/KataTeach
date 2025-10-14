@@ -800,7 +800,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     }}
                     
                     // Add ownership
-                    if (Math.abs(ownership) > 0.05) {{
+                    if (Math.abs(ownership) > 0.1) {{
                         const label = document.createElement('div');
                         label.className = 'label';
                         label.textContent = Math.abs(ownership).toFixed(1);
@@ -868,7 +868,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     }}
                     
                     // Add scoring
-                    if (Math.abs(scoring) > 0.05) {{
+                    if (Math.abs(scoring) > 0.1) {{
                         const label = document.createElement('div');
                         label.className = 'label';
                         label.textContent = Math.abs(scoring).toFixed(1);
@@ -935,15 +935,24 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     }}
                     
                     // Add future position
-                    if (Math.abs(futurepos) > 0.001) {{
+                    if (Math.abs(futurepos) > 0.1) {{
                         const label = document.createElement('div');
                         label.className = 'label';
-                        label.textContent = futurepos.toFixed(1);
+                        label.textContent = Math.abs(futurepos).toFixed(1);
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
-                        label.style.color = futurepos > 0 ? 'black' : 'white';
-                        label.style.textShadow = futurepos > 0 ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
+                        // Color based on who the value is good for:
+                        // Black text = good for Black (positive future position)
+                        // White text = good for White (negative future position)
+                        // KataGo flips future position based on current player, so we need to flip it back
+                        const isBlackPlayer = data.player === 'Black';
+                        const adjustedFuturepos = isBlackPlayer ? futurepos : -futurepos;
+                        const isGoodForBlack = adjustedFuturepos > 0;
+                        const shouldUseBlackText = isGoodForBlack;
+                        
+                        label.style.color = shouldUseBlackText ? 'white' : 'black';
+                        label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
                         label.style.zIndex = '15';
                         board.appendChild(label);
                     }}
@@ -954,8 +963,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             if (info) {{
                 info.innerHTML = `
                     <div class="heatmap-legend">
-                        <span style="background: rgba(0,255,255,0.3);">Cyan: Positive Future</span>
-                        <span style="background: rgba(255,0,255,0.3);">Magenta: Negative Future</span>
+                        <span style="color: black; background: rgba(255,255,255,0.8);">Black Text: Good for Black</span>
+                        <span style="color: white; background: rgba(0,0,0,0.8);">White Text: Good for White</span>
                     </div>
                 `;
             }}
