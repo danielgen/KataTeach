@@ -312,7 +312,8 @@ def run_snorkel(games_dir: Path, model_path: Path) -> None:
                         player=current_player,
                         move_loc=move_loc,
                         last_move_loc=last_move_loc,
-                        before_ownership=ownership_before
+                        before_ownership=ownership_before,
+                        before_board=None  # TODO: Track before board state for full feature support
                     )
                     
                     # Convert numpy arrays to lists for JSON serialization
