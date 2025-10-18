@@ -25,7 +25,7 @@ import torch
 from common_utils import get_device as get_device_str, convert_numpy_to_python
 
 # Import snorkel analysis
-from snorkel_board_positions import analyze_position_comprehensive
+from snorkel_board_positions import analyze_position_comprehensive, urgency_by_region, urgency_intensity_by_region
 
 def get_device():
     """Get the appropriate device for model inference."""
@@ -67,7 +67,7 @@ def play_short_game(model, max_moves=10):
             board=game_state.board,
             ownership=ownership,
             policy=policy,
-            player=Board.BLACK,  # Black starts first
+            player=game_state.board.pla,  # Use board.pla for consistency
             move_loc=None,
             last_move_loc=None,
             before_ownership=None,
@@ -98,8 +98,9 @@ def play_short_game(model, max_moves=10):
         
         # Store ownership before the move for analysis
         ownership_before = np.array(outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
-        # Note: Board copying might not work as expected, so we'll pass None for now
-        board_before = None
+        
+        # BEFORE you play, capture the board state
+        board_before = game_state.board.copy()
         
         # Always use the main policy (policy0) for move selection
         # policy0 = current player's move distribution
@@ -189,17 +190,29 @@ def play_short_game(model, max_moves=10):
                 policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
                 last_move_loc = moves[-1][1] if moves else None
                 
+                # IMPORTANT: use the post-move player (board.pla) — the frame for post_move_outputs
+                post_move_player = game_state.board.pla
+                
+                # Sanity check logging
+                print(f"Move {move_num} (resignation): pre_player={board_before.pla}, post_player={post_move_player}")
+                
                 analysis = analyze_position_comprehensive(
-                    board=game_state.board,
-                    ownership=ownership_after,
-                    policy=policy,
-                    player=current_player,
+                    board=game_state.board,            # post-move board
+                    ownership=ownership_after,         # post-move ownership (frame: post_move_player)
+                    policy=policy,                     # post-move policy0 (also post_move_player)
+                    player=post_move_player,           # <- key change!
                     move_loc=best_move,
                     last_move_loc=last_move_loc,
-                    before_ownership=ownership_before,
-                    before_board=board_before
+                    before_ownership=ownership_before, # pre-move ownership (frame: pre-move player)
+                    before_board=board_before          # pre-move board (for deltas/attack)
                 )
                 analysis_serializable = convert_numpy_to_python(analysis)
+                
+                # Additional sanity checks
+                if 'building_count' in analysis and 'reduction_count' in analysis:
+                    print(f"  Territory analysis: building={analysis['building_count']}, reduction={analysis['reduction_count']}")
+                if 'invasion' in analysis:
+                    print(f"  Invasion: {analysis['invasion']}, intensity={analysis.get('invasion_intensity', 0):.3f}")
             except Exception as e:
                 print(f"Warning: Snorkel analysis failed for move {move_num}: {e}")
                 analysis_serializable = {}
@@ -212,6 +225,17 @@ def play_short_game(model, max_moves=10):
                 "analysis": analysis_serializable,
                 **converted_outputs
             })
+            
+            # Store urgency for the next move (since urgency is computed before the move)
+            # Get policy before the move for urgency calculation
+            pre_move_policy = np.array(outputs.get("policy0", [0.0] * 361))
+            urgency_data = {
+                "urgency": convert_numpy_to_python(urgency_by_region(pre_move_policy)),
+                "urgency_intensity": convert_numpy_to_python(urgency_intensity_by_region(pre_move_policy))
+            }
+            # Store this for the next move's analysis
+            if len(game_data) > 0:
+                game_data[-1]["next_move_urgency"] = urgency_data
             break
         
         # Convert numpy arrays to Python objects for JSON serialization
@@ -223,17 +247,30 @@ def play_short_game(model, max_moves=10):
             policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
             last_move_loc = moves[-2][1] if len(moves) > 1 else None  # Previous move
             
+            # IMPORTANT: use the post-move player (board.pla) — the frame for post_move_outputs
+            post_move_player = game_state.board.pla
+            
+            # Sanity check logging
+            print(f"Move {move_num}: pre_player={board_before.pla}, post_player={post_move_player}")
+            
+            # -- REMOVE the manual sign flips. Let the analyzer normalize. --
             analysis = analyze_position_comprehensive(
-                board=game_state.board,
-                ownership=ownership_after,
-                policy=policy,
-                player=current_player,
+                board=game_state.board,            # post-move board
+                ownership=ownership_after,         # post-move ownership (frame: post_move_player)
+                policy=policy,                     # post-move policy0 (also post_move_player)
+                player=post_move_player,           # <- key change!
                 move_loc=best_move,
                 last_move_loc=last_move_loc,
-                before_ownership=ownership_before,
-                before_board=board_before
+                before_ownership=ownership_before, # pre-move ownership (frame: pre-move player)
+                before_board=board_before          # pre-move board (for deltas/attack)
             )
             analysis_serializable = convert_numpy_to_python(analysis)
+            
+            # Additional sanity checks
+            if 'building_count' in analysis and 'reduction_count' in analysis:
+                print(f"  Territory analysis: building={analysis['building_count']}, reduction={analysis['reduction_count']}")
+            if 'invasion' in analysis:
+                print(f"  Invasion: {analysis['invasion']}, intensity={analysis.get('invasion_intensity', 0):.3f}")
         except Exception as e:
             print(f"Warning: Snorkel analysis failed for move {move_num}: {e}")
             analysis_serializable = {}
@@ -247,6 +284,18 @@ def play_short_game(model, max_moves=10):
             "analysis": analysis_serializable,
             **converted_outputs
         })
+        
+        # Store urgency for the next move (since urgency is computed before the move)
+        if move_num < max_moves:  # Don't store for the last move
+            # Get policy before the move for urgency calculation
+            pre_move_policy = np.array(outputs.get("policy0", [0.0] * 361))
+            urgency_data = {
+                "urgency": convert_numpy_to_python(urgency_by_region(pre_move_policy)),
+                "urgency_intensity": convert_numpy_to_python(urgency_intensity_by_region(pre_move_policy))
+            }
+            # Store this for the next move's analysis
+            if len(game_data) > 0:
+                game_data[-1]["next_move_urgency"] = urgency_data
         
         # Print move information
         if best_move == Board.PASS_LOC:
@@ -800,14 +849,14 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             section.id = 'snorkel-section';
             
             section.innerHTML = `
-                <h3>Snorkel Analysis</h3>
+                <h3>Snorkel Analysis (Current Move Effects)</h3>
                 <div class="sticky-value-display">
                     <div class="sticky-value-item">
-                        <strong>Groups (Det)</strong>
+                        <strong>Group Strength Δ</strong>
                         <span id="groups-det">-</span>
                     </div>
                     <div class="sticky-value-item">
-                        <strong>Groups (Own)</strong>
+                        <strong>Group Connectivity Δ</strong>
                         <span id="groups-own">-</span>
                     </div>
                     <div class="sticky-value-item">
@@ -819,8 +868,24 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         <span id="solid-territory">-</span>
                     </div>
                     <div class="sticky-value-item">
+                        <strong>Building Count</strong>
+                        <span id="building-count">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Reduction Count</strong>
+                        <span id="reduction-count">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Invasion</strong>
+                        <span id="invasion">-</span>
+                    </div>
+                    <div class="sticky-value-item">
                         <strong>Direct Sacrifice</strong>
                         <span id="direct-sacrifice">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Indirect Sacrifice</strong>
+                        <span id="indirect-sacrifice">-</span>
                     </div>
                     <div class="sticky-value-item">
                         <strong>Is Cut</strong>
@@ -841,6 +906,22 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     <div class="sticky-value-item">
                         <strong>Atari</strong>
                         <span id="atari">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Attack</strong>
+                        <span id="attack">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Killing Attack</strong>
+                        <span id="killing-attack">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Reduce Aji</strong>
+                        <span id="reduce-aji">-</span>
+                    </div>
+                    <div class="sticky-value-item">
+                        <strong>Creates New Group</strong>
+                        <span id="creates-new-group">-</span>
                     </div>
                     <div class="sticky-value-item">
                         <strong>Is Only Move</strong>
@@ -1318,19 +1399,33 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         }}
         
         function updateSnorkelInfo(data) {{
-            if (!data || !data.analysis) {{
+            // Use analysis attached to the same entry you're viewing
+            const analysisData = data && data.analysis ? data.analysis : null;
+            
+            // For urgency, use the next_move_urgency if available (computed before the move)
+            const urgencyData = data && data.next_move_urgency ? data.next_move_urgency : null;
+            
+            if (!analysisData) {{
                 // Clear all snorkel fields if no analysis data
                 const elements = {{
                     'groups-det': '-',
                     'groups-own': '-',
                     'potential-territory': '-',
                     'solid-territory': '-',
+                    'building-count': '-',
+                    'reduction-count': '-',
+                    'invasion': '-',
                     'direct-sacrifice': '-',
+                    'indirect-sacrifice': '-',
                     'is-cut': '-',
                     'is-connection': '-',
                     'is-extension': '-',
                     'liberties': '-',
                     'atari': '-',
+                    'attack': '-',
+                    'killing-attack': '-',
+                    'reduce-aji': '-',
+                    'creates-new-group': '-',
                     'is-only-move': '-',
                     'is-tenuki': '-'
                 }};
@@ -1350,20 +1445,28 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 return;
             }}
             
-            const analysis = data.analysis;
+            const analysis = analysisData;
             
             // Update basic snorkel metrics
             const elements = {{
-                'groups-det': analysis.potential_territory !== undefined ? (analysis.potential_territory || 0) : '-',
-                'groups-own': analysis.solid_territory !== undefined ? (analysis.solid_territory || 0) : '-',
+                'groups-det': analysis.group_strength_delta !== undefined ? (analysis.group_strength_delta || 0).toFixed(2) : '-',
+                'groups-own': analysis.group_connectivity_delta !== undefined ? (analysis.group_connectivity_delta || 0).toFixed(2) : '-',
                 'potential-territory': analysis.potential_territory !== undefined ? (analysis.potential_territory || 0) : '-',
                 'solid-territory': analysis.solid_territory !== undefined ? (analysis.solid_territory || 0) : '-',
+                'building-count': analysis.building_count !== undefined ? (analysis.building_count || 0) : '-',
+                'reduction-count': analysis.reduction_count !== undefined ? (analysis.reduction_count || 0) : '-',
+                'invasion': analysis.invasion !== undefined ? (analysis.invasion ? 'Yes' : 'No') : '-',
                 'direct-sacrifice': analysis.direct_sacrifice !== undefined ? (analysis.direct_sacrifice ? 'Yes' : 'No') : '-',
+                'indirect-sacrifice': analysis.indirect_sacrifice !== undefined ? (analysis.indirect_sacrifice || 0) : '-',
                 'is-cut': analysis.cut !== undefined ? (analysis.cut ? 'Yes' : 'No') : '-',
                 'is-connection': analysis.connection !== undefined ? (analysis.connection ? 'Yes' : 'No') : '-',
                 'is-extension': analysis.extension !== undefined ? (analysis.extension ? 'Yes' : 'No') : '-',
                 'liberties': analysis.liberties !== undefined ? (analysis.liberties || 0) : '-',
                 'atari': analysis.atari !== undefined ? (analysis.atari ? 'Yes' : 'No') : '-',
+                'attack': analysis.attack !== undefined ? (analysis.attack ? 'Yes' : 'No') : '-',
+                'killing-attack': analysis.killing_attack !== undefined ? (analysis.killing_attack ? 'Yes' : 'No') : '-',
+                'reduce-aji': analysis.reduce_aji !== undefined ? (analysis.reduce_aji ? 'Yes' : 'No') : '-',
+                'creates-new-group': analysis.creates_new_group !== undefined ? (analysis.creates_new_group ? 'Yes' : 'No') : '-',
                 'is-only-move': analysis.only_move !== undefined ? (analysis.only_move ? 'Yes' : 'No') : '-',
                 'is-tenuki': analysis.tenuki !== undefined ? (analysis.tenuki ? 'Yes' : 'No') : '-'
             }};
@@ -1380,12 +1483,35 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             if (detailsDiv) {{
                 let detailsHtml = '';
                 
-                // Urgency by region
-                if (analysis.urgency) {{
+                // Urgency by region (use next_move_urgency if available)
+                const urgencyToShow = urgencyData || analysis.urgency;
+                if (urgencyToShow) {{
                     detailsHtml += '<div><strong>Urgency by Region:</strong><br>';
-                    for (const [region, urgency] of Object.entries(analysis.urgency)) {{
+                    for (const [region, urgency] of Object.entries(urgencyToShow)) {{
                         if (urgency > 0.01) {{ // Only show regions with meaningful urgency
                             detailsHtml += `${{region}}: ${{((urgency || 0) * 100).toFixed(1)}}%<br>`;
+                        }}
+                    }}
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // Regional territory changes
+                if (analysis.building_count_by_region || analysis.reduction_count_by_region) {{
+                    detailsHtml += '<div><strong>Regional Changes:</strong><br>';
+                    if (analysis.building_count_by_region) {{
+                        for (const [region, count] of Object.entries(analysis.building_count_by_region)) {{
+                            if (count > 0) {{
+                                const intensity = analysis.building_intensity_by_region[region] || 0;
+                                detailsHtml += `Building ${{region}}: ${{count}} (intensity: ${{intensity.toFixed(2)}})<br>`;
+                            }}
+                        }}
+                    }}
+                    if (analysis.reduction_count_by_region) {{
+                        for (const [region, count] of Object.entries(analysis.reduction_count_by_region)) {{
+                            if (count > 0) {{
+                                const intensity = analysis.reduction_intensity_by_region[region] || 0;
+                                detailsHtml += `Reduction ${{region}}: ${{count}} (intensity: ${{intensity.toFixed(2)}})<br>`;
+                            }}
                         }}
                     }}
                     detailsHtml += '</div><br>';
@@ -1413,7 +1539,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 if (analysis.attack || analysis.killing_attack || analysis.reduce_aji) {{
                     detailsHtml += '<div><strong>Attack & Tactics:</strong><br>';
                     if (analysis.attack) {{
-                        detailsHtml += `Attack: Yes (intensity: ${{(analysis.attack_intensity || 0).toFixed(2)}})<br>`;
+                        detailsHtml += `Attack: Yes (avg: ${{(analysis.avg_attack_intensity || 0).toFixed(2)}}, max: ${{(analysis.max_attack_intensity || 0).toFixed(2)}})<br>`;
                     }}
                     if (analysis.killing_attack) {{
                         detailsHtml += `Killing Attack: Yes (intensity: ${{(analysis.kill_intensity || 0).toFixed(2)}})<br>`;
@@ -1424,14 +1550,51 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     detailsHtml += '</div><br>';
                 }}
                 
+                // Sacrifice information
+                if (analysis.direct_sacrifice || analysis.indirect_sacrifice > 0) {{
+                    detailsHtml += '<div><strong>Sacrifices:</strong><br>';
+                    if (analysis.direct_sacrifice) {{
+                        detailsHtml += `Direct: Yes (intensity: ${{(analysis.sacrifice_intensity || 0).toFixed(2)}})<br>`;
+                    }}
+                    if (analysis.indirect_sacrifice > 0) {{
+                        detailsHtml += `Indirect: ${{analysis.indirect_sacrifice}} stones (intensity: ${{(analysis.indirect_sacrifice_intensity || 0).toFixed(2)}})<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // Connection information
+                if (analysis.connection) {{
+                    detailsHtml += '<div><strong>Connection:</strong><br>';
+                    detailsHtml += `Strength Gain: ${{(analysis.connection_strength_gain || 0).toFixed(2)}}<br>`;
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // Influence changes
+                if (analysis.influence_count_delta !== 0 || analysis.influence_strength_delta !== 0) {{
+                    detailsHtml += '<div><strong>Influence Changes:</strong><br>';
+                    if (analysis.influence_count_delta !== 0) {{
+                        detailsHtml += `Count Delta: ${{analysis.influence_count_delta}}<br>`;
+                    }}
+                    if (analysis.influence_strength_delta !== 0) {{
+                        detailsHtml += `Strength Delta: ${{(analysis.influence_strength_delta || 0).toFixed(2)}}<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
+                }}
+                
                 // Group changes
                 if (analysis.group_strength_delta !== 0 || analysis.group_connectivity_delta !== 0) {{
                     detailsHtml += '<div><strong>Group Changes:</strong><br>';
                     if (analysis.group_strength_delta !== 0) {{
                         detailsHtml += `Strength Delta: ${{(analysis.group_strength_delta || 0).toFixed(2)}}<br>`;
                     }}
+                    if (analysis.max_group_strength_delta !== 0) {{
+                        detailsHtml += `Max Strength Delta: ${{(analysis.max_group_strength_delta || 0).toFixed(2)}} (${{analysis.max_group_strength_region || 'none'}})<br>`;
+                    }}
                     if (analysis.group_connectivity_delta !== 0) {{
                         detailsHtml += `Connectivity Delta: ${{(analysis.group_connectivity_delta || 0).toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.max_group_connectivity_delta !== 0) {{
+                        detailsHtml += `Max Connectivity Delta: ${{(analysis.max_group_connectivity_delta || 0).toFixed(2)}} (${{analysis.max_group_connectivity_region || 'none'}})<br>`;
                     }}
                     if (analysis.creates_new_group) {{
                         detailsHtml += `Creates New Group: Yes<br>`;

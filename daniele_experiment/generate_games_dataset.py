@@ -437,15 +437,20 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                     if ownership.ndim == 3:
                         ownership = ownership[0]  # Take first (and only) batch
                     
+                    # Ownership in moves.jsonl is already from current player's perspective
+                    # We can use it directly, but before_ownership needs to be negated
+                    ownership_fixed = ownership
+                    ownership_before_fixed = -ownership_before if ownership_before is not None else None
+                    
                     # Perform comprehensive analysis
                     analysis = analyze_position_comprehensive(
                         board=gs.board,
-                        ownership=ownership,
+                        ownership=ownership_fixed,
                         policy=np.array(policy) if policy else np.zeros(361),
                         player=current_player,
                         move_loc=move_loc,
                         last_move_loc=last_move_loc,
-                        before_ownership=ownership_before,
+                        before_ownership=ownership_before_fixed,
                         before_board=None  # TODO: Track before board state for full feature support
                     )
                     
