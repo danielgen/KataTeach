@@ -42,7 +42,6 @@ POLICY, URGENCY, AND INTENT:
 - Only move: policy assigns nonzero probability to only one candidate
 - Urgency by region: sum of policy probabilities within region (with urgency_intensity)
 - Tenuki: different region + policy mass remains near previous region
-- Rough intent: policy move → ownership effect simulation
 
 COMPUTED FEATURES:
 - Region-based deltas: group_strength_delta[region], group_connectivity_delta[region], etc.
@@ -765,36 +764,6 @@ def is_only_move(policy: np.ndarray, eps: float = EPSILON_POL) -> bool:
     return non_zero == 1
 
 
-def rough_intent_effects(ownership: np.ndarray, policy: np.ndarray, color: int, threshold: float = 0.001) -> Dict[int, Dict[str, float]]:
-    """Calculate rough intent effects for candidate moves only (policy > threshold)."""
-    size = 19
-    sign = (1 if color == Board.BLACK else -1)
-    effects: Dict[int, Dict[str, float]] = {}
-    
-    for y in range(size):
-        for x in range(size):
-            idx = y * size + x
-            if idx >= len(policy) or policy[idx] <= threshold:
-                continue
-            
-            # Simulate placing stone with ownership=1.0
-            after = ownership.copy()
-            after[y, x] = 1.0 * sign
-            
-            # Simple local smoothing (cross shape)
-            for dx, dy, w in [(1,0,0.5), (-1,0,0.5), (0,1,0.5), (0,-1,0.5)]:
-                nx, ny = x + dx, y + dy
-                if in_bounds(nx, ny, size):
-                    after[ny, nx] = np.clip(after[ny, nx] + w * sign, -1.0, 1.0)
-            
-            # Measure territorial effects
-            potential, solid = territory_sizes(after, color)
-            effects[idx] = {
-                "potential_territory": float(potential), 
-                "solid_territory": float(solid)
-            }
-    
-    return effects
 
 
 def is_tenuki(selected_idx: int, last_move_loc: Optional[int], policy: np.ndarray, board: Board) -> bool:
@@ -1122,7 +1091,6 @@ def analyze_position_comprehensive(
         results["atari"] = False
     
     results["only_move"] = is_only_move(policy)
-    results["rough_intent"] = rough_intent_effects(ownership, policy, player)
     
     if last_move_loc is not None and move_loc is not None:
         move_idx = loc_to_xy(board, move_loc)[1] * 19 + loc_to_xy(board, move_loc)[0]
@@ -1218,7 +1186,6 @@ __all__ = [
     "urgency_by_region",
     "is_cut_move",
     "is_only_move",
-    "rough_intent_effects",
     "is_tenuki",
     "is_connection_move",
     "is_extension_move",

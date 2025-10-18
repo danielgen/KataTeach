@@ -161,9 +161,9 @@ def generate_games(
                 if save_html > 0 and game_index <= save_html and move_number <= html_max_moves:
                     board_state = [0] * gs.board.arrsize
                     for i in range(gs.board.arrsize):
-                        if gs.board.board[i] == Board.BLACK:
+                        if gs.board.board[i] == 1:  # Board.BLACK
                             board_state[i] = 1
-                        elif gs.board.board[i] == Board.WHITE:
+                        elif gs.board.board[i] == 2:  # Board.WHITE
                             board_state[i] = -1
                     html_positions.append({
                         "move_number": move_number,
@@ -172,6 +172,7 @@ def generate_games(
                         "board_state": board_state,
                         **convert_numpy_to_python(post),
                     })
+                    print(f"    Added HTML position {move_number}, total: {len(html_positions)}")
 
                 print(f"Move {move_number}: {pla_str} plays {move_loc} (prob={move_prob:.3f}, winrate={our_win:.1%}, thr={thr:.3f})")
 
@@ -213,6 +214,7 @@ def generate_games(
                 snorkel_path = game_dir / "snorkel.jsonl"
                 snorkel_data = {}
                 if snorkel_path.exists():
+                    print(f"  Loading snorkel data from {snorkel_path}")
                     with snorkel_path.open("r", encoding="utf-8") as f:
                         for line in f:
                             try:
@@ -220,20 +222,150 @@ def generate_games(
                                 snorkel_data[rec["move_number"]] = rec["analysis"]
                             except Exception:
                                 continue
+                    print(f"  Loaded snorkel data for {len(snorkel_data)} moves")
+                else:
+                    print(f"  No snorkel data found at {snorkel_path}")
                 
                 # Merge snorkel data with HTML positions
+                positions_with_snorkel = 0
                 for pos in html_positions:
                     move_num = pos["move_number"]
                     if move_num in snorkel_data:
                         pos["analysis"] = snorkel_data[move_num]
+                        positions_with_snorkel += 1
                 
+                print(f"  Merged snorkel data into {positions_with_snorkel} out of {len(html_positions)} positions")
+                
+                print(f"  Generating HTML with {len(html_positions)} positions")
                 generate_html_visualization(html_positions, sgf_content, str(viz_path))
                 print(f"  HTML saved: {viz_path}")
             except Exception as e:
                 print(f"  HTML generation failed: {e}")
 
 
-def run_snorkel(games_dir: Path, model_path: Path) -> None:
+def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: int, model_path: Path, device: str | None = None) -> None:
+    """Generate HTML files with snorkel analysis data included."""
+    from gamestate import GameState, Board
+    from load_model import load_model
+    import json
+    
+    print("Generating HTML files with snorkel analysis...")
+    
+    # Find all game directories
+    game_dirs = [d for d in games_dir.iterdir() if d.is_dir()]
+    game_dirs.sort(key=lambda x: x.name)  # Sort by UUID for consistent ordering
+    
+    for game_index, game_dir in enumerate(game_dirs[:save_html], 1):
+        try:
+            # Load game metadata
+            meta_path = game_dir / "meta.json"
+            if not meta_path.exists():
+                continue
+                
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+            board_size = meta["board_size"]
+            
+            # Load moves from moves.jsonl
+            moves_path = game_dir / "moves.jsonl"
+            if not moves_path.exists():
+                print(f"  Skipping {game_dir.name}: no moves.jsonl found")
+                continue
+                
+            moves_data = []
+            with moves_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        move_data = json.loads(line)
+                        moves_data.append(move_data)
+                    except Exception:
+                        continue
+            
+            # Extract moves from the data
+            moves = []
+            for move_data in moves_data:
+                if "move_loc" in move_data and "player" in move_data:
+                    player_str = move_data["player"]
+                    loc = move_data["move_loc"]
+                    # Convert player string to Board constant
+                    player = Board.BLACK if player_str == "b" else Board.WHITE
+                    moves.append((player, loc))
+            
+            print(f"  Extracted {len(moves)} moves from moves.jsonl")
+            
+            # Load snorkel data
+            snorkel_path = game_dir / "snorkel.jsonl"
+            if not snorkel_path.exists():
+                print(f"  Skipping {game_dir.name}: no snorkel data found")
+                continue
+                
+            snorkel_data = {}
+            with snorkel_path.open("r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                        snorkel_data[rec["move_number"]] = rec["analysis"]
+                    except Exception:
+                        continue
+            
+            # Reconstruct HTML positions with board states
+            html_positions = []
+            game_state = GameState(board_size, GameState.RULES_TT)
+            
+            # Load model for this game
+            dev = device or get_device()
+            model, swa_model, _ = load_model(str(model_path), use_swa=False, device=dev, pos_len=board_size, verbose=False)
+            if swa_model is not None:
+                model = swa_model
+            model.eval()
+            
+            # Add initial position
+            initial_outputs = game_state.get_model_outputs(model)
+            converted_initial_outputs = convert_numpy_to_python(initial_outputs)
+            html_positions.append({
+                "move_number": 0,
+                "player": "Initial",
+                "last_move": None,
+                "board_state": [0] * game_state.board.arrsize,
+                "analysis": snorkel_data.get(0, {}),
+                **converted_initial_outputs
+            })
+            
+            # Add move positions
+            for move_num, (player, loc) in enumerate(moves[:html_max_moves], 1):
+                game_state.play(player, loc)
+                outputs = game_state.get_model_outputs(model)
+                converted_outputs = convert_numpy_to_python(outputs)
+                
+                # Create board state array
+                board_state = [0] * game_state.board.arrsize
+                for i in range(game_state.board.arrsize):
+                    if game_state.board.board[i] == 1:  # Board.BLACK
+                        board_state[i] = 1
+                    elif game_state.board.board[i] == 2:  # Board.WHITE
+                        board_state[i] = -1
+                
+                html_positions.append({
+                    "move_number": move_num,
+                    "player": "Black" if player == Board.BLACK else "White",
+                    "last_move": (player, loc),
+                    "board_state": board_state,
+                    "analysis": snorkel_data.get(move_num, {}),
+                    **converted_outputs
+                })
+            
+            # Generate SGF content
+            sgf_content = create_sgf(moves, board_size, game_index)
+            
+            # Generate HTML
+            viz_path = game_dir / "viz.html"
+            generate_html_visualization(html_positions, sgf_content, str(viz_path))
+            print(f"  HTML with snorkel data saved: {viz_path}")
+            
+        except Exception as e:
+            print(f"  HTML generation failed for {game_dir.name}: {e}")
+
+
+def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) -> None:
     """Comprehensive snorkel analysis that computes all 28 concepts per move.
     Writes games/<uuid>/snorkel.jsonl with per-move comprehensive analysis.
     """
@@ -244,8 +376,9 @@ def run_snorkel(games_dir: Path, model_path: Path) -> None:
     print("Running comprehensive snorkel analysis...")
     
     # Load model for ownership analysis
-    print(f"Loading model: {model_path}")
-    model, swa_model, _ = load_model(str(model_path), use_swa=False, device=get_device(), pos_len=19, verbose=False)
+    dev = device or get_device()
+    print(f"Loading model: {model_path} on device {dev}")
+    model, swa_model, _ = load_model(str(model_path), use_swa=False, device=dev, pos_len=19, verbose=False)
     if swa_model is not None:
         model = swa_model
     model.eval()
@@ -377,6 +510,10 @@ def main() -> None:
         sys.exit(1)
 
     dev = None if args.device == "auto" else args.device
+    # If running snorkel analysis, don't generate HTML during game generation
+    # We'll generate HTML after snorkel analysis is complete
+    save_html_during_generation = args.save_html if not args.run_snorkel else 0
+    
     generate_games(
         model_path=args.model,
         num_games=args.num_games,
@@ -388,12 +525,18 @@ def main() -> None:
         transition_moves=args.transition_moves,
         resign_threshold=args.resign_threshold,
         resign_consec=args.resign_consec,
-        save_html=args.save_html,
+        save_html=save_html_during_generation,
         html_max_moves=args.html_max_moves,
     )
 
     if args.run_snorkel:
-        run_snorkel(args.output_dir, args.model)
+        dev = None if args.device == "auto" else args.device
+        run_snorkel(args.output_dir, args.model, dev)
+        
+        # Now generate HTML with snorkel data included
+        if args.save_html > 0:
+            print("Generating HTML with snorkel analysis data...")
+            generate_html_with_snorkel(args.output_dir, args.save_html, args.html_max_moves, args.model, dev)
 
 
 if __name__ == "__main__":

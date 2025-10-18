@@ -24,6 +24,9 @@ import torch
 # Import common utilities
 from common_utils import get_device as get_device_str, convert_numpy_to_python
 
+# Import snorkel analysis
+from snorkel_board_positions import analyze_position_comprehensive
+
 def get_device():
     """Get the appropriate device for model inference."""
     device_str = get_device_str()
@@ -48,15 +51,39 @@ def play_short_game(model, max_moves=10):
 
     game_data = []
     moves = []
+    ownership_before = None
     
     # Add initial position
     initial_outputs = game_state.get_model_outputs(model)
     converted_initial_outputs = convert_numpy_to_python(initial_outputs)
+    
+    # Add snorkel analysis for initial position
+    try:
+        # Convert ownership to numpy array (19x19)
+        ownership = np.array(initial_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
+        policy = np.array(initial_outputs.get("policy0", [0.0] * 361))
+        
+        analysis = analyze_position_comprehensive(
+            board=game_state.board,
+            ownership=ownership,
+            policy=policy,
+            player=Board.BLACK,  # Black starts first
+            move_loc=None,
+            last_move_loc=None,
+            before_ownership=None,
+            before_board=None
+        )
+        analysis_serializable = convert_numpy_to_python(analysis)
+    except Exception as e:
+        print(f"Warning: Snorkel analysis failed for initial position: {e}")
+        analysis_serializable = {}
+    
     game_data.append({
         "move_number": 0,
         "player": "Initial",
         "last_move": None,
         "board_state": [0] * game_state.board.arrsize,  # Empty board with full size
+        "analysis": analysis_serializable,
         **converted_initial_outputs
     })
     
@@ -68,6 +95,11 @@ def play_short_game(model, max_moves=10):
         
         # Get model outputs for current position
         outputs = game_state.get_model_outputs(model)
+        
+        # Store ownership before the move for analysis
+        ownership_before = np.array(outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
+        # Note: Board copying might not work as expected, so we'll pass None for now
+        board_before = None
         
         # Always use the main policy (policy0) for move selection
         # policy0 = current player's move distribution
@@ -150,11 +182,34 @@ def play_short_game(model, max_moves=10):
             print(f"{player_str} resigns: winrate < {resignation_threshold:.0%} for {consecutive_low_moves} consecutive moves")
             # Store the post-move data before breaking
             converted_outputs = convert_numpy_to_python(post_move_outputs)
+            
+            # Add snorkel analysis
+            try:
+                ownership_after = np.array(post_move_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
+                policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
+                last_move_loc = moves[-1][1] if moves else None
+                
+                analysis = analyze_position_comprehensive(
+                    board=game_state.board,
+                    ownership=ownership_after,
+                    policy=policy,
+                    player=current_player,
+                    move_loc=best_move,
+                    last_move_loc=last_move_loc,
+                    before_ownership=ownership_before,
+                    before_board=board_before
+                )
+                analysis_serializable = convert_numpy_to_python(analysis)
+            except Exception as e:
+                print(f"Warning: Snorkel analysis failed for move {move_num}: {e}")
+                analysis_serializable = {}
+            
             game_data.append({
                 "move_number": move_num,
                 "player": player_str,
                 "last_move": (current_player, best_move),
                 "board_state": board_state,
+                "analysis": analysis_serializable,
                 **converted_outputs
             })
             break
@@ -162,12 +217,34 @@ def play_short_game(model, max_moves=10):
         # Convert numpy arrays to Python objects for JSON serialization
         converted_outputs = convert_numpy_to_python(post_move_outputs)
         
+        # Add snorkel analysis
+        try:
+            ownership_after = np.array(post_move_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
+            policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
+            last_move_loc = moves[-2][1] if len(moves) > 1 else None  # Previous move
+            
+            analysis = analyze_position_comprehensive(
+                board=game_state.board,
+                ownership=ownership_after,
+                policy=policy,
+                player=current_player,
+                move_loc=best_move,
+                last_move_loc=last_move_loc,
+                before_ownership=ownership_before,
+                before_board=board_before
+            )
+            analysis_serializable = convert_numpy_to_python(analysis)
+        except Exception as e:
+            print(f"Warning: Snorkel analysis failed for move {move_num}: {e}")
+            analysis_serializable = {}
+        
         # Store game data
         game_data.append({
             "move_number": move_num,
             "player": player_str,
             "last_move": (current_player, best_move),
             "board_state": board_state,
+            "analysis": analysis_serializable,
             **converted_outputs
         })
         
@@ -251,8 +328,54 @@ def generate_sgf(moves):
 def generate_html_visualization(game_data, sgf_content, output_file):
     """Generate HTML visualization with custom board rendering."""
     
-    # Convert game data to JSON
-    game_data_js = json.dumps(game_data)
+    # Reduce data size by keeping only essential fields for visualization
+    print(f"Converting {len(game_data)} positions to JSON...")
+    
+    # Create a simplified version of game_data with only essential fields
+    simplified_data = []
+    positions_with_analysis = 0
+    for pos in game_data:
+        analysis_data = pos.get("analysis", {})
+        if analysis_data:
+            positions_with_analysis += 1
+        
+        simplified_pos = {
+            "move_number": pos.get("move_number", 0),
+            "player": pos.get("player", "Unknown"),
+            "last_move": pos.get("last_move"),
+            "board_state": pos.get("board_state", []),
+            "analysis": analysis_data,
+            # Essential model outputs only
+            "policy0": pos.get("policy0", []),
+            "policy1": pos.get("policy1", []),
+            "ownership": pos.get("ownership", []),
+            "scoring": pos.get("scoring", []),
+            "futurepos0": pos.get("futurepos0", []),
+            "futurepos1": pos.get("futurepos1", []),
+            "seki": pos.get("seki", []),
+            "value": pos.get("value", [0.5]),
+            "scoremean": pos.get("scoremean", 0.0),
+            "lead": pos.get("lead", 0.0),
+            "scorestdev": pos.get("scorestdev", 0.0),
+            "vtime": pos.get("vtime", 0.0),
+            "estv": pos.get("estv", 0.0),
+            "td_value": pos.get("td_value", [0.5]),
+            "td_value2": pos.get("td_value2", [0.5]),
+            "td_value3": pos.get("td_value3", [0.5]),
+        }
+        simplified_data.append(simplified_pos)
+    
+    print(f"Positions with analysis data: {positions_with_analysis} out of {len(game_data)}")
+    
+    try:
+        game_data_js = json.dumps(simplified_data)
+        print(f"JSON serialization successful, length: {len(game_data_js)}")
+    except Exception as e:
+        print(f"JSON serialization failed: {e}")
+        # Fallback: try with default=str
+        game_data_js = json.dumps(simplified_data, default=str)
+        print(f"JSON serialization with default=str successful, length: {len(game_data_js)}")
+    
     sgf_js = json.dumps(sgf_content)
     
     html = f"""<!DOCTYPE html>
@@ -266,7 +389,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             font-family: Arial, sans-serif;
             margin: 0;
             padding: 20px;
-            padding-top: 120px;
+            padding-top: 20px;
             background-color: #f5f5f5;
         }}
         
@@ -331,6 +454,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 20px;
+            margin-top: 20px;
         }}
         
         .board-section {{
@@ -437,7 +561,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             color: #333;
         }}
         
-        .sticky-value-section {{
+        .sticky-container {{
             position: fixed;
             top: 0;
             left: 0;
@@ -446,9 +570,17 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             background: white;
             border-radius: 0 0 8px 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            padding: 15px 20px;
             max-width: 1400px;
             margin: 0 auto;
+        }}
+        
+        .sticky-section {{
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+        }}
+        
+        .sticky-section:last-child {{
+            border-bottom: none;
         }}
         
         #stickyValueContainer {{
@@ -467,10 +599,26 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             background: #f8f9fa;
             border: 1px solid #dee2e6;
             border-radius: 4px;
-            padding: 8px;
-            font-family: monospace;
-            font-size: 11px;
-            line-height: 1.3;
+            padding: 12px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 12px;
+            line-height: 1.4;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 10px;
+        }}
+        
+        .snorkel-details div {{
+            margin-bottom: 8px;
+        }}
+        
+        .snorkel-details strong {{
+            color: #495057;
+            font-weight: 600;
+        }}
+        
+        .snorkel-details br {{
+            margin-bottom: 2px;
         }}
         
         .sticky-value-display {{
@@ -508,8 +656,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 <button onclick="resetToStart()">Reset</button>
             </div>
         </div>
-        <div id="stickyValueContainer">
-            <!-- Sticky value section will be generated by JavaScript -->
+        <div class="sticky-container" id="stickyValueContainer">
+            <!-- Sticky sections will be generated by JavaScript -->
         </div>
         <div class="boards-container" id="boardsContainer">
             <!-- Boards will be generated by JavaScript -->
@@ -593,7 +741,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         function addValueSection() {{
             const container = document.getElementById('stickyValueContainer');
             const section = document.createElement('div');
-            section.className = 'sticky-value-section';
+            section.className = 'sticky-section';
             section.id = 'value-section';
             
             section.innerHTML = `
@@ -648,7 +796,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         function addSnorkelSection() {{
             const container = document.getElementById('stickyValueContainer');
             const section = document.createElement('div');
-            section.className = 'sticky-value-section';
+            section.className = 'sticky-section';
             section.id = 'snorkel-section';
             
             section.innerHTML = `
@@ -703,7 +851,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         <span id="is-tenuki">-</span>
                     </div>
                 </div>
-                <div class="snorkel-details" id="snorkel-details" style="margin-top: 10px; font-size: 12px; max-height: 200px; overflow-y: auto;">
+                <div class="snorkel-details" id="snorkel-details">
                     <!-- Detailed snorkel info will be populated here -->
                 </div>
             `;
@@ -761,6 +909,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         function updateBoardState(data) {{
             const board = document.getElementById('board-board_state');
             if (!board) return;
+            
             
             board.innerHTML = '';
             drawGridLines(board);
@@ -1169,24 +1318,54 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         }}
         
         function updateSnorkelInfo(data) {{
-            if (!data || !data.analysis) return;
+            if (!data || !data.analysis) {{
+                // Clear all snorkel fields if no analysis data
+                const elements = {{
+                    'groups-det': '-',
+                    'groups-own': '-',
+                    'potential-territory': '-',
+                    'solid-territory': '-',
+                    'direct-sacrifice': '-',
+                    'is-cut': '-',
+                    'is-connection': '-',
+                    'is-extension': '-',
+                    'liberties': '-',
+                    'atari': '-',
+                    'is-only-move': '-',
+                    'is-tenuki': '-'
+                }};
+                
+                for (const [id, value] of Object.entries(elements)) {{
+                    const element = document.getElementById(id);
+                    if (element) {{
+                        element.textContent = value;
+                    }}
+                }}
+                
+                // Clear details
+                const detailsDiv = document.getElementById('snorkel-details');
+                if (detailsDiv) {{
+                    detailsDiv.innerHTML = '<div>No snorkel analysis data available</div>';
+                }}
+                return;
+            }}
             
             const analysis = data.analysis;
             
             // Update basic snorkel metrics
             const elements = {{
-                'groups-det': analysis.groups_deterministic ? analysis.groups_deterministic.length : 0,
-                'groups-own': analysis.groups_ownership ? analysis.groups_ownership.length : 0,
-                'potential-territory': analysis.potential_territory || 0,
-                'solid-territory': analysis.solid_territory || 0,
-                'direct-sacrifice': analysis.direct_sacrifice ? 'Yes' : 'No',
-                'is-cut': analysis.is_cut ? 'Yes' : 'No',
-                'is-connection': analysis.is_connection ? 'Yes' : 'No',
-                'is-extension': analysis.is_extension ? 'Yes' : 'No',
-                'liberties': analysis.liberties || 0,
-                'atari': analysis.atari ? 'Yes' : 'No',
-                'is-only-move': analysis.is_only_move || 'False',
-                'is-tenuki': analysis.is_tenuki ? 'Yes' : 'No'
+                'groups-det': analysis.potential_territory !== undefined ? (analysis.potential_territory || 0) : '-',
+                'groups-own': analysis.solid_territory !== undefined ? (analysis.solid_territory || 0) : '-',
+                'potential-territory': analysis.potential_territory !== undefined ? (analysis.potential_territory || 0) : '-',
+                'solid-territory': analysis.solid_territory !== undefined ? (analysis.solid_territory || 0) : '-',
+                'direct-sacrifice': analysis.direct_sacrifice !== undefined ? (analysis.direct_sacrifice ? 'Yes' : 'No') : '-',
+                'is-cut': analysis.cut !== undefined ? (analysis.cut ? 'Yes' : 'No') : '-',
+                'is-connection': analysis.connection !== undefined ? (analysis.connection ? 'Yes' : 'No') : '-',
+                'is-extension': analysis.extension !== undefined ? (analysis.extension ? 'Yes' : 'No') : '-',
+                'liberties': analysis.liberties !== undefined ? (analysis.liberties || 0) : '-',
+                'atari': analysis.atari !== undefined ? (analysis.atari ? 'Yes' : 'No') : '-',
+                'is-only-move': analysis.only_move !== undefined ? (analysis.only_move ? 'Yes' : 'No') : '-',
+                'is-tenuki': analysis.tenuki !== undefined ? (analysis.tenuki ? 'Yes' : 'No') : '-'
             }};
             
             for (const [id, value] of Object.entries(elements)) {{
@@ -1202,40 +1381,60 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 let detailsHtml = '';
                 
                 // Urgency by region
-                if (analysis.urgency_by_region) {{
+                if (analysis.urgency) {{
                     detailsHtml += '<div><strong>Urgency by Region:</strong><br>';
-                    for (const [region, urgency] of Object.entries(analysis.urgency_by_region)) {{
-                        detailsHtml += `${{region}}: ${{(urgency * 100).toFixed(1)}}%<br>`;
+                    for (const [region, urgency] of Object.entries(analysis.urgency)) {{
+                        if (urgency > 0.01) {{ // Only show regions with meaningful urgency
+                            detailsHtml += `${{region}}: ${{((urgency || 0) * 100).toFixed(1)}}%<br>`;
+                        }}
                     }}
                     detailsHtml += '</div><br>';
                 }}
                 
-                // Rough intent (show top 5 moves)
-                if (analysis.rough_intent) {{
-                    const intentEntries = Object.entries(analysis.rough_intent);
-                    if (intentEntries.length > 0) {{
-                        detailsHtml += '<div><strong>Top Move Intent:</strong><br>';
-                        intentEntries.slice(0, 5).forEach(([moveIdx, intent]) => {{
-                            const x = moveIdx % 19;
-                            const y = Math.floor(moveIdx / 19);
-                            const coord = String.fromCharCode(97 + x) + (19 - y);
-                            detailsHtml += `${{coord}}: Pot=${{intent.potential_territory}}, Solid=${{intent.solid_territory}}<br>`;
-                        }});
-                        detailsHtml += '</div><br>';
+                // Territory changes
+                if (analysis.building_count > 0 || analysis.solidification_count > 0 || analysis.reduction_count > 0) {{
+                    detailsHtml += '<div><strong>Territory Changes:</strong><br>';
+                    if (analysis.building_count > 0) {{
+                        detailsHtml += `Building: ${{analysis.building_count}} (intensity: ${{(analysis.building_intensity || 0).toFixed(2)}})<br>`;
                     }}
+                    if (analysis.solidification_count > 0) {{
+                        detailsHtml += `Solidification: ${{analysis.solidification_count}} (intensity: ${{(analysis.solidification_value || 0).toFixed(2)}})<br>`;
+                    }}
+                    if (analysis.reduction_count > 0) {{
+                        detailsHtml += `Reduction: ${{analysis.reduction_count}} (intensity: ${{(analysis.reduction_intensity || 0).toFixed(2)}})<br>`;
+                    }}
+                    if (analysis.invasion) {{
+                        detailsHtml += `Invasion: Yes (intensity: ${{(analysis.invasion_intensity || 0).toFixed(2)}})<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
                 }}
                 
-                // Territory analysis
-                if (analysis.building_territory !== undefined || analysis.solidify_territory !== undefined) {{
-                    detailsHtml += '<div><strong>Territory Changes:</strong><br>';
-                    if (analysis.building_territory !== undefined) {{
-                        detailsHtml += `Building: ${{analysis.building_territory}}<br>`;
+                // Attack and tactical information
+                if (analysis.attack || analysis.killing_attack || analysis.reduce_aji) {{
+                    detailsHtml += '<div><strong>Attack & Tactics:</strong><br>';
+                    if (analysis.attack) {{
+                        detailsHtml += `Attack: Yes (intensity: ${{(analysis.attack_intensity || 0).toFixed(2)}})<br>`;
                     }}
-                    if (analysis.solidify_territory !== undefined) {{
-                        detailsHtml += `Solidify: ${{analysis.solidify_territory.toFixed(2)}}<br>`;
+                    if (analysis.killing_attack) {{
+                        detailsHtml += `Killing Attack: Yes (intensity: ${{(analysis.kill_intensity || 0).toFixed(2)}})<br>`;
                     }}
-                    if (analysis.reduce_territory !== undefined) {{
-                        detailsHtml += `Reduce: ${{analysis.reduce_territory}}<br>`;
+                    if (analysis.reduce_aji) {{
+                        detailsHtml += `Aji Reduction: Yes (intensity: ${{(analysis.aji_reduction_intensity || 0).toFixed(2)}})<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // Group changes
+                if (analysis.group_strength_delta !== 0 || analysis.group_connectivity_delta !== 0) {{
+                    detailsHtml += '<div><strong>Group Changes:</strong><br>';
+                    if (analysis.group_strength_delta !== 0) {{
+                        detailsHtml += `Strength Delta: ${{(analysis.group_strength_delta || 0).toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.group_connectivity_delta !== 0) {{
+                        detailsHtml += `Connectivity Delta: ${{(analysis.group_connectivity_delta || 0).toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.creates_new_group) {{
+                        detailsHtml += `Creates New Group: Yes<br>`;
                     }}
                     detailsHtml += '</div>';
                 }}
@@ -1319,6 +1518,18 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         addSnorkelSection();
         initializeBoards();
         updateDisplay();
+        
+        // Adjust body padding based on sticky header height
+        function adjustBodyPadding() {{
+            const stickyContainer = document.getElementById('stickyValueContainer');
+            if (stickyContainer) {{
+                const height = stickyContainer.offsetHeight;
+                document.body.style.paddingTop = (height + 10) + 'px';
+            }}
+        }}
+        
+        // Adjust padding after content loads
+        setTimeout(adjustBodyPadding, 100);
     </script>
 </body>
 </html>
