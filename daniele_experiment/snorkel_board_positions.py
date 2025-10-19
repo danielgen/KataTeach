@@ -53,6 +53,7 @@ COMPUTED FEATURES:
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Set, Iterable, Any
 import json
+from functools import lru_cache
 
 import numpy as np
 
@@ -71,7 +72,14 @@ from board import Board
 TAU_POS = 0.10            # Weak ownership threshold (presence threshold)
 TAU_SOLID = 0.70          # Solid territory threshold
 TAU_CONN = 0.10           # Connectivity threshold
-EPSILON_POL = 1e-12       # Policy probability threshold
+EPSILON_POL = 1e-12       # Policy probability threshold (legacy, too small)
+
+# Improved thresholds for more reliable weak supervision
+TAU_POS_LOW = 0.08        # Lower threshold for building territory (hysteresis)
+TAU_POS_HIGH = 0.12       # Higher threshold for building territory (hysteresis)
+TAU_ONLY_MOVE = 0.05      # Threshold for "only move" detection (policy > 0.95)
+TAU_GROUP_IOU = 0.1       # Minimum IoU for group matching across plies
+TAU_AJI_VICINITY = 5      # L1 distance for aji reduction vicinity mask
 
 # Legacy constants for backward compatibility
 OWN_MIN = TAU_POS
@@ -85,7 +93,9 @@ class Group:
     stones: List[int]          # list of locs belonging to the group
     liberties: int             # number of liberties
     strength: float            # average ownership value on group stones (signed from perspective of 'color')
-    connectivity: float        # average ownership of empty intersections within L1 ≤ 2 radius
+    connectivity: float        # average ownership of empty intersections within L1 ≤ 2 radius (legacy)
+    connectivity_signed: float # signed connectivity (+ if helps group's color, - if helps opponent)
+    connectivity_mag: float    # magnitude of connectivity (turn-invariant)
     influence_area: int        # count of own ownership around group
     influence_strength: float  # average ownership around group
     influence_spread: float    # measure of how spread out the influence is (0-1, higher = more spread)
@@ -112,45 +122,47 @@ def in_bounds(x: int, y: int, size: int = 19) -> bool:
 
 def classify_region(x: int, y: int, size: int = 19) -> str:
     """
-    Classify region into 9 distinct areas:
-    - 4 Corners: top-left, top-right, bottom-left, bottom-right
-    - 4 Sides: left, right, upper, lower
-    - 1 Center: middle area
+    Classify region into 9 distinct areas using a simple grid-based approach:
+    - 4 Corners: top-left, top-right, bottom-left, bottom-right (first 6x6 areas)
+    - 4 Sides: left, right, upper, lower (remaining edge areas)
+    - 1 Center: middle area (7x7 center)
     
-    Using bands a-f (0-5) and n-s (size-6 to size-1) for corner/side boundaries
+    Grid layout for 19x19 board:
+    - Corners: 0-5 x 0-5, 14-18 x 0-5, 0-5 x 14-18, 14-18 x 14-18
+    - Sides: 6-13 x 0-5, 6-13 x 14-18, 0-5 x 6-13, 14-18 x 6-13  
+    - Center: 6-13 x 6-13
     """
-    corner_band = set(range(0, 6)) | set(range(size-6, size))  # a-f and n-s
-    in_x_corner = x in corner_band
-    in_y_corner = y in corner_band
+    # Define the grid boundaries
+    corner_size = 6  # 6x6 corner areas
+    side_start = corner_size  # 6
+    side_end = size - corner_size  # 13
     
-    # Determine corner regions
-    if in_x_corner and in_y_corner:
-        if x < 6 and y < 6:  # top-left
-            return "corner_tl"
-        elif x >= size-6 and y < 6:  # top-right
-            return "corner_tr"
-        elif x < 6 and y >= size-6:  # bottom-left
-            return "corner_bl"
-        elif x >= size-6 and y >= size-6:  # bottom-right
-            return "corner_br"
+    # Corner regions (6x6 areas)
+    if x < corner_size and y < corner_size:
+        return "corner_tl"  # 0-5 x 0-5
+    elif x >= side_end and y < corner_size:
+        return "corner_tr"  # 14-18 x 0-5
+    elif x < corner_size and y >= side_end:
+        return "corner_bl"  # 0-5 x 14-18
+    elif x >= side_end and y >= side_end:
+        return "corner_br"  # 14-18 x 14-18
     
-    # Determine side regions
-    elif in_x_corner or in_y_corner:
-        if in_x_corner and not in_y_corner:  # left or right side
-            if x < 6:
-                return "side_left"
-            else:
-                return "side_right"
-        elif in_y_corner and not in_x_corner:  # upper or lower side
-            if y < 6:
-                return "side_top"
-            else:
-                return "side_bottom"
+    # Side regions
+    elif side_start <= x < side_end and y < corner_size:
+        return "side_top"  # 6-13 x 0-5
+    elif side_start <= x < side_end and y >= side_end:
+        return "side_bottom"  # 6-13 x 14-18
+    elif x < corner_size and side_start <= y < side_end:
+        return "side_left"  # 0-5 x 6-13
+    elif x >= side_end and side_start <= y < side_end:
+        return "side_right"  # 14-18 x 6-13
     
     # Center region
-    return "center"
+    else:
+        return "center"  # 6-13 x 6-13
 
 
+@lru_cache(maxsize=4)  # Cache for common board sizes (9, 13, 19, 21)
 def region_map(size: int = 19) -> np.ndarray:
     """Create a map of regions for the board."""
     m = np.empty((size, size), dtype=object)
@@ -197,7 +209,9 @@ def enumerate_groups_deterministic(board: Board) -> List[Group]:
                 stones=stones,
                 liberties=board.group_liberty_count[head],
                 strength=0.0,  # Will be computed later with ownership data
-                connectivity=0.0,
+                connectivity=0.0,  # Legacy field
+                connectivity_signed=0.0,  # Will be computed later
+                connectivity_mag=0.0,  # Will be computed later
                 influence_area=0,
                 influence_strength=0.0,
                 influence_spread=0.0,
@@ -252,14 +266,13 @@ def enumerate_groups_ownership(board: Board, ownership: np.ndarray, color: int) 
                     # Convert to board locations
                     stones = [board.loc(cx, cy) for cx, cy in group_stones]
                     
-                    # Calculate liberties (simplified)
-                    liberties = 0
-                    for cx, cy in group_stones:
-                        for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
-                            nx, ny = cx + dx, cy + dy
-                            if (in_bounds(nx, ny, size) and 
-                                board.board[board.loc(nx, ny)] == Board.EMPTY):
-                                liberties += 1
+                    # Calculate liberties using board's union-find data to avoid double counting
+                    # Find the head of the group in the board's union-find structure
+                    if group_stones:
+                        first_stone_loc = board.loc(group_stones[0][0], group_stones[0][1])
+                        liberties = board.group_liberty_count[board.group_head[first_stone_loc]]
+                    else:
+                        liberties = 0
                     
                     groups.append(Group(
                         color=color,
@@ -267,7 +280,9 @@ def enumerate_groups_ownership(board: Board, ownership: np.ndarray, color: int) 
                         stones=stones,
                         liberties=liberties,
                         strength=0.0,  # Will be computed later with ownership data
-                        connectivity=0.0,
+                        connectivity=0.0,  # Legacy field
+                        connectivity_signed=0.0,  # Will be computed later
+                        connectivity_mag=0.0,  # Will be computed later
                         influence_area=0,
                         influence_strength=0.0,
                         influence_spread=0.0,
@@ -291,6 +306,7 @@ def compute_group_connectivity(groups: List[Group], ownership: np.ndarray, board
     """Compute group connectivity as average ownership of empty intersections within L1 ≤ 2 radius."""
     for g in groups:
         vals: List[float] = []
+        abs_vals: List[float] = []
         
         # For each stone in group, check L1 ≤ 2 radius
         checked = set()
@@ -308,12 +324,17 @@ def compute_group_connectivity(groups: List[Group], ownership: np.ndarray, board
                         continue
                     checked.add(nloc)
                     if board.board[nloc] == Board.EMPTY:
-                        # Ownership is from current player's perspective, so for own group stones,
-                        # we want positive values to indicate good connectivity
-                        v = ownership[ny, nx] if g.color == board.pla else -ownership[ny, nx]
+                        # Ownership is from current player's perspective
+                        v = ownership[ny, nx]
                         vals.append(v)
+                        abs_vals.append(abs(v))
         
+        # Legacy connectivity (frame-dependent)
         g.connectivity = float(np.mean(vals)) if vals else 0.0
+        
+        # New connectivity metrics (more robust)
+        g.connectivity_signed = float(np.mean(vals)) if vals else 0.0
+        g.connectivity_mag = float(np.mean(abs_vals)) if abs_vals else 0.0
 
 
 def compute_group_influence(groups: List[Group], ownership: np.ndarray, board: Board) -> None:
@@ -363,8 +384,8 @@ def compute_group_influence(groups: List[Group], ownership: np.ndarray, board: B
 # Territory Analysis Functions
 # -------------------------
 
-def count_building_territory(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[int, float]:
-    """Count intersections that changed from empty (<0.1) to own ownership (>0.1) and compute intensity.
+def count_building_territory(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[int, float, float]:
+    """Count intersections that changed from empty to own ownership using hysteresis and compute intensity.
     Excludes actual stone positions from territory counting.
     
     Args:
@@ -372,10 +393,13 @@ def count_building_territory(before: np.ndarray, after: np.ndarray, color: int, 
         after: Ownership map after move (from current player's perspective)
         color: Current player (Board.BLACK or Board.WHITE)
         board: Board state to check for stones
+    
+    Returns:
+        (count, intensity, sum_delta) - count of built intersections, mean intensity, sum of deltas
     """
-    # Find intersections that were built (both maps are from current player's perspective)
-    # For current player, building means positive values
-    built_mask = (np.abs(before) < TAU_POS) & (after > TAU_POS)
+    # Use hysteresis thresholds to reduce flip-flop
+    # Building: before < TAU_POS_LOW and after > TAU_POS_HIGH
+    built_mask = (np.abs(before) < TAU_POS_LOW) & (after > TAU_POS_HIGH)
     
     # Exclude actual stone positions from territory counting
     stone_mask = np.zeros_like(built_mask, dtype=bool)
@@ -390,16 +414,19 @@ def count_building_territory(before: np.ndarray, after: np.ndarray, color: int, 
     
     count = int(np.sum(built_mask))
     
-    # Compute intensity as mean ownership increase of built intersections
+    # Compute intensity and sum
     if count > 0:
-        intensity = float(np.mean(after[built_mask] - before[built_mask]))
+        deltas = after[built_mask] - before[built_mask]
+        intensity = float(np.mean(deltas))
+        sum_delta = float(np.sum(deltas))
     else:
         intensity = 0.0
+        sum_delta = 0.0
     
-    return count, intensity
+    return count, intensity, sum_delta
 
 
-def solidify_territory_delta(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[int, float]:
+def solidify_territory_delta(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[int, float, float]:
     """Calculate increase in ownership values of previously owned intersections and compute intensity.
     Excludes actual stone positions from territory counting.
     
@@ -408,6 +435,9 @@ def solidify_territory_delta(before: np.ndarray, after: np.ndarray, color: int, 
         after: Ownership map after move (from current player's perspective)
         color: Current player (Board.BLACK or Board.WHITE)
         board: Board state to check for stones
+    
+    Returns:
+        (count, intensity, sum_delta) - count of solidified intersections, mean intensity, sum of deltas
     """
     # Determine what constitutes "owned" territory for current player
     # For current player, owned territory means positive values
@@ -429,16 +459,19 @@ def solidify_territory_delta(before: np.ndarray, after: np.ndarray, color: int, 
     
     count = int(np.sum(solidified_mask))
     
-    # Compute intensity as mean ownership gain across solidified points
+    # Compute intensity and sum
     if count > 0:
-        intensity = float(np.mean(after[solidified_mask] - before[solidified_mask]))
+        deltas = after[solidified_mask] - before[solidified_mask]
+        intensity = float(np.mean(deltas))
+        sum_delta = float(np.sum(deltas))
     else:
         intensity = 0.0
+        sum_delta = 0.0
     
-    return count, intensity
+    return count, intensity, sum_delta
 
 
-def reduce_opponent_territory_count(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[int, float]:
+def reduce_opponent_territory_count(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[int, float, float]:
     """Count reduction in opponent's owned intersections and compute intensity.
     Excludes actual stone positions from territory counting.
     
@@ -447,6 +480,9 @@ def reduce_opponent_territory_count(before: np.ndarray, after: np.ndarray, color
         after: Ownership map after move (from current player's perspective)
         color: Current player (Board.BLACK or Board.WHITE)
         board: Board state to check for stones
+    
+    Returns:
+        (count, intensity, sum_delta) - count of reduced intersections, mean intensity, sum of deltas
     """
     # Determine what constitutes opponent's territory
     # For current player, opponent territory means negative values
@@ -469,32 +505,75 @@ def reduce_opponent_territory_count(before: np.ndarray, after: np.ndarray, color
     
     count = int(np.sum(reduced_mask))
     
-    # Compute intensity as mean ownership change magnitude of affected points
+    # Compute intensity and sum
     if count > 0:
-        intensity = float(np.mean(np.abs(after[reduced_mask] - before[reduced_mask])))
+        deltas = after[reduced_mask] - before[reduced_mask]
+        intensity = float(np.mean(np.abs(deltas)))
+        sum_delta = float(np.sum(deltas))  # Sum of actual changes (can be negative)
     else:
         intensity = 0.0
+        sum_delta = 0.0
     
-    return count, intensity
+    return count, intensity, sum_delta
 
 
-def invasion_effect(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> Tuple[bool, float]:
-    """Calculate invasion effect: reduced opponent territory + built own territory.
+def invasion_effect(before: np.ndarray, after: np.ndarray, color: int, board: Board, move_loc: Optional[int] = None) -> Tuple[bool, float]:
+    """Calculate invasion effect: same points flip from opponent ownership to own ownership.
     
     Args:
         before: Ownership map before move (from current player's perspective)
         after: Ownership map after move (from current player's perspective)
         color: Current player (Board.BLACK or Board.WHITE)
         board: Board state to check for stones
+        move_loc: Location of the move (optional, for spatial constraint)
     """
-    built_count, built_intensity = count_building_territory(before, after, color, board)
-    reduced_count, reduced_intensity = reduce_opponent_territory_count(before, after, color, board)
+    # Create mask to exclude stone positions
+    stone_mask = np.zeros_like(before, dtype=bool)
+    for y in range(board.size):
+        for x in range(board.size):
+            loc = board.loc(x, y)
+            if board.board[loc] != Board.EMPTY:
+                stone_mask[y, x] = True
     
-    # Invasion occurs if both building and reduction happened
-    is_invasion = (built_count > 0) and (reduced_count > 0)
+    # Only count empty intersections for territory
+    empty_mask = ~stone_mask
     
-    # Invasion intensity is the combined effect
-    invasion_intensity = built_intensity + reduced_intensity
+    # Create spatial constraint mask (L2 distance <= 3 from move)
+    spatial_mask = np.ones_like(before, dtype=bool)  # Default: no spatial constraint
+    if move_loc is not None and move_loc != Board.PASS_LOC:
+        move_x, move_y = loc_to_xy(board, move_loc)
+        spatial_mask = np.zeros_like(before, dtype=bool)
+        for y in range(board.size):
+            for x in range(board.size):
+                # Calculate L2 distance from move location
+                l2_dist = np.sqrt((x - move_x)**2 + (y - move_y)**2)
+                if l2_dist <= 3.0:
+                    spatial_mask[y, x] = True
+        
+        # Check if >0.5% of points within L2<=3 are opponent territory
+        spatial_empty_mask = empty_mask & spatial_mask
+        total_spatial_points = int(np.sum(spatial_empty_mask))
+        if total_spatial_points > 0:
+            opponent_spatial_points = int(np.sum(spatial_empty_mask & (before < -TAU_POS)))
+            opponent_percentage = opponent_spatial_points / total_spatial_points
+            if opponent_percentage <= 0.5:  # Less than 50% opponent territory
+                # Not enough opponent territory in vicinity, no invasion possible
+                return False, 0.0
+    
+    # Invasion: same points flip from opponent territory to own territory
+    # For current player, opponent territory is negative, own territory is positive
+    # AND the points must be within L2 distance <= 3 of the move
+    invasion_mask = empty_mask & spatial_mask & (before < -TAU_POS) & (after > TAU_POS)
+    
+    invasion_count = int(np.sum(invasion_mask))
+    
+    # Invasion intensity is the average ownership change of invaded points
+    if invasion_count > 0:
+        invasion_intensity = float(np.mean(after[invasion_mask] - before[invasion_mask]))
+    else:
+        invasion_intensity = 0.0
+    
+    is_invasion = invasion_count > 0
     
     return is_invasion, invasion_intensity
 
@@ -530,20 +609,32 @@ def weakening_territory_in_region(before: np.ndarray, after: np.ndarray, region:
     return count, intensity
 
 
-def leaving_weakness(before: np.ndarray, after: np.ndarray, color: int) -> int:
+def leaving_weakness(before: np.ndarray, after: np.ndarray, color: int, board: Board) -> int:
     """Count intersections that flipped from own to opponent ownership.
     
     Args:
         before: Ownership map before move (from current player's perspective)
         after: Ownership map after move (from current player's perspective)
         color: Current player (Board.BLACK or Board.WHITE)
+        board: Board state
     """
+    # Only check positions where there are actual stones of the current player
+    stone_mask = np.zeros_like(before, dtype=bool)
+    for y in range(board.size):
+        for x in range(board.size):
+            loc = board.loc(x, y)
+            if board.board[loc] == color:  # Only current player's stones
+                stone_mask[y, x] = True
+    
     # Determine what constitutes own vs opponent territory from current player's perspective
     # For current player, own territory is positive, opponent territory is negative
     own_territory_mask = before > TAU_POS
     opponent_territory_mask = after < -TAU_POS
     
-    return int(np.sum(own_territory_mask & opponent_territory_mask))
+    # Only count stone positions that flipped from own to opponent territory
+    flipped_mask = stone_mask & own_territory_mask & opponent_territory_mask
+    
+    return int(np.sum(flipped_mask))
 
 
 def territory_sizes(ownership: np.ndarray, color: int, board: Board) -> Tuple[int, int]:
@@ -600,9 +691,17 @@ def indirect_sacrifice(before: np.ndarray, after: np.ndarray, color: int, board:
         color: Current player (Board.BLACK or Board.WHITE)
         board: Board state
     """
+    # Only check positions where there are actual stones of the current player
+    stone_mask = np.zeros_like(before, dtype=bool)
+    for y in range(board.size):
+        for x in range(board.size):
+            loc = board.loc(x, y)
+            if board.board[loc] == color:  # Only current player's stones
+                stone_mask[y, x] = True
+    
     # Find stones that became opponent's territory
     # For current player, own territory is positive, opponent territory is negative
-    sacrificed_mask = (before > TAU_POS) & (after < -TAU_POS)
+    sacrificed_mask = stone_mask & (before > TAU_POS) & (after < -TAU_POS)
     
     count = int(np.sum(sacrificed_mask))
     
@@ -677,6 +776,116 @@ def compute_max_group_strength_delta(
     max_delta = deltas_by_region[max_region]
     
     return max_delta, max_region
+
+
+def compute_group_metrics_avg_max(
+    groups_before: List[Group], 
+    groups_after: List[Group], 
+    board: Board,
+    focus_color: int
+) -> Dict[str, Any]:
+    """Compute average and max group strength/connectivity deltas for groups of focus_color.
+    
+    Args:
+        groups_before: Groups before the move
+        groups_after: Groups after the move  
+        board: Board state
+        focus_color: Color to focus on (Board.BLACK or Board.WHITE)
+    
+    Returns:
+        Dictionary with avg/max metrics and group locations
+    """
+    # Filter groups by focus color
+    before_groups = [g for g in groups_before if g.color == focus_color]
+    after_groups = [g for g in groups_after if g.color == focus_color]
+    
+    if not before_groups or not after_groups:
+        return {
+            "avg_strength_delta": 0.0,
+            "max_strength_delta": 0.0,
+            "max_strength_group_location": "none",
+            "avg_connectivity_delta": 0.0,
+            "max_connectivity_delta": 0.0,
+            "max_connectivity_group_location": "none"
+        }
+    
+    # Match groups by spatial overlap (IoU)
+    def group_to_mask(group: Group, size: int) -> np.ndarray:
+        mask = np.zeros((size, size), dtype=bool)
+        for loc in group.stones:
+            x, y = loc_to_xy(board, loc)
+            mask[y, x] = True
+        return mask
+    
+    def get_group_location(group: Group, board: Board) -> str:
+        """Get the most frequent region for stones in the group."""
+        region_counts = {}
+        for loc in group.stones:
+            x, y = loc_to_xy(board, loc)
+            region = classify_region(x, y, board.size)
+            region_counts[region] = region_counts.get(region, 0) + 1
+        
+        if not region_counts:
+            return "none"
+        
+        return max(region_counts, key=region_counts.get)
+    
+    matched_pairs = []
+    used_after = set()
+    
+    for before_group in before_groups:
+        before_mask = group_to_mask(before_group, board.size)
+        best_iou = 0.0
+        best_after_group = None
+        
+        for i, after_group in enumerate(after_groups):
+            if i in used_after:
+                continue
+            
+            after_mask = group_to_mask(after_group, board.size)
+            
+            # Calculate IoU
+            intersection = np.sum(before_mask & after_mask)
+            union = np.sum(before_mask | after_mask)
+            iou = intersection / union if union > 0 else 0.0
+            
+            if iou > best_iou and iou >= TAU_GROUP_IOU:
+                best_iou = iou
+                best_after_group = after_group
+        
+        if best_after_group is not None:
+            matched_pairs.append((before_group, best_after_group))
+            used_after.add(after_groups.index(best_after_group))
+    
+    if not matched_pairs:
+        return {
+            "avg_strength_delta": 0.0,
+            "max_strength_delta": 0.0,
+            "max_strength_group_location": "none",
+            "avg_connectivity_delta": 0.0,
+            "max_connectivity_delta": 0.0,
+            "max_connectivity_group_location": "none"
+        }
+    
+    # Calculate deltas
+    strength_deltas = [after.strength - before.strength for before, after in matched_pairs]
+    connectivity_deltas = [after.connectivity - before.connectivity for before, after in matched_pairs]
+    
+    # Find max deltas and their group locations
+    max_strength_idx = strength_deltas.index(max(strength_deltas))
+    max_connectivity_idx = connectivity_deltas.index(max(connectivity_deltas))
+    
+    max_strength_group = matched_pairs[max_strength_idx][1]  # after group
+    max_connectivity_group = matched_pairs[max_connectivity_idx][1]  # after group
+    
+    return {
+        "avg_strength_delta": float(np.mean(strength_deltas)),
+        "max_strength_delta": float(max(strength_deltas)),
+        "max_strength_group_location": get_group_location(max_strength_group, board),
+        "avg_connectivity_delta": float(np.mean(connectivity_deltas)),
+        "max_connectivity_delta": float(max(connectivity_deltas)),
+        "max_connectivity_group_location": get_group_location(max_connectivity_group, board)
+    }
 
 
 def compute_group_connectivity_delta_by_region(
@@ -938,22 +1147,28 @@ def is_cut_move(board: Board, move_loc: int) -> bool:
     return len(adj_opp_heads) >= 2
 
 
-def is_only_move(policy: np.ndarray, eps: float = EPSILON_POL) -> bool:
-    """Check if policy has only one non-zero value."""
-    non_zero = np.sum(policy > eps)
-    return non_zero == 1
+def is_only_move(policy: np.ndarray, eps: float = TAU_ONLY_MOVE) -> bool:
+    """Check if policy has only one move with significant probability (>0.95)."""
+    # Only move if the maximum probability is > 0.95
+    max_prob = float(np.max(policy))
+    return max_prob > (1.0 - eps)
 
 
 
 
 def is_tenuki(selected_idx: int, last_move_loc: Optional[int], policy: np.ndarray, board: Board) -> bool:
-    """Check if move is tenuki (different area + closer candidates exist)."""
-    if last_move_loc is None or selected_idx is None:
+    """Check if move is tenuki (different area + distance > 6 + local follow-up ignored)."""
+    if last_move_loc is None or selected_idx is None or last_move_loc == Board.PASS_LOC:
         return False
     
     size = 19
     x_sel, y_sel = selected_idx % size, selected_idx // size
     x_last, y_last = loc_to_xy(board, last_move_loc)
+    
+    # Check distance requirement (L1 >= 6)
+    l1_distance = abs(x_sel - x_last) + abs(y_sel - y_last)
+    if l1_distance < 6:
+        return False
     
     region_sel = classify_region(x_sel, y_sel, size)
     region_last = classify_region(x_last, y_last, size)
@@ -961,11 +1176,12 @@ def is_tenuki(selected_idx: int, last_move_loc: Optional[int], policy: np.ndarra
     if region_sel == region_last:
         return False
     
-    # Check if there are candidates in last region with higher probability
+    # Check if there are candidates within L1 <= 4 of last move with higher probability
     selected_prob = policy[selected_idx]
     for y in range(size):
         for x in range(size):
-            if classify_region(x, y, size) == region_last:
+            # Check if within L1 <= 4 of last move
+            if abs(x - x_last) + abs(y - y_last) <= 4:
                 idx = y * size + x
                 if idx < len(policy) and policy[idx] > selected_prob:
                     return True
@@ -1050,13 +1266,45 @@ def atari_move(board: Board, move_loc: int) -> bool:
                 if head in seen:
                     continue
                 seen.add(head)
-                if board.group_liberty_count[head] == 1:
-                    return True
+                
+                # Check if this group is almost in atari (2 liberty) AND the move is one of its liberties
+                if board.group_liberty_count[head] == 2:
+                    # Get the liberties of this group and check if move_loc is one of them
+                    group_liberties = get_group_liberties(board, head)
+                    if move_loc in group_liberties:
+                        return True
     
     return False
 
 
-def reduce_aji(before: np.ndarray, after: np.ndarray, board: Board, color: int) -> Tuple[bool, float]:
+def get_group_liberties(board: Board, group_head: int) -> Set[int]:
+    """Get all liberties of a deterministic group."""
+    if board.board[group_head] == Board.EMPTY:
+        return set()
+    
+    liberties = set()
+    cur = group_head
+    
+    # Walk through all stones in the group
+    while True:
+        stone_x, stone_y = loc_to_xy(board, cur)
+        
+        # Check all 4 orthogonal directions for liberties
+        for dx, dy in [(1,0), (-1,0), (0,1), (0,-1)]:
+            lib_x, lib_y = stone_x + dx, stone_y + dy
+            if in_bounds(lib_x, lib_y, board.size):
+                lib_loc = xy_to_loc(board, lib_x, lib_y)
+                if board.board[lib_loc] == Board.EMPTY:
+                    liberties.add(lib_loc)
+        
+        cur = board.group_next[cur]
+        if cur == group_head:
+            break
+    
+    return liberties
+
+
+def reduce_aji(before: np.ndarray, after: np.ndarray, board: Board, color: int, move_loc: Optional[int] = None) -> Tuple[bool, float]:
     """Calculate aji reduction (increase in own ownership over opponent groups that were under own ownership).
     
     Args:
@@ -1064,10 +1312,21 @@ def reduce_aji(before: np.ndarray, after: np.ndarray, board: Board, color: int) 
         after: Ownership map after move (from current player's perspective)
         board: Board state
         color: Current player (Board.BLACK or Board.WHITE)
+        move_loc: Location of the move (optional, for vicinity mask)
     """
     opp = Board.get_opp(color)
     size = board.size
     delta: List[float] = []
+    
+    # If move_loc is provided, create vicinity mask
+    vicinity_mask = None
+    if move_loc is not None and move_loc != Board.PASS_LOC:
+        move_x, move_y = loc_to_xy(board, move_loc)
+        vicinity_mask = np.zeros((size, size), dtype=bool)
+        for y in range(size):
+            for x in range(size):
+                if abs(x - move_x) + abs(y - move_y) <= TAU_AJI_VICINITY:
+                    vicinity_mask[y, x] = True
     
     for y in range(size):
         for x in range(size):
@@ -1076,8 +1335,10 @@ def reduce_aji(before: np.ndarray, after: np.ndarray, board: Board, color: int) 
                 # Only consider opponent stones that were under own ownership before
                 # For current player, own ownership is positive
                 if before[y, x] > TAU_POS:  # Was under own ownership
-                    ownership_increase = after[y, x] - before[y, x]
-                    delta.append(ownership_increase)
+                    # Apply vicinity mask if available
+                    if vicinity_mask is None or vicinity_mask[y, x]:
+                        ownership_increase = after[y, x] - before[y, x]
+                        delta.append(ownership_increase)
     
     if not delta:
         return False, 0.0
@@ -1089,16 +1350,55 @@ def reduce_aji(before: np.ndarray, after: np.ndarray, board: Board, color: int) 
     return reduces_aji, aji_reduction_intensity
 
 
-def attack_strength_delta(groups_before: List[Group], groups_after: List[Group], opp_color: int) -> Tuple[bool, float, float]:
-    """Calculate attack strength (negative change in opponent group strengths) and return avg and max intensity."""
-    before_map = {g.head: g for g in groups_before if g.color == opp_color}
-    after_map = {g.head: g for g in groups_after if g.color == opp_color}
-    common_heads = set(before_map.keys()) & set(after_map.keys())
+def attack_strength_delta(groups_before: List[Group], groups_after: List[Group], opp_color: int, board: Board) -> Tuple[bool, float, float]:
+    """Calculate attack strength using spatial overlap matching instead of head matching."""
+    before_groups = [g for g in groups_before if g.color == opp_color]
+    after_groups = [g for g in groups_after if g.color == opp_color]
     
-    if not common_heads:
+    if not before_groups or not after_groups:
         return False, 0.0, 0.0
     
-    deltas = [after_map[h].strength - before_map[h].strength for h in common_heads]
+    # Create spatial masks for each group
+    def group_to_mask(group: Group, size: int) -> np.ndarray:
+        mask = np.zeros((size, size), dtype=bool)
+        for loc in group.stones:
+            x, y = loc_to_xy(board, loc)
+            mask[y, x] = True
+        return mask
+    
+    # Match groups by spatial overlap (IoU)
+    matched_pairs = []
+    used_after = set()
+    
+    for before_group in before_groups:
+        before_mask = group_to_mask(before_group, board.size)
+        best_iou = 0.0
+        best_after_group = None
+        
+        for i, after_group in enumerate(after_groups):
+            if i in used_after:
+                continue
+            
+            after_mask = group_to_mask(after_group, board.size)
+            
+            # Calculate IoU
+            intersection = np.sum(before_mask & after_mask)
+            union = np.sum(before_mask | after_mask)
+            iou = intersection / union if union > 0 else 0.0
+            
+            if iou > best_iou and iou >= TAU_GROUP_IOU:
+                best_iou = iou
+                best_after_group = after_group
+        
+        if best_after_group is not None:
+            matched_pairs.append((before_group, best_after_group))
+            used_after.add(after_groups.index(best_after_group))
+    
+    if not matched_pairs:
+        return False, 0.0, 0.0
+    
+    # Calculate strength deltas for matched pairs
+    deltas = [after.strength - before.strength for before, after in matched_pairs]
     avg_attack_intensity = float(np.mean(deltas))
     max_attack_intensity = float(min(deltas))  # Most negative (strongest attack)
     
@@ -1107,19 +1407,237 @@ def attack_strength_delta(groups_before: List[Group], groups_after: List[Group],
     return is_attack, abs(avg_attack_intensity), abs(max_attack_intensity)
 
 
-def killing_attack(groups_after: List[Group], opp_color: int) -> Tuple[bool, float]:
-    """Check if any opponent group has strength <= -0.5 (>=0.5 own ownership) and compute kill intensity."""
+def compute_attack_metrics_avg_max(
+    groups_before: List[Group], 
+    groups_after: List[Group], 
+    board: Board,
+    opp_color: int
+) -> Dict[str, Any]:
+    """Compute average and max attack strength deltas for opponent groups.
+    
+    Args:
+        groups_before: Groups before the move
+        groups_after: Groups after the move  
+        board: Board state
+        opp_color: Opponent color being attacked
+    
+    Returns:
+        Dictionary with avg/max attack metrics and group locations
+    """
+    # Filter groups by opponent color
+    before_groups = [g for g in groups_before if g.color == opp_color]
+    after_groups = [g for g in groups_after if g.color == opp_color]
+    
+    if not before_groups or not after_groups:
+        return {
+            "avg_attack_intensity": 0.0,
+            "max_attack_intensity": 0.0,
+            "max_attack_group_location": "none",
+            "is_attack": False
+        }
+    
+    # Match groups by spatial overlap (IoU) - same logic as above
+    def group_to_mask(group: Group, size: int) -> np.ndarray:
+        mask = np.zeros((size, size), dtype=bool)
+        for loc in group.stones:
+            x, y = loc_to_xy(board, loc)
+            mask[y, x] = True
+        return mask
+    
+    def get_group_location(group: Group, board: Board) -> str:
+        """Get the most frequent region for stones in the group."""
+        region_counts = {}
+        for loc in group.stones:
+            x, y = loc_to_xy(board, loc)
+            region = classify_region(x, y, board.size)
+            region_counts[region] = region_counts.get(region, 0) + 1
+        
+        if not region_counts:
+            return "none"
+        
+        return max(region_counts, key=region_counts.get)
+    
+    matched_pairs = []
+    used_after = set()
+    
+    for before_group in before_groups:
+        before_mask = group_to_mask(before_group, board.size)
+        best_iou = 0.0
+        best_after_group = None
+        
+        for i, after_group in enumerate(after_groups):
+            if i in used_after:
+                continue
+            
+            after_mask = group_to_mask(after_group, board.size)
+            
+            # Calculate IoU
+            intersection = np.sum(before_mask & after_mask)
+            union = np.sum(before_mask | after_mask)
+            iou = intersection / union if union > 0 else 0.0
+            
+            if iou > best_iou and iou >= TAU_GROUP_IOU:
+                best_iou = iou
+                best_after_group = after_group
+        
+        if best_after_group is not None:
+            matched_pairs.append((before_group, best_after_group))
+            used_after.add(after_groups.index(best_after_group))
+    
+    if not matched_pairs:
+        return {
+            "avg_attack_intensity": 0.0,
+            "max_attack_intensity": 0.0,
+            "max_attack_group_location": "none",
+            "is_attack": False
+        }
+    
+    # Calculate attack deltas (negative values = attack)
+    attack_deltas = [after.strength - before.strength for before, after in matched_pairs]
+    
+    # Find max attack (most negative delta)
+    max_attack_idx = attack_deltas.index(min(attack_deltas))
+    max_attack_group = matched_pairs[max_attack_idx][1]  # after group
+    
+    avg_attack_intensity = float(np.mean([abs(d) for d in attack_deltas if d < 0]))
+    max_attack_intensity = float(abs(min(attack_deltas)))
+    is_attack = any(d < 0 for d in attack_deltas)
+    
+    return {
+        "avg_attack_intensity": avg_attack_intensity,
+        "max_attack_intensity": max_attack_intensity,
+        "max_attack_group_location": get_group_location(max_attack_group, board),
+        "is_attack": is_attack
+    }
+
+
+def killing_attack(groups_before: List[Group], groups_after: List[Group], opp_color: int, board: Board, move_loc: Optional[int] = None) -> Tuple[bool, float]:
+    """Check if move creates a killing attack by comparing before/after group strengths.
+    
+    A killing attack occurs when:
+    1. An opponent group's strength significantly decreases (becomes more negative)
+    2. The final strength is <= -0.5 (strong own ownership over opponent stones)
+    3. The move is spatially related to the attacked group (within L1 distance 3)
+    """
+    if move_loc is None or move_loc == Board.PASS_LOC:
+        return False, 0.0
+    
+    # Find opponent groups that were significantly weakened
     killed_groups = []
-    for g in groups_after:
-        if g.color == opp_color and g.strength <= -0.5:
-            killed_groups.append(g)
+    
+    # Create spatial masks for each group to match them
+    def group_to_mask(group: Group, size: int) -> np.ndarray:
+        mask = np.zeros((size, size), dtype=bool)
+        for loc in group.stones:
+            x, y = loc_to_xy(board, loc)
+            mask[y, x] = True
+        return mask
+    
+    # Match groups by spatial overlap (IoU)
+    before_groups = [g for g in groups_before if g.color == opp_color]
+    after_groups = [g for g in groups_after if g.color == opp_color]
+    
+    matched_pairs = []
+    used_after = set()
+    
+    for before_group in before_groups:
+        before_mask = group_to_mask(before_group, board.size)
+        best_iou = 0.0
+        best_after_group = None
+        
+        for i, after_group in enumerate(after_groups):
+            if i in used_after:
+                continue
+            
+            after_mask = group_to_mask(after_group, board.size)
+            
+            # Calculate IoU
+            intersection = np.sum(before_mask & after_mask)
+            union = np.sum(before_mask | after_mask)
+            iou = intersection / union if union > 0 else 0.0
+            
+            if iou > best_iou and iou >= TAU_GROUP_IOU:
+                best_iou = iou
+                best_after_group = after_group
+        
+        if best_after_group is not None:
+            matched_pairs.append((before_group, best_after_group))
+            used_after.add(after_groups.index(best_after_group))
+    
+    # Check for killing attacks in matched groups
+    move_x, move_y = loc_to_xy(board, move_loc)
+    
+    for before_group, after_group in matched_pairs:
+        # Check if group was significantly weakened
+        strength_delta = after_group.strength - before_group.strength
+        is_significantly_weakened = strength_delta < -0.2  # Significant weakening
+        
+        # Check if final strength indicates killing
+        is_killed = after_group.strength <= -0.5
+
+        if is_significantly_weakened and is_killed:
+            killed_groups.append(after_group)
     
     if not killed_groups:
         return False, 0.0
     
-    # Kill intensity is the final ownership mean over targeted stones
+    # Kill intensity is the mean of the absolute strength values of killed groups
     kill_intensity = float(np.mean([abs(g.strength) for g in killed_groups]))
     return True, kill_intensity
+
+
+# -------------------------
+# Scope and Local Analysis Helpers
+# -------------------------
+
+def create_local_mask(move_loc: int, board: Board, radius: int) -> np.ndarray:
+    """Create a mask for local analysis around a move location."""
+    if move_loc == Board.PASS_LOC:
+        return np.zeros((board.size, board.size), dtype=bool)
+    
+    mask = np.zeros((board.size, board.size), dtype=bool)
+    move_x, move_y = loc_to_xy(board, move_loc)
+    
+    for y in range(board.size):
+        for x in range(board.size):
+            if abs(x - move_x) + abs(y - move_y) <= radius:
+                mask[y, x] = True
+    
+    return mask
+
+
+def apply_local_mask_to_territory_deltas(
+    before: np.ndarray, 
+    after: np.ndarray, 
+    local_mask: np.ndarray,
+    color: int, 
+    board: Board
+) -> Tuple[int, float, float, int, float, float, int, float, float]:
+    """Apply local mask to territory delta calculations and return both local and global metrics."""
+    # Global metrics
+    building_count_global, building_intensity_global, building_sum_global = count_building_territory(before, after, color, board)
+    solidification_count_global, solidification_intensity_global, solidification_sum_global = solidify_territory_delta(before, after, color, board)
+    reduction_count_global, reduction_intensity_global, reduction_sum_global = reduce_opponent_territory_count(before, after, color, board)
+    
+    # Local metrics (apply mask)
+    building_count_local, building_intensity_local, building_sum_local = count_building_territory(
+        before * local_mask, after * local_mask, color, board
+    )
+    solidification_count_local, solidification_intensity_local, solidification_sum_local = solidify_territory_delta(
+        before * local_mask, after * local_mask, color, board
+    )
+    reduction_count_local, reduction_intensity_local, reduction_sum_local = reduce_opponent_territory_count(
+        before * local_mask, after * local_mask, color, board
+    )
+    
+    return (
+        building_count_local, building_intensity_local, building_sum_local,
+        solidification_count_local, solidification_intensity_local, solidification_sum_local,
+        reduction_count_local, reduction_intensity_local, reduction_sum_local,
+        building_count_global, building_intensity_global, building_sum_global,
+        solidification_count_global, solidification_intensity_global, solidification_sum_global,
+        reduction_count_global, reduction_intensity_global, reduction_sum_global
+    )
 
 
 # -------------------------
@@ -1157,13 +1675,21 @@ def normalize_before_by_alignment(
     mask = (np.abs(a) >= tau) | (np.abs(b) >= tau)
     if not np.any(mask):
         # If everything is tiny, just return as-is (no basis to align)
+        print(f"[warn] No meaningful ownership points found for alignment (tau={tau})")
         return b.copy()
 
     score_same = float(np.sum(a[mask] * b[mask]))
+    score_flipped = float(np.sum(a[mask] * (-b[mask])))
+    
+    print(f"[debug] Alignment scores: same={score_same:.3f}, flipped={score_flipped:.3f}")
+    
     # If agreeing is worse than disagreeing, flip
-    if score_same < 0.0:
+    if score_same < score_flipped:
+        print(f"[debug] Flipping before ownership map")
         return -b
-    return b.copy()
+    else:
+        print(f"[debug] Keeping before ownership map as-is")
+        return b.copy()
 
 
 def verify_coordinate_mappings():
@@ -1186,6 +1712,22 @@ def verify_coordinate_mappings():
         actual_region = classify_region(x, y, size)
         print(f"Star point ({x},{y}) -> {actual_region} (expected {expected_region}): {'✓' if actual_region == expected_region else '✗'}")
     
+    # Test specific move 16 location
+    move_16_x, move_16_y = 4, 5
+    move_16_idx = move_16_y * size + move_16_x
+    move_16_region = classify_region(move_16_x, move_16_y, size)
+    print(f"Move 16 location ({move_16_x},{move_16_y}) -> idx {move_16_idx}, region {move_16_region}")
+    
+    # Test the areas that were previously misclassified
+    test_areas = [
+        (4, 4, "e5"), (5, 5, "f6"),  # These should now be corner_tl
+        (13, 13, "n14"), (14, 14, "o15")  # These should now be corner_br
+    ]
+    print("\nTesting previously misclassified areas:")
+    for x, y, coord in test_areas:
+        region = classify_region(x, y, size)
+        print(f"{coord} ({x},{y}) -> {region}")
+    
     print("=====================================")
 
 
@@ -1201,7 +1743,8 @@ def analyze_position_comprehensive(
     move_loc: Optional[int] = None,
     last_move_loc: Optional[int] = None,
     before_ownership: Optional[np.ndarray] = None,
-    before_board: Optional[Board] = None
+    before_board: Optional[Board] = None,
+    scope_radius: int = 5
 ) -> Dict[str, Any]:
     """
     Perform comprehensive analysis of a position using all 28 concepts.
@@ -1209,17 +1752,19 @@ def analyze_position_comprehensive(
     Args:
         board: Current board state
         ownership: Current ownership map (19x19) - from current player's perspective
-        policy: Policy distribution (361)
+        policy: Policy distribution (361) - should be pre-move policy
         player: Current player (Board.BLACK or Board.WHITE)
         move_loc: Location of current move (optional)
         last_move_loc: Location of last move (optional)
         before_ownership: Ownership before current move (optional) - from current player's perspective
-        before_board: Board state before current move (optional)
+        before_board: Board state before current move (optional) - required for accurate frame alignment
+        scope_radius: Radius for local vs global metrics (default 5)
     
     Returns:
         Dictionary containing all analysis results matching the specification.
         Note: For annotation purposes, these can be treated as tags with values
         and directions (plus/minus) as mentioned in the original specification.
+        Pass moves short-circuit territory delta metrics and tenuki/only-move checks.
     """
     results = {}
     
@@ -1232,6 +1777,9 @@ def analyze_position_comprehensive(
             print(f"[warn] player({player}) != board.pla({board.pla}); using board.pla")
             analyze_position_comprehensive._player_sync_warned = True
         player = board.pla
+    
+    # Handle pass moves - short-circuit territory deltas and some tactical checks
+    is_pass_move = (move_loc is not None and move_loc == Board.PASS_LOC)
     
     # Verify coordinate mappings (run once for debugging)
     if not hasattr(analyze_position_comprehensive, '_coordinate_verified'):
@@ -1276,6 +1824,15 @@ def analyze_position_comprehensive(
         # Alignment verification
         dot = float(np.sum(before_ownership_current * ownership_current))
         print(f"[debug] alignment dot={dot:.3f}")
+        
+        # Additional debugging for move location
+        if move_loc is not None and move_loc != Board.PASS_LOC:
+            move_x, move_y = loc_to_xy(board, move_loc)
+            print(f"move_loc: {move_loc} -> ({move_x}, {move_y})")
+            print(f"before[move]: {float(before_ownership_current[move_y, move_x]):.4f}")
+            print(f"after[move]: {float(ownership_current[move_y, move_x]):.4f}")
+            print(f"move region: {classify_region(move_x, move_y, board.size)}")
+        
         print("===================================")
     
     # 1-2. Urgency by region (regions are static, not needed in output)
@@ -1298,34 +1855,66 @@ def analyze_position_comprehensive(
     # Groups are used for computation but not returned (per note #1)
     # Only derived metrics are included in results
     
-    # 8-16. Territory analysis
-    if before_ownership_current is not None:
-        # Building territory
-        building_count, building_intensity = count_building_territory(before_ownership_current, ownership_current, player, board)
-        results["building_count"] = building_count
-        results["building_intensity"] = building_intensity
+    # 8-16. Territory analysis (skip for pass moves)
+    if before_ownership_current is not None and not is_pass_move:
+        # Create local mask for scope-based analysis
+        local_mask = create_local_mask(move_loc, board, scope_radius)
         
-        # Solidification
-        solidification_count, solidification_value = solidify_territory_delta(before_ownership_current, ownership_current, player, board)
-        results["solidification_count"] = solidification_count
-        results["solidification_value"] = solidification_value
+        # Get both local and global territory metrics
+        (building_count_local, building_intensity_local, building_sum_local,
+         solidification_count_local, solidification_intensity_local, solidification_sum_local,
+         reduction_count_local, reduction_intensity_local, reduction_sum_local,
+         building_count_global, building_intensity_global, building_sum_global,
+         solidification_count_global, solidification_intensity_global, solidification_sum_global,
+         reduction_count_global, reduction_intensity_global, reduction_sum_global) = apply_local_mask_to_territory_deltas(
+            before_ownership_current, ownership_current, local_mask, player, board
+        )
         
-        # Reduction
-        reduction_count, reduction_intensity = reduce_opponent_territory_count(before_ownership_current, ownership_current, player, board)
-        results["reduction_count"] = reduction_count
-        results["reduction_intensity"] = reduction_intensity
+        # Store both local and global metrics
+        results["building_count_local"] = building_count_local
+        results["building_intensity_local"] = building_intensity_local
+        results["building_sum_local"] = building_sum_local
+        results["building_count_global"] = building_count_global
+        results["building_intensity_global"] = building_intensity_global
+        results["building_sum_global"] = building_sum_global
         
-        # Invasion
-        is_invasion, invasion_intensity = invasion_effect(before_ownership_current, ownership_current, player, board)
+        results["solidification_count_local"] = solidification_count_local
+        results["solidification_intensity_local"] = solidification_intensity_local
+        results["solidification_sum_local"] = solidification_sum_local
+        results["solidification_count_global"] = solidification_count_global
+        results["solidification_intensity_global"] = solidification_intensity_global
+        results["solidification_sum_global"] = solidification_sum_global
+        
+        results["reduction_count_local"] = reduction_count_local
+        results["reduction_intensity_local"] = reduction_intensity_local
+        results["reduction_sum_local"] = reduction_sum_local
+        results["reduction_count_global"] = reduction_count_global
+        results["reduction_intensity_global"] = reduction_intensity_global
+        results["reduction_sum_global"] = reduction_sum_global
+        
+        # Legacy fields (use global for backward compatibility)
+        results["building_count"] = building_count_global
+        results["building_intensity"] = building_intensity_global
+        results["building_sum"] = building_sum_global
+        results["solidification_count"] = solidification_count_global
+        results["solidification_intensity"] = solidification_intensity_global
+        results["solidification_sum"] = solidification_sum_global
+        results["reduction_count"] = reduction_count_global
+        results["reduction_intensity"] = reduction_intensity_global
+        results["reduction_sum"] = reduction_sum_global
+        
+        # Invasion (global only)
+        is_invasion, invasion_intensity = invasion_effect(before_ownership_current, ownership_current, player, board, move_loc)
         results["invasion"] = is_invasion
         results["invasion_intensity"] = invasion_intensity
         
         # Additional diagnostic prints for territory analysis
-        print(f"building_count / reduction_count: {results['building_count']} / {results['reduction_count']}")
+        print(f"building_count (local/global): {building_count_local}/{building_count_global}")
+        print(f"reduction_count (local/global): {reduction_count_local}/{reduction_count_global}")
         print(f"invasion: {results['invasion']}, invasion_intensity: {results['invasion_intensity']:.4f}")
         
         # Leaving weakness
-        results["leaves_weakness"] = leaving_weakness(before_ownership_current, ownership_current, player)
+        results["leaves_weakness"] = leaving_weakness(before_ownership_current, ownership_current, player, board)
         
         # Regional weakening
         weakening_count = {}
@@ -1349,17 +1938,47 @@ def analyze_position_comprehensive(
         results["reduction_count_by_region"] = reduction_count_by_region
         results["reduction_intensity_by_region"] = reduction_intensity_by_region
         
+        # Debug regional reduction
+        print("=== REGIONAL REDUCTION DEBUG ===")
+        for region, count in reduction_count_by_region.items():
+            if count > 0:
+                print(f"{region}: {count} reductions (intensity: {reduction_intensity_by_region[region]:.3f})")
+        print("================================")
+        
     else:
-        # Set defaults when no before_ownership available
-        results["building_count"] = 0
-        results["building_intensity"] = 0.0
-        results["solidification_count"] = 0
-        results["solidification_value"] = 0.0
-        results["reduction_count"] = 0
-        results["reduction_intensity"] = 0.0
+        # Set defaults when no before_ownership available or pass move
+        results["building_count_local"] = 0
+        results["building_intensity_local"] = 0.0
+        results["building_sum_local"] = 0.0
+        results["building_count_global"] = 0
+        results["building_intensity_global"] = 0.0
+        results["building_sum_global"] = 0.0
+        results["solidification_count_local"] = 0
+        results["solidification_intensity_local"] = 0.0
+        results["solidification_sum_local"] = 0.0
+        results["solidification_count_global"] = 0
+        results["solidification_intensity_global"] = 0.0
+        results["solidification_sum_global"] = 0.0
+        results["reduction_count_local"] = 0
+        results["reduction_intensity_local"] = 0.0
+        results["reduction_sum_local"] = 0.0
+        results["reduction_count_global"] = 0
+        results["reduction_intensity_global"] = 0.0
+        results["reduction_sum_global"] = 0.0
         results["invasion"] = False
         results["invasion_intensity"] = 0.0
         results["leaves_weakness"] = 0
+        
+        # Legacy fields
+        results["building_count"] = 0
+        results["building_intensity"] = 0.0
+        results["building_sum"] = 0.0
+        results["solidification_count"] = 0
+        results["solidification_intensity"] = 0.0
+        results["solidification_sum"] = 0.0
+        results["reduction_count"] = 0
+        results["reduction_intensity"] = 0.0
+        results["reduction_sum"] = 0.0
         results["weakening_count_by_region"] = {region: 0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
         results["weakening_intensity_by_region"] = {region: 0.0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
         results["building_count_by_region"] = {region: 0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
@@ -1392,8 +2011,8 @@ def analyze_position_comprehensive(
         results["indirect_sacrifice"] = 0
         results["indirect_sacrifice_intensity"] = 0.0
     
-    # 18-25. Tactical concepts
-    if move_loc is not None:
+    # 18-25. Tactical concepts (skip for pass moves)
+    if move_loc is not None and not is_pass_move:
         results["cut"] = is_cut_move(board, move_loc)
         
         is_connection, connection_strength_gain = is_connection_move(board, move_loc, player)
@@ -1411,9 +2030,9 @@ def analyze_position_comprehensive(
         results["liberties"] = 0
         results["atari"] = False
     
-    results["only_move"] = is_only_move(policy)
+    results["only_move"] = is_only_move(policy) if not is_pass_move else False
     
-    if last_move_loc is not None and move_loc is not None:
+    if last_move_loc is not None and move_loc is not None and not is_pass_move:
         move_idx = loc_to_xy(board, move_loc)[1] * 19 + loc_to_xy(board, move_loc)[0]
         results["tenuki"] = is_tenuki(move_idx, last_move_loc, policy, board)
     else:
@@ -1421,24 +2040,24 @@ def analyze_position_comprehensive(
     
     # 26-28. Attack concepts
     if before_ownership_current is not None:
-        reduces_aji, aji_reduction_intensity = reduce_aji(before_ownership_current, ownership_current, board, player)
+        reduces_aji, aji_reduction_intensity = reduce_aji(before_ownership_current, ownership_current, board, player, move_loc)
         results["reduce_aji"] = reduces_aji
         results["aji_reduction_intensity"] = aji_reduction_intensity
         
         # Calculate attack effects
         if before_board is not None:
             groups_before = enumerate_groups_deterministic(before_board)
-            is_attack, avg_attack_intensity, max_attack_intensity = attack_strength_delta(groups_before, groups_det, Board.get_opp(player))
+            is_attack, avg_attack_intensity, max_attack_intensity = attack_strength_delta(groups_before, groups_det, Board.get_opp(player), board)
             results["attack"] = is_attack
             results["avg_attack_intensity"] = avg_attack_intensity
             results["max_attack_intensity"] = max_attack_intensity
             
-            # Group deltas by region
+            # Group deltas by region (legacy)
             group_strength_delta_by_region = compute_group_strength_delta_by_region(groups_before, groups_det, board)
             results["group_strength_delta_by_region"] = group_strength_delta_by_region
             results["group_strength_delta"] = sum(group_strength_delta_by_region.values())
             
-            # Max group strength delta (which group is being helped most)
+            # Max group strength delta (which group is being helped most) (legacy)
             max_strength_delta, max_strength_region = compute_max_group_strength_delta(groups_before, groups_det, board)
             results["max_group_strength_delta"] = max_strength_delta
             results["max_group_strength_region"] = max_strength_region
@@ -1447,10 +2066,18 @@ def analyze_position_comprehensive(
             results["group_connectivity_delta_by_region"] = group_connectivity_delta_by_region
             results["group_connectivity_delta"] = sum(group_connectivity_delta_by_region.values())
             
-            # Max group connectivity delta (which group's connectivity is being improved most)
+            # Max group connectivity delta (which group's connectivity is being improved most) (legacy)
             max_connectivity_delta, max_connectivity_region = compute_max_group_connectivity_delta(groups_before, groups_det, board)
             results["max_group_connectivity_delta"] = max_connectivity_delta
             results["max_group_connectivity_region"] = max_connectivity_region
+            
+            # NEW: Improved group metrics with avg/max and locations
+            own_group_metrics = compute_group_metrics_avg_max(groups_before, groups_det, board, player)
+            results.update({f"own_{k}": v for k, v in own_group_metrics.items()})
+            
+            # Attack metrics for opponent groups
+            attack_metrics = compute_attack_metrics_avg_max(groups_before, groups_det, board, Board.get_opp(player))
+            results.update(attack_metrics)
             
             influence_count_delta_by_region, influence_strength_delta_by_region = compute_influence_delta_by_region(groups_before, groups_det, board)
             results["influence_count_delta_by_region"] = influence_count_delta_by_region
@@ -1471,13 +2098,28 @@ def analyze_position_comprehensive(
             results["group_connectivity_delta"] = 0.0
             results["max_group_connectivity_delta"] = 0.0
             results["max_group_connectivity_region"] = "none"
+            
+            # NEW: Default values for improved metrics
+            results["own_avg_strength_delta"] = 0.0
+            results["own_max_strength_delta"] = 0.0
+            results["own_max_strength_group_location"] = "none"
+            results["own_avg_connectivity_delta"] = 0.0
+            results["own_max_connectivity_delta"] = 0.0
+            results["own_max_connectivity_group_location"] = "none"
+            results["avg_attack_intensity"] = 0.0
+            results["max_attack_intensity"] = 0.0
+            results["max_attack_group_location"] = "none"
             results["influence_count_delta_by_region"] = {region: 0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
             results["influence_count_delta"] = 0
             results["influence_strength_delta_by_region"] = {region: 0.0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
             results["influence_strength_delta"] = 0.0
             results["creates_new_group"] = False
         
-        is_killing_attack, kill_intensity = killing_attack(groups_det, Board.get_opp(player))
+        if before_board is not None:
+            groups_before = enumerate_groups_deterministic(before_board)
+            is_killing_attack, kill_intensity = killing_attack(groups_before, groups_det, Board.get_opp(player), board, move_loc)
+        else:
+            is_killing_attack, kill_intensity = False, 0.0
         results["killing_attack"] = is_killing_attack
         results["kill_intensity"] = kill_intensity
     else:
@@ -1493,6 +2135,17 @@ def analyze_position_comprehensive(
         results["group_connectivity_delta"] = 0.0
         results["max_group_connectivity_delta"] = 0.0
         results["max_group_connectivity_region"] = "none"
+        
+        # NEW: Default values for improved metrics
+        results["own_avg_strength_delta"] = 0.0
+        results["own_max_strength_delta"] = 0.0
+        results["own_max_strength_group_location"] = "none"
+        results["own_avg_connectivity_delta"] = 0.0
+        results["own_max_connectivity_delta"] = 0.0
+        results["own_max_connectivity_group_location"] = "none"
+        results["avg_attack_intensity"] = 0.0
+        results["max_attack_intensity"] = 0.0
+        results["max_attack_group_location"] = "none"
         results["influence_count_delta_by_region"] = {region: 0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
         results["influence_count_delta"] = 0
         results["influence_strength_delta_by_region"] = {region: 0.0 for region in ["corner_tl", "corner_tr", "corner_bl", "corner_br", "side_left", "side_right", "side_top", "side_bottom", "center"]}
@@ -1538,6 +2191,10 @@ __all__ = [
     "compute_max_group_strength_delta",
     "compute_group_connectivity_delta_by_region",
     "compute_max_group_connectivity_delta",
+    "compute_group_metrics_avg_max",
+    "compute_attack_metrics_avg_max",
+    "create_local_mask",
+    "apply_local_mask_to_territory_deltas",
     "normalize_ownership_to_player_frame",
     "normalize_before_by_alignment",
     "verify_coordinate_mappings",

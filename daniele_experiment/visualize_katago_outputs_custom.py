@@ -1581,9 +1581,9 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     detailsHtml += '</div><br>';
                 }}
                 
-                // Group changes
+                // Group changes (legacy)
                 if (analysis.group_strength_delta !== 0 || analysis.group_connectivity_delta !== 0) {{
-                    detailsHtml += '<div><strong>Group Changes:</strong><br>';
+                    detailsHtml += '<div><strong>Group Changes (Legacy):</strong><br>';
                     if (analysis.group_strength_delta !== 0) {{
                         detailsHtml += `Strength Delta: ${{(analysis.group_strength_delta || 0).toFixed(2)}}<br>`;
                     }}
@@ -1599,7 +1599,41 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     if (analysis.creates_new_group) {{
                         detailsHtml += `Creates New Group: Yes<br>`;
                     }}
-                    detailsHtml += '</div>';
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // NEW: Improved group metrics
+                if (analysis.own_avg_strength_delta !== 0 || analysis.own_max_strength_delta !== 0 || 
+                    analysis.own_avg_connectivity_delta !== 0 || analysis.own_max_connectivity_delta !== 0) {{
+                    detailsHtml += '<div><strong>Own Group Changes:</strong><br>';
+                    if (analysis.own_avg_strength_delta !== 0) {{
+                        detailsHtml += `Avg Strength Delta: ${{(analysis.own_avg_strength_delta || 0).toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.own_max_strength_delta !== 0) {{
+                        detailsHtml += `Max Strength Delta: ${{(analysis.own_max_strength_delta || 0).toFixed(2)}} (${{analysis.own_max_strength_group_location || 'none'}})<br>`;
+                    }}
+                    if (analysis.own_avg_connectivity_delta !== 0) {{
+                        detailsHtml += `Avg Connectivity Delta: ${{(analysis.own_avg_connectivity_delta || 0).toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.own_max_connectivity_delta !== 0) {{
+                        detailsHtml += `Max Connectivity Delta: ${{(analysis.own_max_connectivity_delta || 0).toFixed(2)}} (${{analysis.own_max_connectivity_group_location || 'none'}})<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
+                }}
+                
+                // NEW: Attack metrics
+                if (analysis.avg_attack_intensity !== 0 || analysis.max_attack_intensity !== 0) {{
+                    detailsHtml += '<div><strong>Attack Metrics:</strong><br>';
+                    if (analysis.avg_attack_intensity !== 0) {{
+                        detailsHtml += `Avg Attack Intensity: ${{(analysis.avg_attack_intensity || 0).toFixed(2)}}<br>`;
+                    }}
+                    if (analysis.max_attack_intensity !== 0) {{
+                        detailsHtml += `Max Attack Intensity: ${{(analysis.max_attack_intensity || 0).toFixed(2)}} (${{analysis.max_attack_group_location || 'none'}})<br>`;
+                    }}
+                    if (analysis.is_attack) {{
+                        detailsHtml += `Is Attack: Yes<br>`;
+                    }}
+                    detailsHtml += '</div><br>';
                 }}
                 
                 detailsDiv.innerHTML = detailsHtml;
