@@ -1023,6 +1023,16 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                             <span class="feature-explanation">change</span>
                             <span id="current-group-influence-count-delta">-</span>
                         </div>
+                        <div class="sticky-value-item" title="Influence strength of this group (mean ownership of influenced points)">
+                            <strong>Influence Str</strong>
+                            <span class="feature-explanation">strength</span>
+                            <span id="current-group-influence-strength">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Change in influence strength of this group">
+                            <strong>Influence Str Δ</strong>
+                            <span class="feature-explanation">change</span>
+                            <span id="current-group-influence-strength-delta">-</span>
+                        </div>
                         <div class="sticky-value-item" title="Liberty count of the group containing the played stone">
                             <strong>Liberties</strong>
                             <span class="feature-explanation">empty adj</span>
@@ -1715,7 +1725,9 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     'current-group-connectivity': '-',
                     'current-group-connectivity-delta': '-',
                     'current-group-influence-count': '-',
-                    'current-group-influence-count-delta': '-'
+                    'current-group-influence-count-delta': '-',
+                    'current-group-influence-strength': '-',
+                    'current-group-influence-strength-delta': '-'
                 }};
                 
                 for (const [id, value] of Object.entries(elements)) {{
@@ -1891,6 +1903,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 'current-group-connectivity-delta': analysis.current_group_connectivity_delta !== undefined ? ((analysis.current_group_connectivity_delta >= 0 ? '+' : '') + (analysis.current_group_connectivity_delta || 0).toFixed(3)) : '-',
                 'current-group-influence-count': analysis.current_group_influence_count !== undefined ? (analysis.current_group_influence_count || 0) : '-',
                 'current-group-influence-count-delta': analysis.current_group_influence_count_delta !== undefined ? ((analysis.current_group_influence_count_delta >= 0 ? '+' : '') + (analysis.current_group_influence_count_delta || 0)) : '-',
+                'current-group-influence-strength': analysis.current_group_influence_strength !== undefined ? (analysis.current_group_influence_strength || 0).toFixed(3) : '-',
+                'current-group-influence-strength-delta': analysis.current_group_influence_strength_delta !== undefined ? ((analysis.current_group_influence_strength_delta >= 0 ? '+' : '') + (analysis.current_group_influence_strength_delta || 0).toFixed(3)) : '-',
                 'liberties': analysis.liberties !== undefined ? (analysis.liberties || 0) : '-',
                 'creates-new-group': analysis.creates_new_group !== undefined ? (analysis.creates_new_group ? 'Yes' : 'No') : '-',
                 
