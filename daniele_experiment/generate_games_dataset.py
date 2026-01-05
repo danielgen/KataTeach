@@ -43,6 +43,9 @@ from common_utils import (
     _idx361_from_loc, calculate_dynamic_threshold
 )
 
+# Import snorkel analysis
+from snorkel_board_positions import analyze_position_comprehensive
+
 # Import HTML renderer directly (must be importable)
 from visualize_katago_outputs_custom import generate_html_visualization  # type: ignore
 
@@ -146,6 +149,20 @@ def generate_games(
                 if "trunkfinal" in outputs:
                     np.save(trunk_dir / f"move_{move_number:03d}.npy", outputs["trunkfinal"])  # type: ignore[arg-type]
 
+                # Normalize ownership to current player's perspective before storing
+                # KataGo outputs ownership from White's perspective (positive = White territory)
+                post_normalized = post.copy()
+                if "ownership" in post_normalized:
+                    ownership_raw = post_normalized["ownership"]
+                    # Convert from [1, 19, 19] to [19, 19] if needed
+                    if ownership_raw.ndim == 3:
+                        ownership_raw = ownership_raw[0]
+                    # Flip ownership only for Black (to convert from White's perspective to Black's)
+                    if pla == Board.BLACK:
+                        post_normalized["ownership"] = -ownership_raw
+                    else:
+                        post_normalized["ownership"] = ownership_raw
+
                 # Write per-move outputs JSONL (post state, but include selected move info)
                 record = {
                     "move_number": move_number,
@@ -153,7 +170,7 @@ def generate_games(
                     "move_loc": int(move_loc),
                     "idx361": int(_idx361_from_loc(move_loc, gs.board)),
                     "selected_prob": float(move_prob),
-                    **convert_numpy_to_python(post),
+                    **convert_numpy_to_python(post_normalized),
                 }
                 f_jsonl.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -244,7 +261,11 @@ def generate_games(
 
 
 def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: int, model_path: Path, device: str | None = None) -> None:
-    """Generate HTML files with snorkel analysis data included."""
+    """Generate HTML files with snorkel analysis data included.
+    
+    If save_html > 0, only processes the first save_html games.
+    If save_html == 0, processes all games that have snorkel data.
+    """
     from gamestate import GameState, Board
     from load_model import load_model
     import json
@@ -255,7 +276,22 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
     game_dirs = [d for d in games_dir.iterdir() if d.is_dir()]
     game_dirs.sort(key=lambda x: x.name)  # Sort by UUID for consistent ordering
     
-    for game_index, game_dir in enumerate(game_dirs[:save_html], 1):
+    # Filter to only games with snorkel data
+    games_with_snorkel = []
+    for game_dir in game_dirs:
+        snorkel_path = game_dir / "snorkel.jsonl"
+        if snorkel_path.exists():
+            games_with_snorkel.append(game_dir)
+    
+    # Limit to save_html games if specified, otherwise process all
+    if save_html > 0:
+        games_to_process = games_with_snorkel[:save_html]
+    else:
+        games_to_process = games_with_snorkel
+    
+    print(f"  Found {len(games_with_snorkel)} games with snorkel data, processing {len(games_to_process)}")
+    
+    for game_index, game_dir in enumerate(games_to_process, 1):
         try:
             # Load game metadata
             meta_path = game_dir / "meta.json"
@@ -292,7 +328,7 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
             
             print(f"  Extracted {len(moves)} moves from moves.jsonl")
             
-            # Load snorkel data
+            # Load snorkel data (we already filtered for this, but double-check)
             snorkel_path = game_dir / "snorkel.jsonl"
             if not snorkel_path.exists():
                 print(f"  Skipping {game_dir.name}: no snorkel data found")
@@ -368,6 +404,11 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
 def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) -> None:
     """Comprehensive snorkel analysis that computes all 28 concepts per move.
     Writes games/<uuid>/snorkel.jsonl with per-move comprehensive analysis.
+    
+    Ownership convention:
+        - KataGo always outputs ownership from White's perspective (positive = White)
+        - We pass raw ownership to analyze_position_comprehensive which handles normalization
+        - Both before and after ownership should be raw KataGo outputs (White's perspective)
     """
     from snorkel_board_positions import analyze_position_comprehensive
     from gamestate import GameState, Board
@@ -410,8 +451,11 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
         board_size = 19
         gs = GameState(board_size, GameState.RULES_TT)
         
-        # Track ownership before each move for territory analysis
-        ownership_before = None
+        # Track ownership and board state before each move for territory and group analysis
+        # ownership_before is always raw KataGo output (White's perspective)
+        # Initialize to zeros for the first move (empty board has neutral ownership)
+        ownership_before_raw = np.zeros((board_size, board_size), dtype=np.float32)
+        board_before = None
         
         with out_path.open("w", encoding="utf-8") as f_out:
             for i, rec in enumerate(moves_data):
@@ -429,29 +473,48 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                     if i > 0:
                         last_move_loc = moves_data[i-1].get("move_loc")
                     
-                    # Get current ownership from model evaluation
-                    outputs = gs.get_model_outputs(model)
-                    ownership = outputs.get("ownership", np.zeros((board_size, board_size), dtype=np.float32))
+                    # Capture board state BEFORE the move (for group comparisons)
+                    board_before = gs.board.copy()
+                    ownership_before_for_analysis = ownership_before_raw.copy()
                     
-                    # Convert ownership from [1, 19, 19] to [19, 19] if needed
-                    if ownership.ndim == 3:
-                        ownership = ownership[0]  # Take first (and only) batch
+                    # Play the move first to get post-move state
+                    if move_loc is not None and move_loc != Board.PASS_LOC:
+                        try:
+                            gs.play(current_player, move_loc)
+                        except Exception:
+                            # Skip invalid moves
+                            pass
                     
-                    # Ownership in moves.jsonl is already from current player's perspective
-                    # We can use it directly, but before_ownership needs to be negated
-                    ownership_fixed = ownership
-                    ownership_before_fixed = -ownership_before if ownership_before is not None else None
+                    # Get post-move ownership
+                    # Raw ownership from get_model_outputs is from current player to move's perspective
+                    # After the move, gs.board.pla is the opponent (next to play)
+                    ownership_after = rec.get("ownership_after")
+                    if ownership_after is not None:
+                        ownership_after_raw = np.array(ownership_after).reshape(board_size, board_size)
+                    else:
+                        # Get from model evaluation after the move
+                        outputs_after = gs.get_model_outputs(model)
+                        ownership_after_raw = outputs_after.get("ownership", np.zeros((board_size, board_size), dtype=np.float32))
+                        if ownership_after_raw.ndim == 3:
+                            ownership_after_raw = ownership_after_raw[0]
                     
-                    # Perform comprehensive analysis
+                    # Who is to play after the move (opponent)
+                    post_move_player = gs.board.pla
+                    
+                    # Perform comprehensive analysis AFTER the move
+                    # ownership_after_raw is from post_move_player's perspective (who is to play now)
+                    # ownership_before_for_analysis is from current_player's perspective (was to play before move)
+                    # before_board.pla == current_player, so it will normalize correctly
                     analysis = analyze_position_comprehensive(
-                        board=gs.board,
-                        ownership=ownership_fixed,
+                        board=gs.board,  # Post-move board
+                        ownership=ownership_after_raw,  # From post_move_player's perspective
                         policy=np.array(policy) if policy else np.zeros(361),
                         player=current_player,
                         move_loc=move_loc,
                         last_move_loc=last_move_loc,
-                        before_ownership=ownership_before_fixed,
-                        before_board=None  # TODO: Track before board state for full feature support
+                        before_ownership=ownership_before_for_analysis,  # From current_player's perspective
+                        before_board=board_before,  # Pre-move board state (board_before.pla == current_player)
+                        ownership_frame_player=post_move_player  # Frame of ownership_after_raw
                     )
                     
                     # Convert numpy arrays to lists for JSON serialization
@@ -473,16 +536,9 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                         out_safe = convert_numpy_to_python(out)
                         f_out.write(json.dumps(out_safe, ensure_ascii=False, default=str) + "\n")
                     
-                    # Store current ownership as "before" for next move
-                    ownership_before = ownership.copy()
-                    
-                    # Advance game state for next move
-                    if move_loc is not None and move_loc != Board.PASS_LOC:
-                        try:
-                            gs.play(current_player, move_loc)
-                        except Exception:
-                            # Skip invalid moves
-                            pass
+                    # Store raw ownership_after for next move's "before" analysis
+                    # Keep it in raw KataGo format (White's perspective)
+                    ownership_before_raw = ownership_after_raw.copy()
                             
                 except Exception as e:
                     print(f"Error analyzing move {i}: {e}")
@@ -539,9 +595,10 @@ def main() -> None:
         run_snorkel(args.output_dir, args.model, dev)
         
         # Now generate HTML with snorkel data included
-        if args.save_html > 0:
-            print("Generating HTML with snorkel analysis data...")
-            generate_html_with_snorkel(args.output_dir, args.save_html, args.html_max_moves, args.model, dev)
+        # When --run-snorkel is used, generate HTML for games that have snorkel data
+        # If save_html > 0, limit to first N games; if 0, generate for all games with snorkel data
+        print("Generating HTML with snorkel analysis data...")
+        generate_html_with_snorkel(args.output_dir, args.save_html, args.html_max_moves, args.model, dev)
 
 
 if __name__ == "__main__":

@@ -190,21 +190,26 @@ def play_short_game(model, max_moves=10):
                 policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
                 last_move_loc = moves[-1][1] if moves else None
                 
-                # IMPORTANT: use the post-move player (board.pla) — the frame for post_move_outputs
-                post_move_player = game_state.board.pla
+                # Analyze from the perspective of the player who MADE the move
+                # Raw ownership from get_model_outputs is from current player to move's perspective
+                # After move: game_state.board.pla is opponent (who is to play next)
+                # ownership_after is from game_state.board.pla's perspective
+                # ownership_before was captured when current_player was to play, so it's from current_player's perspective
+                post_move_player = game_state.board.pla  # Who is to play next (opponent)
                 
                 # Sanity check logging
                 print(f"Move {move_num} (resignation): pre_player={board_before.pla}, post_player={post_move_player}")
                 
                 analysis = analyze_position_comprehensive(
                     board=game_state.board,            # post-move board
-                    ownership=ownership_after,         # post-move ownership (frame: post_move_player)
-                    policy=policy,                     # post-move policy0 (also post_move_player)
-                    player=post_move_player,           # <- key change!
+                    ownership=ownership_after,         # post-move ownership (from post_move_player's perspective)
+                    policy=policy,                     # post-move policy0
+                    player=current_player,             # The player who MADE the move
                     move_loc=best_move,
                     last_move_loc=last_move_loc,
-                    before_ownership=ownership_before, # pre-move ownership (frame: pre-move player)
-                    before_board=board_before          # pre-move board (for deltas/attack)
+                    before_ownership=ownership_before, # pre-move ownership (from current_player's perspective)
+                    before_board=board_before,         # pre-move board (for deltas/attack)
+                    ownership_frame_player=post_move_player  # Frame of ownership_after
                 )
                 analysis_serializable = convert_numpy_to_python(analysis)
                 
@@ -247,22 +252,26 @@ def play_short_game(model, max_moves=10):
             policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
             last_move_loc = moves[-2][1] if len(moves) > 1 else None  # Previous move
             
-            # IMPORTANT: use the post-move player (board.pla) — the frame for post_move_outputs
-            post_move_player = game_state.board.pla
+            # Analyze from the perspective of the player who MADE the move
+            # Raw ownership from get_model_outputs is from current player to move's perspective
+            # After move: game_state.board.pla is opponent (who is to play next)
+            # ownership_after is from game_state.board.pla's perspective
+            # ownership_before was captured when current_player was to play, so it's from current_player's perspective
+            post_move_player = game_state.board.pla  # Who is to play next (opponent)
             
             # Sanity check logging
             print(f"Move {move_num}: pre_player={board_before.pla}, post_player={post_move_player}")
             
-            # -- REMOVE the manual sign flips. Let the analyzer normalize. --
             analysis = analyze_position_comprehensive(
                 board=game_state.board,            # post-move board
-                ownership=ownership_after,         # post-move ownership (frame: post_move_player)
-                policy=policy,                     # post-move policy0 (also post_move_player)
-                player=post_move_player,           # <- key change!
+                ownership=ownership_after,         # post-move ownership (from post_move_player's perspective)
+                policy=policy,                     # post-move policy0
+                player=current_player,             # The player who MADE the move
                 move_loc=best_move,
                 last_move_loc=last_move_loc,
-                before_ownership=ownership_before, # pre-move ownership (frame: pre-move player)
-                before_board=board_before          # pre-move board (for deltas/attack)
+                before_ownership=ownership_before, # pre-move ownership (from current_player's perspective)
+                before_board=board_before,         # pre-move board (for deltas/attack)
+                ownership_frame_player=post_move_player  # Frame of ownership_after
             )
             analysis_serializable = convert_numpy_to_python(analysis)
             
@@ -388,19 +397,65 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         if analysis_data:
             positions_with_analysis += 1
         
+        # Determine if we need to flip ownership/scoring/futurepos to White's perspective
+        # Raw model output is from current player's perspective (who is to play next)
+        # After Black plays -> White to play -> ownership is from White's perspective (no flip)
+        # After White plays -> Black to play -> ownership is from Black's perspective (flip needed)
+        # player field indicates who just played
+        player = pos.get("player", "Unknown")
+        need_flip = (player == "White")  # After White plays, Black is to move, so flip to White's perspective
+        
+        def flip_nested_array(arr):
+            """Flip sign of all values in a potentially nested array structure."""
+            if not arr:
+                return arr
+            if isinstance(arr, np.ndarray):
+                return (-arr).tolist()
+            # Check depth of nesting
+            if isinstance(arr[0], (list, np.ndarray)):
+                # 2D or 3D array
+                if isinstance(arr[0], np.ndarray) or (isinstance(arr[0], list) and arr[0] and isinstance(arr[0][0], (list, np.ndarray))):
+                    # 3D array: [batch][height][width]
+                    return [[[-v for v in row] for row in channel] for channel in arr]
+                else:
+                    # 2D array: [height][width]
+                    return [[-v for v in row] for row in arr]
+            else:
+                # 1D array
+                return [-v for v in arr]
+        
+        # Get ownership and normalize to White's perspective
+        ownership = pos.get("ownership", [])
+        if need_flip and ownership:
+            ownership = flip_nested_array(ownership)
+        
+        # Get scoring and normalize to White's perspective
+        scoring = pos.get("scoring", [])
+        if need_flip and scoring:
+            scoring = flip_nested_array(scoring)
+        
+        # Get futurepos and normalize to White's perspective
+        futurepos0 = pos.get("futurepos0", [])
+        if need_flip and futurepos0:
+            futurepos0 = flip_nested_array(futurepos0)
+        
+        futurepos1 = pos.get("futurepos1", [])
+        if need_flip and futurepos1:
+            futurepos1 = flip_nested_array(futurepos1)
+        
         simplified_pos = {
             "move_number": pos.get("move_number", 0),
-            "player": pos.get("player", "Unknown"),
+            "player": player,
             "last_move": pos.get("last_move"),
             "board_state": pos.get("board_state", []),
             "analysis": analysis_data,
-            # Essential model outputs only
+            # Essential model outputs only (normalized to White's perspective)
             "policy0": pos.get("policy0", []),
             "policy1": pos.get("policy1", []),
-            "ownership": pos.get("ownership", []),
-            "scoring": pos.get("scoring", []),
-            "futurepos0": pos.get("futurepos0", []),
-            "futurepos1": pos.get("futurepos1", []),
+            "ownership": ownership,
+            "scoring": scoring,
+            "futurepos0": futurepos0,
+            "futurepos1": futurepos1,
             "seki": pos.get("seki", []),
             "value": pos.get("value", [0.5]),
             "scoremean": pos.get("scoremean", 0.0),
@@ -644,30 +699,71 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             color: #333;
         }}
         
-        .snorkel-details {{
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 12px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-size: 12px;
-            line-height: 1.4;
-            max-height: 300px;
-            overflow-y: auto;
-            margin-top: 10px;
+        .detail-value {{
+            color: #868e96;
+            font-style: italic;
         }}
         
-        .snorkel-details div {{
+        .feature-category {{
             margin-bottom: 8px;
+            background: #fafbfc;
+            border-radius: 4px;
+            padding: 6px 10px;
+            border: 1px solid #e1e4e8;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 4px 12px;
         }}
         
-        .snorkel-details strong {{
-            color: #495057;
+        .category-header {{
             font-weight: 600;
+            font-size: 11px;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-right: 8px;
+            min-width: 100px;
         }}
         
-        .snorkel-details br {{
-            margin-bottom: 2px;
+        .feature-grid {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 16px;
+            flex: 1;
+        }}
+        
+        .feature-grid .sticky-value-item {{
+            padding: 2px 0;
+            font-size: 12px;
+            background: none;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }}
+        
+        .feature-grid .sticky-value-item strong {{
+            font-size: 11px;
+            margin-bottom: 0;
+            color: #6c757d;
+            font-weight: 500;
+        }}
+        
+        .feature-grid .sticky-value-item strong::after {{
+            content: ':';
+        }}
+        
+        .feature-grid .sticky-value-item span {{
+            font-weight: 600;
+            color: #212529;
+        }}
+        
+        .feature-explanation {{
+            font-size: 9px;
+            color: #999;
+            font-style: italic;
+            margin-left: 4px;
+            font-weight: normal;
         }}
         
         .sticky-value-display {{
@@ -850,90 +946,266 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             
             section.innerHTML = `
                 <h3>Snorkel Analysis (Current Move Effects)</h3>
-                <div class="sticky-value-display">
-                    <div class="sticky-value-item">
-                        <strong>Group Strength Δ</strong>
-                        <span id="groups-det">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Group Connectivity Δ</strong>
-                        <span id="groups-own">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Potential Territory</strong>
+                
+                    <!-- Territory Section -->
+                <div class="feature-category">
+                    <div class="category-header">Territory</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Change in weakly-owned empty points (ownership > 0.10)">
+                            <strong>Potential Δ</strong>
+                            <span class="feature-explanation">weak territory</span>
                         <span id="potential-territory">-</span>
                     </div>
-                    <div class="sticky-value-item">
-                        <strong>Solid Territory</strong>
+                        <div class="sticky-value-item" title="Change in strongly-owned empty points (ownership >= 0.70)">
+                            <strong>Solid Δ</strong>
+                            <span class="feature-explanation">strong territory</span>
                         <span id="solid-territory">-</span>
                     </div>
-                    <div class="sticky-value-item">
-                        <strong>Building Count</strong>
+                        <div class="sticky-value-item" title="Empty points that became owned (neutral → owned)">
+                        <strong>Building</strong>
+                        <span class="feature-explanation">new territory</span>
                         <span id="building-count">-</span>
                     </div>
-                    <div class="sticky-value-item">
-                        <strong>Reduction Count</strong>
-                        <span id="reduction-count">-</span>
+                        <div class="sticky-value-item" title="Points already owned that became stronger">
+                        <strong>Solidification</strong>
+                        <span class="feature-explanation">strengthened</span>
+                        <span id="solidification-count">-</span>
                     </div>
-                    <div class="sticky-value-item">
-                        <strong>Invasion</strong>
-                        <span id="invasion">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Direct Sacrifice</strong>
-                        <span id="direct-sacrifice">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Indirect Sacrifice</strong>
-                        <span id="indirect-sacrifice">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Is Cut</strong>
-                        <span id="is-cut">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Is Connection</strong>
-                        <span id="is-connection">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Is Extension</strong>
-                        <span id="is-extension">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Liberties</strong>
-                        <span id="liberties">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Atari</strong>
-                        <span id="atari">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Attack</strong>
-                        <span id="attack">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Killing Attack</strong>
-                        <span id="killing-attack">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Reduce Aji</strong>
-                        <span id="reduce-aji">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Creates New Group</strong>
-                        <span id="creates-new-group">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Is Only Move</strong>
-                        <span id="is-only-move">-</span>
-                    </div>
-                    <div class="sticky-value-item">
-                        <strong>Is Tenuki</strong>
-                        <span id="is-tenuki">-</span>
+                        <div class="sticky-value-item" title="Opponent territory reduced">
+                            <strong>Reduction</strong>
+                            <span class="feature-explanation">opponent lost</span>
+                            <span id="reduction-count">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Flipped opponent territory to own">
+                            <strong>Invasion</strong>
+                            <span class="feature-explanation">flipped to own</span>
+                            <span id="invasion">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" title="Intensities: building @ solidify @ reduce">
+                            <strong>Intensities</strong>
+                            <span class="feature-explanation">B:S:R</span>
+                            <span id="territory-intensities">-</span>
+                        </div>
                     </div>
                 </div>
-                <div class="snorkel-details" id="snorkel-details">
-                    <!-- Detailed snorkel info will be populated here -->
+                
+                <!-- Current Group Section (the group containing this move) -->
+                <div class="feature-category">
+                    <div class="category-header">This Move's Group</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Current strength of the group containing this stone">
+                            <strong>Strength</strong>
+                            <span class="feature-explanation">ownership</span>
+                            <span id="current-group-strength">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Change in strength of this group">
+                            <strong>Strength Δ</strong>
+                            <span class="feature-explanation">change</span>
+                            <span id="current-group-strength-delta">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Current connectivity of the group containing this stone">
+                            <strong>Connectivity</strong>
+                            <span class="feature-explanation">nearby</span>
+                            <span id="current-group-connectivity">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Change in connectivity of this group">
+                            <strong>Connectivity Δ</strong>
+                            <span class="feature-explanation">change</span>
+                            <span id="current-group-connectivity-delta">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Influence area of this group (unique empty points controlled)">
+                            <strong>Influence</strong>
+                            <span class="feature-explanation">area</span>
+                            <span id="current-group-influence-count">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Change in influence area of this group">
+                            <strong>Influence Δ</strong>
+                            <span class="feature-explanation">change</span>
+                            <span id="current-group-influence-count-delta">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Liberty count of the group containing the played stone">
+                            <strong>Liberties</strong>
+                            <span class="feature-explanation">empty adj</span>
+                            <span id="liberties">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Move created a new separate group">
+                            <strong>New Group</strong>
+                            <span class="feature-explanation">isolated</span>
+                            <span id="creates-new-group">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- All Groups Section -->
+                <div class="feature-category">
+                    <div class="category-header">All Groups (Average)</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Average change in ownership over all own groups">
+                            <strong>Strength Δ</strong>
+                            <span class="feature-explanation">avg change</span>
+                        <span id="group-strength-delta">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Average change in connectivity of all own groups">
+                            <strong>Connectivity Δ</strong>
+                            <span class="feature-explanation">avg change</span>
+                        <span id="group-connectivity-delta">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Change in count of influenced empty points">
+                        <strong>Influence Count Δ</strong>
+                        <span class="feature-explanation">points</span>
+                        <span id="influence-count-delta">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Change in average influence strength">
+                            <strong>Influence Str Δ</strong>
+                            <span class="feature-explanation">avg</span>
+                            <span id="influence-strength-delta">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" title="Max strength delta among all groups">
+                            <strong>Max Str Δ</strong>
+                            <span class="feature-explanation">max</span>
+                            <span id="max-group-strength-delta">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" title="Max connectivity delta among all groups">
+                            <strong>Max Conn Δ</strong>
+                            <span class="feature-explanation">max</span>
+                            <span id="max-group-connectivity-delta">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Tactics Section -->
+                <div class="feature-category">
+                    <div class="category-header">Tactics</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Move separates 2+ opponent groups">
+                        <strong>Cut</strong>
+                        <span class="feature-explanation">separates</span>
+                        <span id="is-cut">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Move connects 2+ own groups">
+                        <strong>Connection</strong>
+                        <span class="feature-explanation">joins</span>
+                        <span id="is-connection">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Number of groups connected minus 1">
+                            <strong>Conn. Gain</strong>
+                            <span class="feature-explanation">groups</span>
+                        <span id="connection-strength-gain">-</span>
+                    </div>
+                        <div class="sticky-value-item detail-value" id="merged-groups-regions-item" style="display: none;" title="Regions where merged groups are located">
+                            <strong>Merged Regions</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="merged-groups-regions">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="merged-groups-heads-item" style="display: none;" title="Head stone locations of merged groups">
+                            <strong>Merged Heads</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="merged-groups-heads">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Move is adjacent to own stone">
+                        <strong>Extension</strong>
+                        <span class="feature-explanation">adjacent</span>
+                        <span id="is-extension">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Move puts opponent group into atari">
+                        <strong>Atari</strong>
+                        <span class="feature-explanation">2 liberties</span>
+                        <span id="atari">-</span>
+                    </div>
+                    </div>
+                </div>
+                
+                    <!-- Attack Section -->
+                <div class="feature-category">
+                    <div class="category-header">Attack</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Opponent group strength decreased">
+                        <strong>Attack</strong>
+                        <span class="feature-explanation">weakened</span>
+                        <span id="attack">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Opponent group dropped to likely-dead level">
+                            <strong>Killing</strong>
+                            <span class="feature-explanation">likely dead</span>
+                        <span id="killing-attack">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Reduced opponent's potential (aji)">
+                            <strong>Reduce Aji</strong>
+                            <span class="feature-explanation">potential</span>
+                            <span id="reduce-aji">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" title="Attack intensities: avg / max">
+                            <strong>Intensity</strong>
+                            <span class="feature-explanation">avg/max</span>
+                            <span id="attack-intensity">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="attacked-groups-count-item" style="display: none;" title="Number of groups under attack">
+                            <strong>Groups Attacked</strong>
+                            <span class="feature-explanation">count</span>
+                            <span id="attacked-groups-count">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="attacked-groups-regions-item" style="display: none;" title="Regions where attacked groups are located">
+                            <strong>Attacked Regions</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="attacked-groups-regions">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="attacked-groups-heads-item" style="display: none;" title="Head stone locations of attacked groups">
+                            <strong>Attacked Heads</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="attacked-groups-heads">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="attacked-groups-intensities-item" style="display: none;" title="Strength deltas for each attacked group (how much each group was weakened)">
+                            <strong>Group Intensities</strong>
+                            <span class="feature-explanation">deltas</span>
+                            <span id="attacked-groups-intensities">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sacrifice Section -->
+                <div class="feature-category">
+                    <div class="category-header">Sacrifice</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Stone is in opponent territory after move">
+                            <strong>Direct</strong>
+                            <span class="feature-explanation">stone lost</span>
+                        <span id="direct-sacrifice">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Own stones that flipped to opponent territory">
+                            <strong>Indirect</strong>
+                            <span class="feature-explanation">stones lost</span>
+                        <span id="indirect-sacrifice">-</span>
+                    </div>
+                    </div>
+                </div>
+                
+                    <!-- Policy Section -->
+                <div class="feature-category">
+                    <div class="category-header">Policy</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Top move has >95% probability">
+                            <strong>Only Move</strong>
+                            <span class="feature-explanation">>95% prob</span>
+                            <span id="is-only-move">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Move is far from last move, ignoring local follow-up">
+                            <strong>Tenuki</strong>
+                            <span class="feature-explanation">distant</span>
+                            <span id="is-tenuki">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Top urgency regions by policy mass">
+                            <strong>Urgency</strong>
+                            <span class="feature-explanation">regions</span>
+                            <span id="urgency-summary">-</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Regional Summary -->
+                <div class="feature-category" id="regional-category" style="display: none;">
+                    <div class="category-header">Regional</div>
+                    <div class="feature-grid" id="regional-grid">
+                    </div>
                 </div>
             `;
             
@@ -1144,14 +1416,13 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
-                        // Color based on who the value is good for:
-                        // Black text = good for Black (positive ownership)
-                        // White text = good for White (negative ownership)
-                        // KataGo flips ownership based on current player, so we need to flip it back
-                        const isBlackPlayer = data.player === 'Black';
-                        const adjustedOwnership = isBlackPlayer ? ownership : -ownership;
-                        const isGoodForBlack = adjustedOwnership > 0;
-                        const shouldUseBlackText = isGoodForBlack;
+                    // Color based on who the value is good for:
+                    // Red text = good for White (positive ownership from White's perspective)
+                    // Grey text = good for Black (negative ownership from White's perspective)
+                    // KataGo always outputs ownership from White's perspective (positive = White)
+                    // data.player is who just played, so the current player to move is the opponent
+                    const isGoodForWhite = ownership > 0;
+                    const shouldUseBlackText = isGoodForWhite;  // Red for White, Grey for Black
                         
                         label.style.color = shouldUseBlackText ? 'red' : 'grey';
                         label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
@@ -1212,14 +1483,12 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
-                        // Color based on who the value is good for:
-                        // Black text = good for Black (positive scoring)
-                        // White text = good for White (negative scoring)
-                        // KataGo flips scoring based on current player, so we need to flip it back
-                        const isBlackPlayer = data.player === 'Black';
-                        const adjustedScoring = isBlackPlayer ? scoring : -scoring;
-                        const isGoodForBlack = adjustedScoring > 0;
-                        const shouldUseBlackText = isGoodForBlack;
+                    // Color based on who the value is good for:
+                    // Red text = good for White (positive scoring from White's perspective)
+                    // Grey text = good for Black (negative scoring from White's perspective)
+                    // KataGo always outputs scoring from White's perspective (positive = White)
+                    const isGoodForWhite = scoring > 0;
+                    const shouldUseBlackText = isGoodForWhite;  // Red for White, Grey for Black
                         label.style.color = shouldUseBlackText ? 'red' : 'grey';
                         label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
                         label.style.zIndex = '15';
@@ -1279,14 +1548,12 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                         label.style.position = 'absolute';
                         label.style.left = `${{pixelX - 5}}px`;
                         label.style.top = `${{pixelY - 5}}px`;
-                        // Color based on who the value is good for:
-                        // Black text = good for Black (positive future position)
-                        // White text = good for White (negative future position)
-                        // KataGo flips future position based on current player, so we need to flip it back
-                        const isBlackPlayer = data.player === 'Black';
-                        const adjustedFuturepos = isBlackPlayer ? futurepos : -futurepos;
-                        const isGoodForBlack = adjustedFuturepos > 0;
-                        const shouldUseBlackText = isGoodForBlack;
+                    // Color based on who the value is good for:
+                    // Red text = good for White (positive futurepos from White's perspective)
+                    // Grey text = good for Black (negative futurepos from White's perspective)
+                    // KataGo always outputs futurepos from White's perspective (positive = White)
+                    const isGoodForWhite = futurepos > 0;
+                    const shouldUseBlackText = isGoodForWhite;  // Red for White, Grey for Black
                         
                         label.style.color = shouldUseBlackText ? 'red' : 'grey';
                         label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
@@ -1408,26 +1675,47 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             if (!analysisData) {{
                 // Clear all snorkel fields if no analysis data
                 const elements = {{
-                    'groups-det': '-',
-                    'groups-own': '-',
+                    'group-strength-delta': '-',
+                    'group-connectivity-delta': '-',
+                    'influence-count-delta': '-',
+                    'influence-strength-delta': '-',
+                    'max-group-strength-delta': '-',
+                    'max-group-connectivity-delta': '-',
                     'potential-territory': '-',
                     'solid-territory': '-',
                     'building-count': '-',
+                    'solidification-count': '-',
                     'reduction-count': '-',
                     'invasion': '-',
+                    'territory-intensities': '-',
                     'direct-sacrifice': '-',
                     'indirect-sacrifice': '-',
                     'is-cut': '-',
                     'is-connection': '-',
+                    'connection-strength-gain': '-',
+                    'merged-groups-regions': '-',
+                    'merged-groups-heads': '-',
                     'is-extension': '-',
                     'liberties': '-',
                     'atari': '-',
                     'attack': '-',
                     'killing-attack': '-',
                     'reduce-aji': '-',
+                    'attack-intensity': '-',
+                    'attacked-groups-count': '-',
+                    'attacked-groups-regions': '-',
+                    'attacked-groups-heads': '-',
+                    'attacked-groups-intensities': '-',
                     'creates-new-group': '-',
                     'is-only-move': '-',
-                    'is-tenuki': '-'
+                    'is-tenuki': '-',
+                    'urgency-summary': '-',
+                    'current-group-strength': '-',
+                    'current-group-strength-delta': '-',
+                    'current-group-connectivity': '-',
+                    'current-group-connectivity-delta': '-',
+                    'current-group-influence-count': '-',
+                    'current-group-influence-count-delta': '-'
                 }};
                 
                 for (const [id, value] of Object.entries(elements)) {{
@@ -1437,38 +1725,210 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     }}
                 }}
                 
-                // Clear details
-                const detailsDiv = document.getElementById('snorkel-details');
-                if (detailsDiv) {{
-                    detailsDiv.innerHTML = '<div>No snorkel analysis data available</div>';
+                // Hide regional category
+                const regionalCategory = document.getElementById('regional-category');
+                if (regionalCategory) {{
+                    regionalCategory.style.display = 'none';
                 }}
+                
+                // Hide attacked groups info
+                const attackedGroupsCountItem = document.getElementById('attacked-groups-count-item');
+                const attackedGroupsRegionsItem = document.getElementById('attacked-groups-regions-item');
+                const attackedGroupsHeadsItem = document.getElementById('attacked-groups-heads-item');
+                const attackedGroupsIntensitiesItem = document.getElementById('attacked-groups-intensities-item');
+                if (attackedGroupsCountItem) attackedGroupsCountItem.style.display = 'none';
+                if (attackedGroupsRegionsItem) attackedGroupsRegionsItem.style.display = 'none';
+                if (attackedGroupsHeadsItem) attackedGroupsHeadsItem.style.display = 'none';
+                if (attackedGroupsIntensitiesItem) attackedGroupsIntensitiesItem.style.display = 'none';
+                
+                // Hide merged groups info
+                const mergedGroupsRegionsItem = document.getElementById('merged-groups-regions-item');
+                const mergedGroupsHeadsItem = document.getElementById('merged-groups-heads-item');
+                if (mergedGroupsRegionsItem) mergedGroupsRegionsItem.style.display = 'none';
+                if (mergedGroupsHeadsItem) mergedGroupsHeadsItem.style.display = 'none';
+                
                 return;
             }}
             
             const analysis = analysisData;
             
+            // Helper to format value with delta
+            function formatWithDelta(value, delta) {{
+                if (value === undefined) return '-';
+                let result = String(value);
+                if (delta !== undefined && delta !== 0) {{
+                    const sign = delta > 0 ? '+' : '';
+                    result += ` (${{sign}}${{delta}})`;
+                }}
+                return result;
+            }}
+            
+            // Build territory intensities string
+            const intensityParts = [];
+            if (analysis.building_intensity) intensityParts.push(`B:${{(analysis.building_intensity).toFixed(2)}}`);
+            if (analysis.solidification_intensity) intensityParts.push(`S:${{(analysis.solidification_intensity).toFixed(2)}}`);
+            if (analysis.reduction_intensity) intensityParts.push(`R:${{(analysis.reduction_intensity).toFixed(2)}}`);
+            const territoryIntensities = intensityParts.length > 0 ? intensityParts.join(' ') : '-';
+            
+            // Build attack intensity string
+            const attackIntensity = analysis.attack ? 
+                `${{(analysis.avg_attack_intensity || 0).toFixed(2)}} / ${{(analysis.max_attack_intensity || 0).toFixed(2)}}` : '-';
+            
+            // Build merged groups info (only if connection = yes)
+            let mergedGroupsRegions = '-';
+            let mergedGroupsHeads = '-';
+            const showMergedGroups = analysis.connection && analysis.merged_groups_regions && analysis.merged_groups_regions.length > 0;
+            
+            if (showMergedGroups) {{
+                // Format regions
+                if (analysis.merged_groups_regions && analysis.merged_groups_regions.length > 0) {{
+                    const regionNames = analysis.merged_groups_regions.map(r => r.replace('_', ' '));
+                    mergedGroupsRegions = regionNames.join(', ');
+                }}
+                
+                // Format head locations (convert to coordinates)
+                if (analysis.merged_groups_head_locs && analysis.merged_groups_head_locs.length > 0) {{
+                    const headCoords = analysis.merged_groups_head_locs.map(loc => {{
+                        // Convert KataGo location to (x, y) coordinates
+                        const dy = 20; // size + 1 = 19 + 1 = 20
+                        const x = (loc % dy) - 1;
+                        const y = Math.floor(loc / dy) - 1;
+                        // Convert to Go notation (A-T for rows, 1-19 for columns)
+                        const letter = String.fromCharCode(65 + y); // A=0, B=1, ..., T=18
+                        return `${{letter}}${{x + 1}}`;
+                    }});
+                    mergedGroupsHeads = headCoords.join(', ');
+                }}
+            }}
+            
+            // Show/hide merged groups info
+            const mergedGroupsRegionsItem = document.getElementById('merged-groups-regions-item');
+            const mergedGroupsHeadsItem = document.getElementById('merged-groups-heads-item');
+            if (mergedGroupsRegionsItem) mergedGroupsRegionsItem.style.display = showMergedGroups ? 'flex' : 'none';
+            if (mergedGroupsHeadsItem) mergedGroupsHeadsItem.style.display = showMergedGroups ? 'flex' : 'none';
+            
+            // Build attacked groups info (only if attack = yes)
+            let attackedGroupsCount = '-';
+            let attackedGroupsRegions = '-';
+            let attackedGroupsHeads = '-';
+            let attackedGroupsIntensities = '-';
+            const showAttackedGroups = analysis.attack && analysis.attacked_groups_count > 0;
+            
+            if (showAttackedGroups) {{
+                attackedGroupsCount = analysis.attacked_groups_count || 0;
+                
+                // Format regions
+                if (analysis.attacked_groups_regions && analysis.attacked_groups_regions.length > 0) {{
+                    const regionNames = analysis.attacked_groups_regions.map(r => r.replace('_', ' '));
+                    attackedGroupsRegions = regionNames.join(', ');
+                }}
+                
+                // Format head locations (convert to coordinates)
+                if (analysis.attacked_groups_head_locs && analysis.attacked_groups_head_locs.length > 0) {{
+                    const headCoords = analysis.attacked_groups_head_locs.map(loc => {{
+                        // Convert KataGo location to (x, y) coordinates
+                        // KataGo uses: loc = (x + 1) + (size + 1) * (y + 1)
+                        const dy = 20; // size + 1 = 19 + 1 = 20
+                        const x = (loc % dy) - 1;
+                        const y = Math.floor(loc / dy) - 1;
+                        // Convert to Go notation (A-T for rows, 1-19 for columns)
+                        // Note: Standard Go notation skips 'I', but we'll use A-T for simplicity
+                        const letter = String.fromCharCode(65 + y); // A=0, B=1, ..., T=18
+                        return `${{letter}}${{x + 1}}`;
+                    }});
+                    attackedGroupsHeads = headCoords.join(', ');
+                }}
+                
+                // Format attack intensities by group (strength deltas)
+                if (analysis.attacked_groups_strength_deltas && analysis.attacked_groups_strength_deltas.length > 0) {{
+                    // Deltas are negative (strength decreased), format as positive values
+                    const intensities = analysis.attacked_groups_strength_deltas.map(delta => {{
+                        // Show as positive value (how much strength decreased)
+                        return Math.abs(delta).toFixed(3);
+                    }});
+                    attackedGroupsIntensities = intensities.join(', ');
+                }}
+            }}
+            
+            // Show/hide attacked groups info
+            const attackedGroupsCountItem = document.getElementById('attacked-groups-count-item');
+            const attackedGroupsRegionsItem = document.getElementById('attacked-groups-regions-item');
+            const attackedGroupsHeadsItem = document.getElementById('attacked-groups-heads-item');
+            const attackedGroupsIntensitiesItem = document.getElementById('attacked-groups-intensities-item');
+            if (attackedGroupsCountItem) attackedGroupsCountItem.style.display = showAttackedGroups ? 'flex' : 'none';
+            if (attackedGroupsRegionsItem) attackedGroupsRegionsItem.style.display = showAttackedGroups ? 'flex' : 'none';
+            if (attackedGroupsHeadsItem) attackedGroupsHeadsItem.style.display = showAttackedGroups ? 'flex' : 'none';
+            if (attackedGroupsIntensitiesItem) attackedGroupsIntensitiesItem.style.display = showAttackedGroups ? 'flex' : 'none';
+            
+            // Build urgency summary (top 2 regions)
+            const urgencyToShow = urgencyData || analysis.urgency;
+            let urgencySummary = '-';
+            if (urgencyToShow) {{
+                const topUrgency = Object.entries(urgencyToShow)
+                    .filter(([_, u]) => u > 0.01)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 2)
+                    .map(([r, u]) => `${{r.replace('_', ' ')}}: ${{(u * 100).toFixed(0)}}%`)
+                    .join(', ');
+                if (topUrgency) urgencySummary = topUrgency;
+            }}
+            
             // Update basic snorkel metrics
             const elements = {{
-                'groups-det': analysis.group_strength_delta !== undefined ? (analysis.group_strength_delta || 0).toFixed(2) : '-',
-                'groups-own': analysis.group_connectivity_delta !== undefined ? (analysis.group_connectivity_delta || 0).toFixed(2) : '-',
-                'potential-territory': analysis.potential_territory !== undefined ? (analysis.potential_territory || 0) : '-',
-                'solid-territory': analysis.solid_territory !== undefined ? (analysis.solid_territory || 0) : '-',
+                // Territory
+                'potential-territory': analysis.potential_territory !== undefined ? (analysis.potential_territory >= 0 ? '+' : '') + analysis.potential_territory : '-',
+                'solid-territory': analysis.solid_territory !== undefined ? (analysis.solid_territory >= 0 ? '+' : '') + analysis.solid_territory : '-',
                 'building-count': analysis.building_count !== undefined ? (analysis.building_count || 0) : '-',
+                'solidification-count': analysis.solidification_count !== undefined ? (analysis.solidification_count || 0) : '-',
                 'reduction-count': analysis.reduction_count !== undefined ? (analysis.reduction_count || 0) : '-',
                 'invasion': analysis.invasion !== undefined ? (analysis.invasion ? 'Yes' : 'No') : '-',
-                'direct-sacrifice': analysis.direct_sacrifice !== undefined ? (analysis.direct_sacrifice ? 'Yes' : 'No') : '-',
-                'indirect-sacrifice': analysis.indirect_sacrifice !== undefined ? (analysis.indirect_sacrifice || 0) : '-',
+                'territory-intensities': territoryIntensities,
+                
+                // Current Group (this move's group)
+                'current-group-strength': analysis.current_group_strength !== undefined ? (analysis.current_group_strength || 0).toFixed(3) : '-',
+                'current-group-strength-delta': analysis.current_group_strength_delta !== undefined ? ((analysis.current_group_strength_delta >= 0 ? '+' : '') + (analysis.current_group_strength_delta || 0).toFixed(3)) : '-',
+                'current-group-connectivity': analysis.current_group_connectivity !== undefined ? (analysis.current_group_connectivity || 0).toFixed(3) : '-',
+                'current-group-connectivity-delta': analysis.current_group_connectivity_delta !== undefined ? ((analysis.current_group_connectivity_delta >= 0 ? '+' : '') + (analysis.current_group_connectivity_delta || 0).toFixed(3)) : '-',
+                'current-group-influence-count': analysis.current_group_influence_count !== undefined ? (analysis.current_group_influence_count || 0) : '-',
+                'current-group-influence-count-delta': analysis.current_group_influence_count_delta !== undefined ? ((analysis.current_group_influence_count_delta >= 0 ? '+' : '') + (analysis.current_group_influence_count_delta || 0)) : '-',
+                'liberties': analysis.liberties !== undefined ? (analysis.liberties || 0) : '-',
+                'creates-new-group': analysis.creates_new_group !== undefined ? (analysis.creates_new_group ? 'Yes' : 'No') : '-',
+                
+                // All Groups (average)
+                'group-strength-delta': analysis.group_strength_delta !== undefined ? ((analysis.group_strength_delta >= 0 ? '+' : '') + (analysis.group_strength_delta || 0).toFixed(3)) : '-',
+                'group-connectivity-delta': analysis.group_connectivity_delta !== undefined ? ((analysis.group_connectivity_delta >= 0 ? '+' : '') + (analysis.group_connectivity_delta || 0).toFixed(3)) : '-',
+                'influence-count-delta': analysis.influence_count_delta !== undefined ? ((analysis.influence_count_delta >= 0 ? '+' : '') + (analysis.influence_count_delta || 0)) : '-',
+                'influence-strength-delta': analysis.influence_strength_delta !== undefined ? ((analysis.influence_strength_delta >= 0 ? '+' : '') + (analysis.influence_strength_delta || 0).toFixed(3)) : '-',
+                'max-group-strength-delta': analysis.max_group_strength_delta !== undefined ? ((analysis.max_group_strength_delta >= 0 ? '+' : '') + (analysis.max_group_strength_delta || 0).toFixed(3)) : '-',
+                'max-group-connectivity-delta': analysis.max_group_connectivity_delta !== undefined ? ((analysis.max_group_connectivity_delta >= 0 ? '+' : '') + (analysis.max_group_connectivity_delta || 0).toFixed(3)) : '-',
+                
+                // Tactics
                 'is-cut': analysis.cut !== undefined ? (analysis.cut ? 'Yes' : 'No') : '-',
                 'is-connection': analysis.connection !== undefined ? (analysis.connection ? 'Yes' : 'No') : '-',
+                'connection-strength-gain': analysis.connection_strength_gain !== undefined ? (analysis.connection_strength_gain || 0).toFixed(1) : '-',
+                'merged-groups-regions': mergedGroupsRegions,
+                'merged-groups-heads': mergedGroupsHeads,
                 'is-extension': analysis.extension !== undefined ? (analysis.extension ? 'Yes' : 'No') : '-',
-                'liberties': analysis.liberties !== undefined ? (analysis.liberties || 0) : '-',
                 'atari': analysis.atari !== undefined ? (analysis.atari ? 'Yes' : 'No') : '-',
+                
+                // Attack
                 'attack': analysis.attack !== undefined ? (analysis.attack ? 'Yes' : 'No') : '-',
                 'killing-attack': analysis.killing_attack !== undefined ? (analysis.killing_attack ? 'Yes' : 'No') : '-',
                 'reduce-aji': analysis.reduce_aji !== undefined ? (analysis.reduce_aji ? 'Yes' : 'No') : '-',
-                'creates-new-group': analysis.creates_new_group !== undefined ? (analysis.creates_new_group ? 'Yes' : 'No') : '-',
+                'attack-intensity': attackIntensity,
+                'attacked-groups-count': attackedGroupsCount,
+                'attacked-groups-regions': attackedGroupsRegions,
+                'attacked-groups-heads': attackedGroupsHeads,
+                'attacked-groups-intensities': attackedGroupsIntensities,
+                
+                // Sacrifice
+                'direct-sacrifice': analysis.direct_sacrifice !== undefined ? (analysis.direct_sacrifice ? 'Yes' : 'No') : '-',
+                'indirect-sacrifice': analysis.indirect_sacrifice !== undefined ? (analysis.indirect_sacrifice || 0) : '-',
+                
+                // Policy
                 'is-only-move': analysis.only_move !== undefined ? (analysis.only_move ? 'Yes' : 'No') : '-',
-                'is-tenuki': analysis.tenuki !== undefined ? (analysis.tenuki ? 'Yes' : 'No') : '-'
+                'is-tenuki': analysis.tenuki !== undefined ? (analysis.tenuki ? 'Yes' : 'No') : '-',
+                'urgency-summary': urgencySummary
             }};
             
             for (const [id, value] of Object.entries(elements)) {{
@@ -1478,165 +1938,30 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 }}
             }}
             
-            // Update detailed snorkel info
-            const detailsDiv = document.getElementById('snorkel-details');
-            if (detailsDiv) {{
-                let detailsHtml = '';
-                
-                // Urgency by region (use next_move_urgency if available)
-                const urgencyToShow = urgencyData || analysis.urgency;
-                if (urgencyToShow) {{
-                    detailsHtml += '<div><strong>Urgency by Region:</strong><br>';
-                    for (const [region, urgency] of Object.entries(urgencyToShow)) {{
-                        if (urgency > 0.01) {{ // Only show regions with meaningful urgency
-                            detailsHtml += `${{region}}: ${{((urgency || 0) * 100).toFixed(1)}}%<br>`;
-                        }}
+            // Update regional breakdown (only if there's meaningful data)
+            const regionalCategory = document.getElementById('regional-category');
+            const regionalGrid = document.getElementById('regional-grid');
+            if (regionalCategory && regionalGrid && (analysis.building_count_by_region || analysis.solidification_count_by_region || analysis.reduction_count_by_region)) {{
+                const regions = ['corner_tl', 'corner_tr', 'corner_bl', 'corner_br', 'side_left', 'side_right', 'side_top', 'side_bottom', 'center'];
+                let hasData = false;
+                let gridHtml = '';
+                for (const r of regions) {{
+                    const b = (analysis.building_count_by_region || {{}})[r] || 0;
+                    const s = (analysis.solidification_count_by_region || {{}})[r] || 0;
+                    const d = (analysis.reduction_count_by_region || {{}})[r] || 0;
+                    if (b > 0 || s > 0 || d > 0) {{
+                        hasData = true;
+                        gridHtml += `<div class="sticky-value-item"><strong>${{r.replace('_', ' ')}}</strong><span class="feature-explanation">B:S:R</span><span>B:${{b}} S:${{s}} R:${{d}}</span></div>`;
                     }}
-                    detailsHtml += '</div><br>';
                 }}
-                
-                // Regional territory changes
-                if (analysis.building_count_by_region || analysis.reduction_count_by_region) {{
-                    detailsHtml += '<div><strong>Regional Changes:</strong><br>';
-                    if (analysis.building_count_by_region) {{
-                        for (const [region, count] of Object.entries(analysis.building_count_by_region)) {{
-                            if (count > 0) {{
-                                const intensity = analysis.building_intensity_by_region[region] || 0;
-                                detailsHtml += `Building ${{region}}: ${{count}} (intensity: ${{intensity.toFixed(2)}})<br>`;
-                            }}
-                        }}
-                    }}
-                    if (analysis.reduction_count_by_region) {{
-                        for (const [region, count] of Object.entries(analysis.reduction_count_by_region)) {{
-                            if (count > 0) {{
-                                const intensity = analysis.reduction_intensity_by_region[region] || 0;
-                                detailsHtml += `Reduction ${{region}}: ${{count}} (intensity: ${{intensity.toFixed(2)}})<br>`;
-                            }}
-                        }}
-                    }}
-                    detailsHtml += '</div><br>';
+                if (hasData) {{
+                    regionalCategory.style.display = 'flex';
+                    regionalGrid.innerHTML = gridHtml;
+                }} else {{
+                    regionalCategory.style.display = 'none';
                 }}
-                
-                // Territory changes
-                if (analysis.building_count > 0 || analysis.solidification_count > 0 || analysis.reduction_count > 0) {{
-                    detailsHtml += '<div><strong>Territory Changes:</strong><br>';
-                    if (analysis.building_count > 0) {{
-                        detailsHtml += `Building: ${{analysis.building_count}} (intensity: ${{(analysis.building_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    if (analysis.solidification_count > 0) {{
-                        detailsHtml += `Solidification: ${{analysis.solidification_count}} (intensity: ${{(analysis.solidification_value || 0).toFixed(2)}})<br>`;
-                    }}
-                    if (analysis.reduction_count > 0) {{
-                        detailsHtml += `Reduction: ${{analysis.reduction_count}} (intensity: ${{(analysis.reduction_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    if (analysis.invasion) {{
-                        detailsHtml += `Invasion: Yes (intensity: ${{(analysis.invasion_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // Attack and tactical information
-                if (analysis.attack || analysis.killing_attack || analysis.reduce_aji) {{
-                    detailsHtml += '<div><strong>Attack & Tactics:</strong><br>';
-                    if (analysis.attack) {{
-                        detailsHtml += `Attack: Yes (avg: ${{(analysis.avg_attack_intensity || 0).toFixed(2)}}, max: ${{(analysis.max_attack_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    if (analysis.killing_attack) {{
-                        detailsHtml += `Killing Attack: Yes (intensity: ${{(analysis.kill_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    if (analysis.reduce_aji) {{
-                        detailsHtml += `Aji Reduction: Yes (intensity: ${{(analysis.aji_reduction_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // Sacrifice information
-                if (analysis.direct_sacrifice || analysis.indirect_sacrifice > 0) {{
-                    detailsHtml += '<div><strong>Sacrifices:</strong><br>';
-                    if (analysis.direct_sacrifice) {{
-                        detailsHtml += `Direct: Yes (intensity: ${{(analysis.sacrifice_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    if (analysis.indirect_sacrifice > 0) {{
-                        detailsHtml += `Indirect: ${{analysis.indirect_sacrifice}} stones (intensity: ${{(analysis.indirect_sacrifice_intensity || 0).toFixed(2)}})<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // Connection information
-                if (analysis.connection) {{
-                    detailsHtml += '<div><strong>Connection:</strong><br>';
-                    detailsHtml += `Strength Gain: ${{(analysis.connection_strength_gain || 0).toFixed(2)}}<br>`;
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // Influence changes
-                if (analysis.influence_count_delta !== 0 || analysis.influence_strength_delta !== 0) {{
-                    detailsHtml += '<div><strong>Influence Changes:</strong><br>';
-                    if (analysis.influence_count_delta !== 0) {{
-                        detailsHtml += `Count Delta: ${{analysis.influence_count_delta}}<br>`;
-                    }}
-                    if (analysis.influence_strength_delta !== 0) {{
-                        detailsHtml += `Strength Delta: ${{(analysis.influence_strength_delta || 0).toFixed(2)}}<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // Group changes (legacy)
-                if (analysis.group_strength_delta !== 0 || analysis.group_connectivity_delta !== 0) {{
-                    detailsHtml += '<div><strong>Group Changes (Legacy):</strong><br>';
-                    if (analysis.group_strength_delta !== 0) {{
-                        detailsHtml += `Strength Delta: ${{(analysis.group_strength_delta || 0).toFixed(2)}}<br>`;
-                    }}
-                    if (analysis.max_group_strength_delta !== 0) {{
-                        detailsHtml += `Max Strength Delta: ${{(analysis.max_group_strength_delta || 0).toFixed(2)}} (${{analysis.max_group_strength_region || 'none'}})<br>`;
-                    }}
-                    if (analysis.group_connectivity_delta !== 0) {{
-                        detailsHtml += `Connectivity Delta: ${{(analysis.group_connectivity_delta || 0).toFixed(2)}}<br>`;
-                    }}
-                    if (analysis.max_group_connectivity_delta !== 0) {{
-                        detailsHtml += `Max Connectivity Delta: ${{(analysis.max_group_connectivity_delta || 0).toFixed(2)}} (${{analysis.max_group_connectivity_region || 'none'}})<br>`;
-                    }}
-                    if (analysis.creates_new_group) {{
-                        detailsHtml += `Creates New Group: Yes<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // NEW: Improved group metrics
-                if (analysis.own_avg_strength_delta !== 0 || analysis.own_max_strength_delta !== 0 || 
-                    analysis.own_avg_connectivity_delta !== 0 || analysis.own_max_connectivity_delta !== 0) {{
-                    detailsHtml += '<div><strong>Own Group Changes:</strong><br>';
-                    if (analysis.own_avg_strength_delta !== 0) {{
-                        detailsHtml += `Avg Strength Delta: ${{(analysis.own_avg_strength_delta || 0).toFixed(2)}}<br>`;
-                    }}
-                    if (analysis.own_max_strength_delta !== 0) {{
-                        detailsHtml += `Max Strength Delta: ${{(analysis.own_max_strength_delta || 0).toFixed(2)}} (${{analysis.own_max_strength_group_location || 'none'}})<br>`;
-                    }}
-                    if (analysis.own_avg_connectivity_delta !== 0) {{
-                        detailsHtml += `Avg Connectivity Delta: ${{(analysis.own_avg_connectivity_delta || 0).toFixed(2)}}<br>`;
-                    }}
-                    if (analysis.own_max_connectivity_delta !== 0) {{
-                        detailsHtml += `Max Connectivity Delta: ${{(analysis.own_max_connectivity_delta || 0).toFixed(2)}} (${{analysis.own_max_connectivity_group_location || 'none'}})<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                // NEW: Attack metrics
-                if (analysis.avg_attack_intensity !== 0 || analysis.max_attack_intensity !== 0) {{
-                    detailsHtml += '<div><strong>Attack Metrics:</strong><br>';
-                    if (analysis.avg_attack_intensity !== 0) {{
-                        detailsHtml += `Avg Attack Intensity: ${{(analysis.avg_attack_intensity || 0).toFixed(2)}}<br>`;
-                    }}
-                    if (analysis.max_attack_intensity !== 0) {{
-                        detailsHtml += `Max Attack Intensity: ${{(analysis.max_attack_intensity || 0).toFixed(2)}} (${{analysis.max_attack_group_location || 'none'}})<br>`;
-                    }}
-                    if (analysis.is_attack) {{
-                        detailsHtml += `Is Attack: Yes<br>`;
-                    }}
-                    detailsHtml += '</div><br>';
-                }}
-                
-                detailsDiv.innerHTML = detailsHtml;
+            }} else if (regionalCategory) {{
+                regionalCategory.style.display = 'none';
             }}
         }}
         
