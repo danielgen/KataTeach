@@ -52,6 +52,7 @@ def play_short_game(model, max_moves=10):
     game_data = []
     moves = []
     ownership_before = None
+    pass_counterfactual = None  # Track pass counterfactual ownership
     
     # Add initial position
     initial_outputs = game_state.get_model_outputs(model)
@@ -84,6 +85,7 @@ def play_short_game(model, max_moves=10):
         "last_move": None,
         "board_state": [0] * game_state.board.arrsize,  # Empty board with full size
         "analysis": analysis_serializable,
+        "pass_counterfactual": None,  # No counterfactual for initial position
         **converted_initial_outputs
     })
     
@@ -101,6 +103,35 @@ def play_short_game(model, max_moves=10):
         
         # BEFORE you play, capture the board state
         board_before = game_state.board.copy()
+        
+        # Compute pass counterfactual ownership BEFORE playing the actual move
+        # This gives us "what would ownership be if the player passed?"
+        # Used to avoid anticipatory ownership issues in territory concepts.
+        pass_counterfactual = None
+        pass_counterfactual_frame_player = None
+        try:
+            # Play a pass move temporarily to compute counterfactual
+            game_state.play(current_player, Board.PASS_LOC)
+            
+            # Get ownership after the pass
+            counterfactual_outputs = game_state.get_model_outputs(model)
+            pass_counterfactual = np.array(counterfactual_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
+            
+            # After pass, ownership is from the opponent's perspective (who is to play)
+            pass_counterfactual_frame_player = game_state.board.pla
+            
+            # Undo the pass to restore original state
+            game_state.undo()
+            print(f"  Computed pass counterfactual: shape={pass_counterfactual.shape}, min={pass_counterfactual.min():.3f}, max={pass_counterfactual.max():.3f}")
+        except Exception as e:
+            # If counterfactual computation fails, try to recover state
+            if game_state.can_undo() and len(game_state.moves) > 0 and game_state.moves[-1][1] == Board.PASS_LOC:
+                game_state.undo()
+            print(f"    Warning: Pass counterfactual failed for move {move_num}: {e}")
+            import traceback
+            traceback.print_exc()
+            pass_counterfactual = None
+            pass_counterfactual_frame_player = None
         
         # Always use the main policy (policy0) for move selection
         # policy0 = current player's move distribution
@@ -209,7 +240,9 @@ def play_short_game(model, max_moves=10):
                     last_move_loc=last_move_loc,
                     before_ownership=ownership_before, # pre-move ownership (from current_player's perspective)
                     before_board=board_before,         # pre-move board (for deltas/attack)
-                    ownership_frame_player=post_move_player  # Frame of ownership_after
+                    ownership_frame_player=post_move_player,  # Frame of ownership_after
+                    pass_counterfactual_ownership=pass_counterfactual,  # "What if I passed?"
+                    pass_counterfactual_frame_player=pass_counterfactual_frame_player
                 )
                 analysis_serializable = convert_numpy_to_python(analysis)
                 
@@ -218,6 +251,8 @@ def play_short_game(model, max_moves=10):
                     print(f"  Territory analysis: building={analysis['building_count']}, reduction={analysis['reduction_count']}")
                 if 'invasion' in analysis:
                     print(f"  Invasion: {analysis['invasion']}, intensity={analysis.get('invasion_intensity', 0):.3f}")
+                if analysis.get('used_pass_counterfactual'):
+                    print(f"  Using pass counterfactual for territory concepts")
             except Exception as e:
                 print(f"Warning: Snorkel analysis failed for move {move_num}: {e}")
                 analysis_serializable = {}
@@ -228,6 +263,7 @@ def play_short_game(model, max_moves=10):
                 "last_move": (current_player, best_move),
                 "board_state": board_state,
                 "analysis": analysis_serializable,
+                "pass_counterfactual": pass_counterfactual.tolist() if pass_counterfactual is not None else None,
                 **converted_outputs
             })
             
@@ -271,7 +307,9 @@ def play_short_game(model, max_moves=10):
                 last_move_loc=last_move_loc,
                 before_ownership=ownership_before, # pre-move ownership (from current_player's perspective)
                 before_board=board_before,         # pre-move board (for deltas/attack)
-                ownership_frame_player=post_move_player  # Frame of ownership_after
+                ownership_frame_player=post_move_player,  # Frame of ownership_after
+                pass_counterfactual_ownership=pass_counterfactual,  # "What if I passed?"
+                pass_counterfactual_frame_player=pass_counterfactual_frame_player
             )
             analysis_serializable = convert_numpy_to_python(analysis)
             
@@ -280,6 +318,8 @@ def play_short_game(model, max_moves=10):
                 print(f"  Territory analysis: building={analysis['building_count']}, reduction={analysis['reduction_count']}")
             if 'invasion' in analysis:
                 print(f"  Invasion: {analysis['invasion']}, intensity={analysis.get('invasion_intensity', 0):.3f}")
+            if analysis.get('used_pass_counterfactual'):
+                print(f"  Using pass counterfactual for territory concepts")
         except Exception as e:
             print(f"Warning: Snorkel analysis failed for move {move_num}: {e}")
             analysis_serializable = {}
@@ -291,6 +331,7 @@ def play_short_game(model, max_moves=10):
             "last_move": (current_player, best_move),
             "board_state": board_state,
             "analysis": analysis_serializable,
+            "pass_counterfactual": pass_counterfactual.tolist() if pass_counterfactual is not None else None,
             **converted_outputs
         })
         
@@ -383,8 +424,15 @@ def generate_sgf(moves):
     return "\n".join(sgf_lines)
 
 
-def generate_html_visualization(game_data, sgf_content, output_file):
-    """Generate HTML visualization with custom board rendering."""
+def generate_html_visualization(game_data, sgf_content, output_file, global_stats=None):
+    """Generate HTML visualization with custom board rendering.
+    
+    Args:
+        game_data: List of position data dicts
+        sgf_content: SGF string for the game
+        output_file: Path to write HTML file
+        global_stats: Optional dict with global statistics for percentile computation
+    """
     
     # Reduce data size by keeping only essential fields for visualization
     print(f"Converting {len(game_data)} positions to JSON...")
@@ -443,6 +491,21 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         if need_flip and futurepos1:
             futurepos1 = flip_nested_array(futurepos1)
         
+        # Get pass counterfactual ownership and normalize to White's perspective
+        # Pass counterfactual is "what if the player passed?" ownership
+        # After a pass by current player (who just played), it's opponent's turn
+        # So ownership perspective is from opponent's view
+        # If Black just played, pass leads to White's turn -> ownership from White's perspective (no flip)
+        # If White just played, pass leads to Black's turn -> ownership from Black's perspective (need flip)
+        pass_counterfactual = pos.get("pass_counterfactual", None)
+        if pass_counterfactual is not None:
+            # Pass counterfactual: after player's pass, it's opponent's turn
+            # If Black just played (player="Black"), opponent is White, so ownership is from White's perspective (no flip)
+            # If White just played (player="White"), opponent is Black, so ownership is from Black's perspective (flip to White)
+            need_flip_counterfactual = (player == "White")
+            if need_flip_counterfactual:
+                pass_counterfactual = flip_nested_array(pass_counterfactual)
+        
         simplified_pos = {
             "move_number": pos.get("move_number", 0),
             "player": player,
@@ -453,6 +516,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             "policy0": pos.get("policy0", []),
             "policy1": pos.get("policy1", []),
             "ownership": ownership,
+            "pass_counterfactual": pass_counterfactual,
             "scoring": scoring,
             "futurepos0": futurepos0,
             "futurepos1": futurepos1,
@@ -481,6 +545,9 @@ def generate_html_visualization(game_data, sgf_content, output_file):
         print(f"JSON serialization with default=str successful, length: {len(game_data_js)}")
     
     sgf_js = json.dumps(sgf_content)
+    
+    # Embed global stats for percentile computation (or null if not available)
+    global_stats_js = json.dumps(global_stats) if global_stats else "null"
     
     html = f"""<!DOCTYPE html>
 <html>
@@ -704,6 +771,13 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             font-style: italic;
         }}
         
+        .percentile {{
+            font-size: 9px;
+            color: #6c757d;
+            font-weight: normal;
+            margin-left: 2px;
+        }}
+        
         .feature-category {{
             margin-bottom: 8px;
             background: #fafbfc;
@@ -811,8 +885,57 @@ def generate_html_visualization(game_data, sgf_content, output_file):
     
     <script>
         const gameData = {game_data_js};
+        const globalStats = {global_stats_js};
         let currentMove = 0;
         let autoPlayInterval = null;
+        
+        // Compute percentile for a value given feature stats
+        function computePercentile(value, featureName) {{
+            if (!globalStats || !globalStats.features || !globalStats.features[featureName]) {{
+                return null;
+            }}
+            const stats = globalStats.features[featureName];
+            if (value === null || value === undefined) return null;
+            
+            // Linear interpolation between known percentiles
+            const percentiles = [
+                {{p: 0, v: stats.min}},
+                {{p: 10, v: stats.p10}},
+                {{p: 25, v: stats.p25}},
+                {{p: 50, v: stats.p50}},
+                {{p: 75, v: stats.p75}},
+                {{p: 90, v: stats.p90}},
+                {{p: 100, v: stats.max}}
+            ];
+            
+            // Find where value falls
+            for (let i = 0; i < percentiles.length - 1; i++) {{
+                const lower = percentiles[i];
+                const upper = percentiles[i + 1];
+                if (value >= lower.v && value <= upper.v) {{
+                    // Linear interpolation
+                    if (upper.v === lower.v) return lower.p;
+                    const fraction = (value - lower.v) / (upper.v - lower.v);
+                    return Math.round(lower.p + fraction * (upper.p - lower.p));
+                }}
+            }}
+            
+            // Handle edge cases
+            if (value < stats.min) return 0;
+            if (value > stats.max) return 100;
+            return 50;  // Default fallback
+        }}
+        
+        // Format value with percentile
+        function formatWithPercentile(value, featureName, decimals = 3) {{
+            if (value === null || value === undefined) return '-';
+            const formatted = typeof value === 'number' ? value.toFixed(decimals) : value;
+            const percentile = computePercentile(value, featureName);
+            if (percentile !== null) {{
+                return `${{formatted}} <span class="percentile">(p${{percentile}})</span>`;
+            }}
+            return formatted;
+        }}
         
         function updateDisplay() {{
             const data = gameData[currentMove];
@@ -856,6 +979,9 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             
             // Ownership
             addBoardSection('Ownership', 'ownership');
+            
+            // Pass Counterfactual Ownership (what if player passed?)
+            addBoardSection('Pass Counterfactual (What If Pass?)', 'pass_counterfactual');
             
             // Scoring
             addBoardSection('Scoring', 'scoring');
@@ -1181,10 +1307,20 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                             <span class="feature-explanation">stone lost</span>
                         <span id="direct-sacrifice">-</span>
                     </div>
+                        <div class="sticky-value-item" title="Intensity of direct sacrifice (ownership value)">
+                            <strong>Direct Intensity</strong>
+                            <span class="feature-explanation">ownership</span>
+                        <span id="direct-sacrifice-intensity">-</span>
+                    </div>
                         <div class="sticky-value-item" title="Own stones that flipped to opponent territory">
                             <strong>Indirect</strong>
                             <span class="feature-explanation">stones lost</span>
                         <span id="indirect-sacrifice">-</span>
+                    </div>
+                        <div class="sticky-value-item" title="Intensity of indirect sacrifice (average ownership swing)">
+                            <strong>Indirect Intensity</strong>
+                            <span class="feature-explanation">avg swing</span>
+                        <span id="indirect-sacrifice-intensity">-</span>
                     </div>
                     </div>
                 </div>
@@ -1229,6 +1365,7 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             updatePolicy(data, 'policy0');
             updatePolicy(data, 'policy1');
             updateOwnership(data);
+            updatePassCounterfactual(data);
             updateScoring(data);
             updateFuturePos(data, 'futurepos0', 0);
             updateFuturePos(data, 'futurepos1', 1);
@@ -1448,6 +1585,99 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     <div class="heatmap-legend">
                         <span style="color: red; background: rgba(255,255,255,0.8);">Red Text: White</span>
                         <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Black</span>
+                    </div>
+                `;
+            }}
+        }}
+        
+        function updatePassCounterfactual(data) {{
+            const board = document.getElementById('board-pass_counterfactual');
+            if (!board) return;
+            
+            board.innerHTML = '';
+            drawGridLines(board);
+            
+            // Show "N/A" if no counterfactual data (initial position or pass moves)
+            if (!data.pass_counterfactual || !Array.isArray(data.pass_counterfactual)) {{
+                const info = document.getElementById('info-pass_counterfactual');
+                if (info) {{
+                    info.innerHTML = `
+                        <div style="text-align: center; color: #666; padding: 10px;">
+                            No counterfactual available (initial position or pass move)
+                        </div>
+                    `;
+                }}
+                return;
+            }}
+            
+            // Debug: log data structure
+            console.log('pass_counterfactual data structure:', {{
+                isArray: Array.isArray(data.pass_counterfactual),
+                length: data.pass_counterfactual.length,
+                firstRowLength: data.pass_counterfactual[0] ? data.pass_counterfactual[0].length : 'N/A',
+                sample: data.pass_counterfactual[0] ? data.pass_counterfactual[0][0] : 'N/A'
+            }});
+            
+            // Create stones and counterfactual ownership values at proper Go board coordinates
+            for (let y = 0; y < 19; y++) {{
+                for (let x = 0; x < 19; x++) {{
+                    // Pass counterfactual is 2D array with [y][x] indexing (no batch dimension)
+                    // Handle both 2D [y][x] and 3D [0][y][x] formats for robustness
+                    let ownership;
+                    if (data.pass_counterfactual[0] && Array.isArray(data.pass_counterfactual[0]) && 
+                        data.pass_counterfactual[0][0] && Array.isArray(data.pass_counterfactual[0][0])) {{
+                        // 3D format: [batch][y][x]
+                        ownership = data.pass_counterfactual[0][y][x];
+                    }} else {{
+                        // 2D format: [y][x]
+                        ownership = data.pass_counterfactual[y] ? data.pass_counterfactual[y][x] : 0;
+                    }}
+                    
+                    // Calculate pixel position (Go board coordinates)
+                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
+                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
+                    
+                    // Add stones (same as ownership board)
+                    const dy = 20; // size + 1 = 19 + 1 = 20
+                    const loc = (x + 1) + dy * (y + 1);
+                    const stone = data.board_state[loc] || 0;
+                    if (stone === 1 || stone === -1) {{
+                        const stoneEl = document.createElement('div');
+                        stoneEl.className = `stone ${{stone === 1 ? 'black' : 'white'}}`;
+                        stoneEl.style.position = 'absolute';
+                        stoneEl.style.left = `${{pixelX - 9}}px`;
+                        stoneEl.style.top = `${{pixelY - 9}}px`;
+                        stoneEl.style.zIndex = '10';
+                        board.appendChild(stoneEl);
+                    }}
+                    
+                    // Add counterfactual ownership value
+                    if (ownership !== undefined && ownership !== null && Math.abs(ownership) > 0.1) {{
+                        const label = document.createElement('div');
+                        label.className = 'label';
+                        label.textContent = Math.round(Math.abs(ownership) * 10);
+                        label.style.position = 'absolute';
+                        label.style.left = `${{pixelX - 5}}px`;
+                        label.style.top = `${{pixelY - 5}}px`;
+                        // Color based on who the value is good for (same as ownership)
+                        const isGoodForWhite = ownership > 0;
+                        label.style.color = isGoodForWhite ? 'red' : 'grey';
+                        label.style.textShadow = isGoodForWhite ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
+                        label.style.zIndex = '15';
+                        board.appendChild(label);
+                    }}
+                }}
+            }}
+            
+            const info = document.getElementById('info-pass_counterfactual');
+            if (info) {{
+                info.innerHTML = `
+                    <div class="heatmap-legend">
+                        <span style="color: red; background: rgba(255,255,255,0.8);">Red Text: White</span>
+                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Black</span>
+                    </div>
+                    <div style="font-size: 11px; color: #666; margin-top: 5px; text-align: center;">
+                        Shows ownership if the player had passed instead of playing. Used to detect actual move impact vs. anticipated outcome.
                     </div>
                 `;
             }}
@@ -1699,7 +1929,9 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     'invasion': '-',
                     'territory-intensities': '-',
                     'direct-sacrifice': '-',
+                    'direct-sacrifice-intensity': '-',
                     'indirect-sacrifice': '-',
+                    'indirect-sacrifice-intensity': '-',
                     'is-cut': '-',
                     'is-connection': '-',
                     'connection-strength-gain': '-',
@@ -1885,36 +2117,56 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 if (topUrgency) urgencySummary = topUrgency;
             }}
             
-            // Update basic snorkel metrics
+            // Update basic snorkel metrics (with percentiles where stats available)
             const elements = {{
-                // Territory
-                'potential-territory': analysis.potential_territory !== undefined ? (analysis.potential_territory >= 0 ? '+' : '') + analysis.potential_territory : '-',
-                'solid-territory': analysis.solid_territory !== undefined ? (analysis.solid_territory >= 0 ? '+' : '') + analysis.solid_territory : '-',
-                'building-count': analysis.building_count !== undefined ? (analysis.building_count || 0) : '-',
-                'solidification-count': analysis.solidification_count !== undefined ? (analysis.solidification_count || 0) : '-',
-                'reduction-count': analysis.reduction_count !== undefined ? (analysis.reduction_count || 0) : '-',
+                // Territory (with percentiles)
+                'potential-territory': analysis.potential_territory !== undefined ? 
+                    formatWithPercentile(analysis.potential_territory, 'potential_territory', 0) : '-',
+                'solid-territory': analysis.solid_territory !== undefined ? 
+                    formatWithPercentile(analysis.solid_territory, 'solid_territory', 0) : '-',
+                'building-count': analysis.building_count !== undefined ? 
+                    formatWithPercentile(analysis.building_count, 'building_count', 0) : '-',
+                'solidification-count': analysis.solidification_count !== undefined ? 
+                    formatWithPercentile(analysis.solidification_count, 'solidification_count', 0) : '-',
+                'reduction-count': analysis.reduction_count !== undefined ? 
+                    formatWithPercentile(analysis.reduction_count, 'reduction_count', 0) : '-',
                 'invasion': analysis.invasion !== undefined ? (analysis.invasion ? 'Yes' : 'No') : '-',
                 'territory-intensities': territoryIntensities,
                 
-                // Current Group (this move's group)
-                'current-group-strength': analysis.current_group_strength !== undefined ? (analysis.current_group_strength || 0).toFixed(3) : '-',
-                'current-group-strength-delta': analysis.current_group_strength_delta !== undefined ? ((analysis.current_group_strength_delta >= 0 ? '+' : '') + (analysis.current_group_strength_delta || 0).toFixed(3)) : '-',
-                'current-group-connectivity': analysis.current_group_connectivity !== undefined ? (analysis.current_group_connectivity || 0).toFixed(3) : '-',
-                'current-group-connectivity-delta': analysis.current_group_connectivity_delta !== undefined ? ((analysis.current_group_connectivity_delta >= 0 ? '+' : '') + (analysis.current_group_connectivity_delta || 0).toFixed(3)) : '-',
-                'current-group-influence-count': analysis.current_group_influence_count !== undefined ? (analysis.current_group_influence_count || 0) : '-',
-                'current-group-influence-count-delta': analysis.current_group_influence_count_delta !== undefined ? ((analysis.current_group_influence_count_delta >= 0 ? '+' : '') + (analysis.current_group_influence_count_delta || 0)) : '-',
-                'current-group-influence-strength': analysis.current_group_influence_strength !== undefined ? (analysis.current_group_influence_strength || 0).toFixed(3) : '-',
-                'current-group-influence-strength-delta': analysis.current_group_influence_strength_delta !== undefined ? ((analysis.current_group_influence_strength_delta >= 0 ? '+' : '') + (analysis.current_group_influence_strength_delta || 0).toFixed(3)) : '-',
-                'liberties': analysis.liberties !== undefined ? (analysis.liberties || 0) : '-',
+                // Current Group (this move's group) - with percentiles
+                'current-group-strength': analysis.current_group_strength !== undefined ? 
+                    formatWithPercentile(analysis.current_group_strength, 'current_group_strength') : '-',
+                'current-group-strength-delta': analysis.current_group_strength_delta !== undefined ? 
+                    formatWithPercentile(analysis.current_group_strength_delta, 'current_group_strength_delta') : '-',
+                'current-group-connectivity': analysis.current_group_connectivity !== undefined ? 
+                    formatWithPercentile(analysis.current_group_connectivity, 'current_group_connectivity') : '-',
+                'current-group-connectivity-delta': analysis.current_group_connectivity_delta !== undefined ? 
+                    formatWithPercentile(analysis.current_group_connectivity_delta, 'current_group_connectivity_delta') : '-',
+                'current-group-influence-count': analysis.current_group_influence_count !== undefined ? 
+                    formatWithPercentile(analysis.current_group_influence_count, 'current_group_influence_count', 0) : '-',
+                'current-group-influence-count-delta': analysis.current_group_influence_count_delta !== undefined ? 
+                    formatWithPercentile(analysis.current_group_influence_count_delta, 'current_group_influence_count_delta', 0) : '-',
+                'current-group-influence-strength': analysis.current_group_influence_strength !== undefined ? 
+                    formatWithPercentile(analysis.current_group_influence_strength, 'current_group_influence_strength') : '-',
+                'current-group-influence-strength-delta': analysis.current_group_influence_strength_delta !== undefined ? 
+                    formatWithPercentile(analysis.current_group_influence_strength_delta, 'current_group_influence_strength_delta') : '-',
+                'liberties': analysis.liberties !== undefined ? 
+                    formatWithPercentile(analysis.liberties, 'liberties', 0) : '-',
                 'creates-new-group': analysis.creates_new_group !== undefined ? (analysis.creates_new_group ? 'Yes' : 'No') : '-',
                 
-                // All Groups (average)
-                'group-strength-delta': analysis.group_strength_delta !== undefined ? ((analysis.group_strength_delta >= 0 ? '+' : '') + (analysis.group_strength_delta || 0).toFixed(3)) : '-',
-                'group-connectivity-delta': analysis.group_connectivity_delta !== undefined ? ((analysis.group_connectivity_delta >= 0 ? '+' : '') + (analysis.group_connectivity_delta || 0).toFixed(3)) : '-',
-                'influence-count-delta': analysis.influence_count_delta !== undefined ? ((analysis.influence_count_delta >= 0 ? '+' : '') + (analysis.influence_count_delta || 0)) : '-',
-                'influence-strength-delta': analysis.influence_strength_delta !== undefined ? ((analysis.influence_strength_delta >= 0 ? '+' : '') + (analysis.influence_strength_delta || 0).toFixed(3)) : '-',
-                'max-group-strength-delta': analysis.max_group_strength_delta !== undefined ? ((analysis.max_group_strength_delta >= 0 ? '+' : '') + (analysis.max_group_strength_delta || 0).toFixed(3)) : '-',
-                'max-group-connectivity-delta': analysis.max_group_connectivity_delta !== undefined ? ((analysis.max_group_connectivity_delta >= 0 ? '+' : '') + (analysis.max_group_connectivity_delta || 0).toFixed(3)) : '-',
+                // All Groups (average) - with percentiles
+                'group-strength-delta': analysis.group_strength_delta !== undefined ? 
+                    formatWithPercentile(analysis.group_strength_delta, 'group_strength_delta') : '-',
+                'group-connectivity-delta': analysis.group_connectivity_delta !== undefined ? 
+                    formatWithPercentile(analysis.group_connectivity_delta, 'group_connectivity_delta') : '-',
+                'influence-count-delta': analysis.influence_count_delta !== undefined ? 
+                    formatWithPercentile(analysis.influence_count_delta, 'influence_count_delta', 0) : '-',
+                'influence-strength-delta': analysis.influence_strength_delta !== undefined ? 
+                    formatWithPercentile(analysis.influence_strength_delta, 'influence_strength_delta') : '-',
+                'max-group-strength-delta': analysis.max_group_strength_delta !== undefined ? 
+                    formatWithPercentile(analysis.max_group_strength_delta, 'max_group_strength_delta') : '-',
+                'max-group-connectivity-delta': analysis.max_group_connectivity_delta !== undefined ? 
+                    formatWithPercentile(analysis.max_group_connectivity_delta, 'max_group_connectivity_delta') : '-',
                 
                 // Tactics
                 'is-cut': analysis.cut !== undefined ? (analysis.cut ? 'Yes' : 'No') : '-',
@@ -1925,22 +2177,29 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                 'is-extension': analysis.extension !== undefined ? (analysis.extension ? 'Yes' : 'No') : '-',
                 'atari': analysis.atari !== undefined ? (analysis.atari ? 'Yes' : 'No') : '-',
                 
-                // Attack
+                // Attack - with percentiles for intensities
                 'attack': analysis.attack !== undefined ? (analysis.attack ? 'Yes' : 'No') : '-',
                 'killing-attack': analysis.killing_attack !== undefined ? (analysis.killing_attack ? 'Yes' : 'No') : '-',
                 'reduce-aji': analysis.reduce_aji !== undefined ? (analysis.reduce_aji ? 'Yes' : 'No') : '-',
-                'attack-intensity': attackIntensity,
+                'attack-intensity': analysis.attack ? 
+                    formatWithPercentile(analysis.avg_attack_intensity, 'avg_attack_intensity') + ' / ' + 
+                    formatWithPercentile(analysis.max_attack_intensity, 'max_attack_intensity') : '-',
                 'attacked-groups-count': attackedGroupsCount,
                 'attacked-groups-regions': attackedGroupsRegions,
                 'attacked-groups-heads': attackedGroupsHeads,
                 'attacked-groups-intensities': attackedGroupsIntensities,
                 
-                // Sacrifice
+                // Sacrifice - with percentiles for intensities
                 'direct-sacrifice': analysis.direct_sacrifice !== undefined ? (analysis.direct_sacrifice ? 'Yes' : 'No') : '-',
-                'indirect-sacrifice': analysis.indirect_sacrifice !== undefined ? (analysis.indirect_sacrifice || 0) : '-',
+                'direct-sacrifice-intensity': analysis.direct_sacrifice_intensity !== undefined ? 
+                    formatWithPercentile(analysis.direct_sacrifice_intensity, 'direct_sacrifice_intensity') : '-',
+                'indirect-sacrifice': analysis.indirect_sacrifice !== undefined ? 
+                    formatWithPercentile(analysis.indirect_sacrifice, 'indirect_sacrifice', 0) : '-',
+                'indirect-sacrifice-intensity': analysis.indirect_sacrifice_intensity !== undefined ? 
+                    formatWithPercentile(analysis.indirect_sacrifice_intensity, 'indirect_sacrifice_intensity') : '-',
                 
                 // Policy
-                'is-only-move': analysis.only_move !== undefined ? (analysis.only_move ? 'Yes' : 'No') : '-',
+                'is-only-move': analysis.forcing !== undefined ? (analysis.forcing ? 'Yes' : 'No') : '-',
                 'is-tenuki': analysis.tenuki !== undefined ? (analysis.tenuki ? 'Yes' : 'No') : '-',
                 'urgency-summary': urgencySummary
             }};
@@ -1948,7 +2207,8 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             for (const [id, value] of Object.entries(elements)) {{
                 const element = document.getElementById(id);
                 if (element) {{
-                    element.textContent = value;
+                    // Use innerHTML since percentiles include HTML spans
+                    element.innerHTML = value;
                 }}
             }}
             
@@ -1957,6 +2217,15 @@ def generate_html_visualization(game_data, sgf_content, output_file):
             const regionalGrid = document.getElementById('regional-grid');
             if (regionalCategory && regionalGrid && (analysis.building_count_by_region || analysis.solidification_count_by_region || analysis.reduction_count_by_region)) {{
                 const regions = ['corner_tl', 'corner_tr', 'corner_bl', 'corner_br', 'side_left', 'side_right', 'side_top', 'side_bottom', 'center'];
+                
+                // Calculate totals for percentage computation
+                let totalB = 0, totalS = 0, totalR = 0;
+                for (const r of regions) {{
+                    totalB += (analysis.building_count_by_region || {{}})[r] || 0;
+                    totalS += (analysis.solidification_count_by_region || {{}})[r] || 0;
+                    totalR += (analysis.reduction_count_by_region || {{}})[r] || 0;
+                }}
+                
                 let hasData = false;
                 let gridHtml = '';
                 for (const r of regions) {{
@@ -1965,7 +2234,18 @@ def generate_html_visualization(game_data, sgf_content, output_file):
                     const d = (analysis.reduction_count_by_region || {{}})[r] || 0;
                     if (b > 0 || s > 0 || d > 0) {{
                         hasData = true;
-                        gridHtml += `<div class="sticky-value-item"><strong>${{r.replace('_', ' ')}}</strong><span class="feature-explanation">B:S:R</span><span>B:${{b}} S:${{s}} R:${{d}}</span></div>`;
+                        // Calculate percentages
+                        const bPct = totalB > 0 ? Math.round((b / totalB) * 100) : 0;
+                        const sPct = totalS > 0 ? Math.round((s / totalS) * 100) : 0;
+                        const rPct = totalR > 0 ? Math.round((d / totalR) * 100) : 0;
+                        
+                        // Format: count (pct%) for each non-zero value
+                        let parts = [];
+                        if (b > 0) parts.push(`B:${{b}}(${{bPct}}%)`);
+                        if (s > 0) parts.push(`S:${{s}}(${{sPct}}%)`);
+                        if (d > 0) parts.push(`R:${{d}}(${{rPct}}%)`);
+                        
+                        gridHtml += `<div class="sticky-value-item"><strong>${{r.replace('_', ' ')}}</strong><span>${{parts.join(' ')}}</span></div>`;
                     }}
                 }}
                 if (hasData) {{

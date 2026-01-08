@@ -1,224 +1,219 @@
-# Concept definitions for linear probe training
-# Each concept maps to a label derived from the snorkel analysis
+# Archetype concepts for linear probe training (intent-level)
+# Goal: fewer, more meaningful concepts; less brittle than raw deltas.
+#
+# Best Practice: For sparse quantile sources (e.g., building_count, reduction_count),
+# add filters to ensure source > 0 before computing quantiles. Otherwise "top 10%" 
+# might mean ">= 1" and labels become binary noise. Example:
+#   filters:
+#     - {column: building_count, operator: '>', value: 0}
+#
+# Game Phase Stratification:
+#   For quantile concepts, you can set stratify_by_phase: true to compute thresholds
+#   separately per game phase (early: moves 1-60, mid: 61-150, end: 151+).
+#   This is useful when concept intensity varies significantly by game phase.
+#   Example: territory_building might be "high" at different absolute values in
+#   opening vs endgame. Without stratification, early-game moves might dominate
+#   the quantiles, making endgame moves rarely labeled as positive.
 
 concepts:
-  # Tactical concepts (binary)
+  # -------------------------
+  # 1) Local tactics (binary)
+  # -------------------------
   cut:
     type: binary
     source: cut
-    description: "Move separates 2+ opponent groups"
-    
-  connection:
+    description: "Cut: separates opponent groups (local tactical)."
+
+  connect:
     type: binary
     source: connection
-    description: "Move connects 2+ own groups"
-    
-  connection_gain:
+    description: "Connect: joins own groups."
+
+  multi_connect:
     type: threshold
     source: connection_strength_gain
     threshold: 1.0
-    description: "Move connects multiple groups (gain > 1)"
-    
-  extension:
+    description: "Multi-connect: connects multiple groups (gain >= 1.0)."
+
+  extend:
     type: binary
     source: extension
-    description: "Move is adjacent to own stone"
-    
+    description: "Extend: adjacent to own stone (shape/extension)."
+
   atari:
     type: binary
     source: atari
-    description: "Move puts opponent group in atari"
-    
-  creates_new_group:
+    description: "Atari: puts opponent group in atari."
+  
+  forcing:
     type: binary
-    source: creates_new_group
-    description: "Move creates a new separate group"
-    
-  invasion:
-    type: binary
-    source: invasion
-    description: "Move invades opponent territory"
-    
-  direct_sacrifice:
-    type: binary
-    source: direct_sacrifice
-    description: "Move places stone in opponent territory (sacrifice)"
-    
-  indirect_sacrifice:
-    type: threshold
-    source: indirect_sacrifice
-    threshold: 1
-    description: "Move causes own stones to flip to opponent territory"
-    
-  attack:
-    type: binary
-    source: attack
-    description: "Move weakens opponent groups"
-    
-  killing_attack:
-    type: binary
-    source: killing_attack
-    description: "Move threatens to kill opponent group"
-    
-  reduce_aji:
-    type: binary
-    source: reduce_aji
-    description: "Move reduces aji/potential of weak opponent stones"
-    
+    source: forcing
+    description: "Only move: only move has >95% probability."
+
   tenuki:
     type: binary
     source: tenuki
-    description: "Move ignores local situation to play elsewhere"
-    
-  only_move:
+    description: "Tenuki: plays away from local situation."
+
+  invasion:
     type: binary
-    source: only_move
-    description: "Policy strongly favors single move (>95%)"
+    source: invasion
+    description: "Invasion: plays into opponent territory / flips region."
 
-  # Continuous concepts (quantile-based labeling)
-  building_territory:
-    type: quantile
-    source: building_count
-    q: 0.1
-    direction: high
-    description: "Move builds significant territory (top 10%)"
-    
-  solidifying_territory:
-    type: quantile
-    source: solidification_count
-    q: 0.1
-    direction: high
-    description: "Move solidifies existing territory (top 10%)"
-    
-  reducing_opponent:
-    type: quantile
-    source: reduction_count
-    q: 0.1
-    direction: high
-    description: "Move significantly reduces opponent territory (top 10%)"
+  sacrifice_direct:
+    type: binary
+    source: direct_sacrifice
+    description: "Direct sacrifice: stone immediately 'lost' (negative ownership)."
 
-  # Delta-based concepts (change from before to after)
-  territory_gain:
+  sacrifice_indirect:
+    type: threshold
+    source: indirect_sacrifice
+    threshold: 1
+    description: "Indirect sacrifice: move causes own stones to flip (>= 1)."
+
+  must_live:
+    type: binary
+    source: must_live
+    description: "Move that saves a group from dying (dead in counterfactual, alive after)"
+
+  occupy_corner:
+    type: binary
+    source: occupy_corner
+    description: "First stone played in a corner area (opening corner occupation)"
+
+  approaching_corner:
+    type: binary
+    source: approaching_corner
+    description: "Approach move responding to opponent's corner stone (kakari)"
+  # -------------------------------------
+  # 2) Combat archetypes (quantile-based)
+  # -------------------------------------
+  fight_pressure:
     type: quantile
-    source: potential_territory
-    q: 0.1
+    source: max_attack_intensity
+    q: 0.15
     direction: high
-    description: "Move gains significant potential territory (top 10%)"
-    
-  territory_loss:
+    filters:
+      - {column: attacked_groups_count, operator: '>=', value: 1}
+    description: "Fight pressure: strong local attack pressure (max intensity, only if attacking)."
+
+  fight_wide:
+    type: threshold
+    source: attacked_groups_count
+    threshold: 2
+    filters:
+      - {column: attacked_groups_count, operator: '>=', value: 1}
+    description: "Fight wide: attacks many groups (only among attacking moves)."
+
+  kill_attack:
+    type: binary
+    source: killing_attack
+    description: "Kill threat: attack likely kills / makes group dead."
+
+  aji_reduction:
+    type: binary
+    source: reduce_aji
+    description: "Reduce aji: makes already-dead/weak stones 'more dead' (cleanup)."
+
+  # --------------------------------------------
+  # 3) Territory / influence archetypes (quantile)
+  # --------------------------------------------
+  territory_building:
     type: quantile
-    source: potential_territory
-    q: 0.1
-    direction: low
-    description: "Move loses significant potential territory (bottom 10%)"
-    
-  influence_expansion:
+    source: building_intensity
+    q: 0.15
+    direction: high
+    stratify_by_phase: true  # Compute quantiles separately per game phase
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: building_intensity, operator: '>', value: 0}
+    description: "Build territory: strong creation of new owned points (intensity, not too early). Stratified by phase so early/mid/endgame have separate thresholds."
+
+  territory_securing:
+    type: quantile
+    source: solidification_intensity
+    q: 0.15
+    direction: high
+    stratify_by_phase: true
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: solidification_intensity, operator: '>', value: 0}
+    description: "Secure territory: strengthens already-owned points (solidification intensity). Stratified by phase so early/mid/endgame have separate thresholds."
+
+  opponent_reduction:
+    type: quantile
+    source: reduction_intensity
+    q: 0.15
+    direction: high
+    stratify_by_phase: true
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: reduction_intensity, operator: '>', value: 0}
+    description: "Reduce opponent: strong reduction of opponent territory (reduction intensity). Stratified by phase so early/mid/endgame have separate thresholds."
+
+  influence_surge:
     type: quantile
     source: influence_count_delta
-    q: 0.1
+    q: 0.15
     direction: high
-    description: "Move expands influence significantly (top 10%)"
-    
-  group_strengthening:
-    type: quantile
-    source: group_strength_delta
-    q: 0.1
-    direction: high
-    description: "Move strengthens own groups significantly (top 10%)"
-  
-  connectivity_improvement:
-    type: quantile
-    source: current_group_connectivity_delta
-    q: 0.1
-    direction: high
-    description: "Move improves connectivity of current group significantly (top 10%)"
-  
-  group_connectivity_improvement:
-    type: quantile
-    source: group_connectivity_delta
-    q: 0.1
-    direction: high
-    description: "Move improves average connectivity of all own groups (top 10%)"
-  
-  max_group_strengthening:
-    type: quantile
-    source: max_group_strength_delta
-    q: 0.1
-    direction: high
-    description: "Move causes maximum single-group strength improvement (top 10%)"
-  
-  max_connectivity_improvement:
-    type: quantile
-    source: max_group_connectivity_delta
-    q: 0.1
-    direction: high
-    description: "Move causes maximum single-group connectivity improvement (top 10%)"
-  
-  influence_strength_change:
-    type: quantile
-    source: influence_strength_delta
-    q: 0.1
-    direction: high
-    use_abs: true
-    description: "Move significantly changes average influence strength (top 10% by magnitude)"
-  
-  high_urgency:
+    stratify_by_phase: true
+    no_drop: true
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: influence_count_delta, operator: '>', value: 0}
+    description: "Influence surge: expands influence area significantly. Stratified by phase so early/mid/endgame have separate thresholds."
+
+  urgency_peak:
     type: quantile
     source: urgency
-    q: 0.1
-    direction: high
     threshold_key: "max"
-    description: "Move is in high-urgency region (top 10% by max policy mass)"
-  
-  regional_building:
+    q: 0.15
+    direction: high
+    no_drop: true
+    description: "Urgency peak: move lies in a highly urgent region (max urgency mass)."
+
+  # --------------------------------------------
+  # 4) Group-shape / stability shifts (quantile)
+  # --------------------------------------------
+  group_strength_shift:
     type: quantile
-    source: building_count_by_region
-    q: 0.1
+    source: group_strength_delta
+    q: 0.15
     direction: high
-    threshold_key: "max"
-    description: "Move builds significant territory in at least one region (top 10%)"
-  
-  regional_solidification:
+    use_abs: true
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+    description: "Group strength shift: large change in current group strength (by magnitude). Note: Consider splitting into group_strength_up and group_strength_down for directional meaning."
+
+  group_connectivity_shift:
     type: quantile
-    source: solidification_count_by_region
-    q: 0.1
+    source: current_group_connectivity_delta
+    q: 0.15
     direction: high
-    threshold_key: "max"
-    description: "Move solidifies territory significantly in at least one region (top 10%)"
-  
-  regional_reduction:
+    use_abs: true
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+    description: "Connectivity shift: large change in current group connectivity (by magnitude). Note: Consider splitting into group_connectivity_up and group_connectivity_down for directional meaning."
+
+  sacrifice_commitment:
     type: quantile
-    source: reduction_count_by_region
-    q: 0.1
+    source: sacrifice_intensity
+    q: 0.15
     direction: high
-    threshold_key: "max"
-    description: "Move significantly reduces opponent territory in at least one region (top 10%)"
+    filters:
+      - {column: label_sacrifice_direct, operator: '==', value: 1}
+    description: "Sacrifice commitment: large immediate self-loss (among direct sacrifices)."
 
 # Feature extraction settings
 feature_extraction:
-  # How to aggregate spatial features (512, 19, 19) -> (N,)
-  aggregation: "global_pool"  # global_pool, move_location, or both
-  
-  # Include features from specific board location
+  aggregation: "global_pool"
   include_move_location: true
-  
-  # Pool type for global aggregation
-  pool_type: "mean"  # mean, max, or both
+  pool_type: "mean"
 
-# Training settings
 training:
-  # Model types to try
-  models:
-    - logistic_regression
-    - linear_svc
-  
-  # Cross-validation
+  models: [logistic_regression]
   cv_folds: 5
   group_column: "game_id"
-  
-  # Class balancing
   class_weight: "balanced"
-  
-  # Regularization
   C_values: [0.001, 0.01, 0.1, 1.0, 10.0]
-
+  min_val_samples: 80

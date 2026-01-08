@@ -236,7 +236,11 @@ def generate_games(
                         for line in f:
                             try:
                                 rec = json.loads(line)
-                                snorkel_data[rec["move_number"]] = rec["analysis"]
+                                # Store both analysis and pass_counterfactual
+                                snorkel_data[rec["move_number"]] = {
+                                    "analysis": rec.get("analysis"),
+                                    "pass_counterfactual": rec.get("pass_counterfactual"),
+                                }
                             except Exception:
                                 continue
                     print(f"  Loaded snorkel data for {len(snorkel_data)} moves")
@@ -248,7 +252,8 @@ def generate_games(
                 for pos in html_positions:
                     move_num = pos["move_number"]
                     if move_num in snorkel_data:
-                        pos["analysis"] = snorkel_data[move_num]
+                        pos["analysis"] = snorkel_data[move_num]["analysis"]
+                        pos["pass_counterfactual"] = snorkel_data[move_num]["pass_counterfactual"]
                         positions_with_snorkel += 1
                 
                 print(f"  Merged snorkel data into {positions_with_snorkel} out of {len(html_positions)} positions")
@@ -271,6 +276,17 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
     import json
     
     print("Generating HTML files with snorkel analysis...")
+    
+    # Load global stats if available (for percentile display)
+    global_stats = None
+    stats_path = games_dir / "global_stats.json"
+    if stats_path.exists():
+        try:
+            with stats_path.open("r", encoding="utf-8") as f:
+                global_stats = json.load(f)
+            print(f"  Loaded global stats from {stats_path}")
+        except Exception as e:
+            print(f"  Warning: Could not load global stats: {e}")
     
     # Find all game directories
     game_dirs = [d for d in games_dir.iterdir() if d.is_dir()]
@@ -339,7 +355,11 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
                 for line in f:
                     try:
                         rec = json.loads(line)
-                        snorkel_data[rec["move_number"]] = rec["analysis"]
+                        # Store both analysis and pass_counterfactual
+                        snorkel_data[rec["move_number"]] = {
+                            "analysis": rec.get("analysis"),
+                            "pass_counterfactual": rec.get("pass_counterfactual"),
+                        }
                     except Exception:
                         continue
             
@@ -362,7 +382,8 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
                 "player": "Initial",
                 "last_move": None,
                 "board_state": [0] * game_state.board.arrsize,
-                "analysis": snorkel_data.get(0, {}),
+                "analysis": snorkel_data.get(0, {}).get("analysis", {}),
+                "pass_counterfactual": snorkel_data.get(0, {}).get("pass_counterfactual"),
                 **converted_initial_outputs
             })
             
@@ -380,21 +401,23 @@ def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: 
                     elif game_state.board.board[i] == 2:  # Board.WHITE
                         board_state[i] = -1
                 
+                snorkel_rec = snorkel_data.get(move_num, {})
                 html_positions.append({
                     "move_number": move_num,
                     "player": "Black" if player == Board.BLACK else "White",
                     "last_move": (player, loc),
                     "board_state": board_state,
-                    "analysis": snorkel_data.get(move_num, {}),
+                    "analysis": snorkel_rec.get("analysis", {}),
+                    "pass_counterfactual": snorkel_rec.get("pass_counterfactual"),
                     **converted_outputs
                 })
             
             # Generate SGF content
             sgf_content = create_sgf(moves, board_size, game_index)
             
-            # Generate HTML
+            # Generate HTML (with optional global stats for percentile display)
             viz_path = game_dir / "viz.html"
-            generate_html_visualization(html_positions, sgf_content, str(viz_path))
+            generate_html_visualization(html_positions, sgf_content, str(viz_path), global_stats=global_stats)
             print(f"  HTML with snorkel data saved: {viz_path}")
             
         except Exception as e:
@@ -409,6 +432,13 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
         - KataGo always outputs ownership from White's perspective (positive = White)
         - We pass raw ownership to analyze_position_comprehensive which handles normalization
         - Both before and after ownership should be raw KataGo outputs (White's perspective)
+    
+    Pass Counterfactual:
+        - For territory-related concepts (building, solidification, reduction, invasion),
+          we compute a "pass counterfactual" ownership to avoid anticipatory ownership issues.
+        - Before playing the actual move, we compute what ownership would be if the player passed.
+        - This counterfactual is used as the baseline for territory concepts instead of the
+          previous move's ownership, which may already "anticipate" the expected move.
     """
     from snorkel_board_positions import analyze_position_comprehensive
     from gamestate import GameState, Board
@@ -477,7 +507,39 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                     board_before = gs.board.copy()
                     ownership_before_for_analysis = ownership_before_raw.copy()
                     
-                    # Play the move first to get post-move state
+                    # Compute pass counterfactual ownership BEFORE playing the actual move
+                    # This gives us "what would ownership be if the player passed?"
+                    # Used to avoid anticipatory ownership issues in territory concepts.
+                    pass_counterfactual_raw = None
+                    pass_counterfactual_frame_player = None
+                    if move_loc is not None and move_loc != Board.PASS_LOC:
+                        try:
+                            # Play a pass move temporarily to compute counterfactual
+                            gs.play(current_player, Board.PASS_LOC)
+                            
+                            # Get ownership after the pass
+                            # After pass, gs.board.pla is the opponent (who plays next)
+                            counterfactual_outputs = gs.get_model_outputs(model)
+                            pass_counterfactual_raw = counterfactual_outputs.get(
+                                "ownership", np.zeros((board_size, board_size), dtype=np.float32)
+                            )
+                            if pass_counterfactual_raw.ndim == 3:
+                                pass_counterfactual_raw = pass_counterfactual_raw[0]
+                            
+                            # After pass, ownership is from the opponent's perspective (who is to play)
+                            pass_counterfactual_frame_player = gs.board.pla
+                            
+                            # Undo the pass to restore original state
+                            gs.undo()
+                        except Exception as e:
+                            # If counterfactual computation fails, try to recover state
+                            if gs.can_undo() and len(gs.moves) > 0 and gs.moves[-1][1] == Board.PASS_LOC:
+                                gs.undo()
+                            print(f"    Warning: Pass counterfactual failed for move {i}: {e}")
+                            pass_counterfactual_raw = None
+                            pass_counterfactual_frame_player = None
+                    
+                    # Play the actual move to get post-move state
                     if move_loc is not None and move_loc != Board.PASS_LOC:
                         try:
                             gs.play(current_player, move_loc)
@@ -505,6 +567,7 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                     # ownership_after_raw is from post_move_player's perspective (who is to play now)
                     # ownership_before_for_analysis is from current_player's perspective (was to play before move)
                     # before_board.pla == current_player, so it will normalize correctly
+                    # pass_counterfactual_raw provides the "what if I passed" ownership for territory concepts
                     analysis = analyze_position_comprehensive(
                         board=gs.board,  # Post-move board
                         ownership=ownership_after_raw,  # From post_move_player's perspective
@@ -514,7 +577,9 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                         last_move_loc=last_move_loc,
                         before_ownership=ownership_before_for_analysis,  # From current_player's perspective
                         before_board=board_before,  # Pre-move board state (board_before.pla == current_player)
-                        ownership_frame_player=post_move_player  # Frame of ownership_after_raw
+                        ownership_frame_player=post_move_player,  # Frame of ownership_after_raw
+                        pass_counterfactual_ownership=pass_counterfactual_raw,  # "What if I passed?"
+                        pass_counterfactual_frame_player=pass_counterfactual_frame_player
                     )
                     
                     # Convert numpy arrays to lists for JSON serialization
@@ -526,6 +591,8 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                         "player": player,
                         "move_loc": move_loc,
                         "analysis": analysis_serializable,
+                        # Store raw pass_counterfactual for visualization
+                        "pass_counterfactual": pass_counterfactual_raw.tolist() if pass_counterfactual_raw is not None else None,
                     }
                     
                     # Use a more robust JSON serialization
@@ -549,6 +616,103 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
     print("Snorkel analysis completed!")
 
 
+def compute_global_stats(games_dir: Path) -> Dict[str, Any]:
+    """
+    Compute global statistics from all snorkel.jsonl files for percentile computation.
+    
+    Returns a dict with percentile arrays for key features:
+    - For each feature, stores [p10, p25, p50, p75, p90] values
+    """
+    print("Computing global statistics from all games...")
+    
+    # Features to track for percentile computation
+    features_to_track = [
+        # Territory features
+        "potential_territory", "solid_territory", "building_count", "building_intensity",
+        "solidification_count", "solidification_intensity", "reduction_count", "reduction_intensity",
+        "invasion_intensity",
+        # Group features
+        "current_group_strength", "current_group_strength_delta",
+        "current_group_connectivity", "current_group_connectivity_delta",
+        "current_group_influence_count", "current_group_influence_count_delta",
+        "current_group_influence_strength", "current_group_influence_strength_delta",
+        "liberties",
+        # All groups average
+        "group_strength_delta", "group_connectivity_delta",
+        "influence_count_delta", "influence_strength_delta",
+        "max_group_strength_delta", "max_group_connectivity_delta",
+        # Attack features
+        "avg_attack_intensity", "max_attack_intensity", "aji_reduction_intensity",
+        # Sacrifice features
+        "direct_sacrifice_intensity", "indirect_sacrifice", "indirect_sacrifice_intensity",
+    ]
+    
+    # Collect all values for each feature
+    feature_values: Dict[str, List[float]] = {f: [] for f in features_to_track}
+    
+    game_count = 0
+    move_count = 0
+    
+    for game_dir in sorted(games_dir.iterdir()):
+        if not game_dir.is_dir():
+            continue
+        snorkel_path = game_dir / "snorkel.jsonl"
+        if not snorkel_path.exists():
+            continue
+        
+        game_count += 1
+        
+        with snorkel_path.open("r", encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    analysis = rec.get("analysis", {})
+                    move_count += 1
+                    
+                    for feature in features_to_track:
+                        value = analysis.get(feature)
+                        if value is not None and isinstance(value, (int, float)):
+                            feature_values[feature].append(float(value))
+                except Exception:
+                    continue
+    
+    print(f"  Processed {game_count} games, {move_count} moves")
+    
+    # Compute percentiles for each feature
+    percentiles = [10, 25, 50, 75, 90]
+    stats: Dict[str, Any] = {
+        "percentiles": percentiles,
+        "features": {},
+        "game_count": game_count,
+        "move_count": move_count,
+    }
+    
+    for feature, values in feature_values.items():
+        if len(values) >= 10:  # Need at least 10 values for meaningful percentiles
+            arr = np.array(values)
+            stats["features"][feature] = {
+                "min": float(np.min(arr)),
+                "max": float(np.max(arr)),
+                "mean": float(np.mean(arr)),
+                "std": float(np.std(arr)),
+                "p10": float(np.percentile(arr, 10)),
+                "p25": float(np.percentile(arr, 25)),
+                "p50": float(np.percentile(arr, 50)),
+                "p75": float(np.percentile(arr, 75)),
+                "p90": float(np.percentile(arr, 90)),
+                "count": len(values),
+            }
+            print(f"  {feature}: n={len(values)}, p50={stats['features'][feature]['p50']:.3f}")
+    
+    # Save stats to JSON
+    stats_path = games_dir / "global_stats.json"
+    with stats_path.open("w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=2)
+    print(f"Saved global stats to {stats_path}")
+    
+    return stats
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Generate self-play games with model outputs and trunkfinal dumps")
     p.add_argument("--model", type=Path, required=True, help="Path to model checkpoint")
@@ -564,8 +728,18 @@ def main() -> None:
     p.add_argument("--save-html", type=int, default=0, help="Render HTML for the first N games (0=off)")
     p.add_argument("--html-max-moves", type=int, default=200, help="Max moves to include in HTML")
     p.add_argument("--run-snorkel", action="store_true", help="Run snorkel_board_positions.py over games after generation")
+    p.add_argument("--compute-stats", action="store_true", help="Compute global stats from all snorkel data (for percentiles)")
+    p.add_argument("--stats-only", action="store_true", help="Only compute stats, skip game generation")
     args = p.parse_args()
 
+    # Handle stats-only mode (doesn't require model)
+    if args.stats_only:
+        if not args.output_dir.exists():
+            print(f"Output directory not found: {args.output_dir}")
+            sys.exit(1)
+        compute_global_stats(args.output_dir)
+        return
+    
     if not args.model.exists():
         print(f"Model not found: {args.model}")
         sys.exit(1)
@@ -594,11 +768,18 @@ def main() -> None:
         dev = None if args.device == "auto" else args.device
         run_snorkel(args.output_dir, args.model, dev)
         
+        # Compute global stats if requested (or always after snorkel)
+        if args.compute_stats:
+            compute_global_stats(args.output_dir)
+        
         # Now generate HTML with snorkel data included
         # When --run-snorkel is used, generate HTML for games that have snorkel data
         # If save_html > 0, limit to first N games; if 0, generate for all games with snorkel data
         print("Generating HTML with snorkel analysis data...")
         generate_html_with_snorkel(args.output_dir, args.save_html, args.html_max_moves, args.model, dev)
+    elif args.compute_stats:
+        # Just compute stats without running snorkel
+        compute_global_stats(args.output_dir)
 
 
 if __name__ == "__main__":

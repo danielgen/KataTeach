@@ -49,7 +49,7 @@ This document verifies that all features computed in `snorkel_board_positions.py
 | `reduce_aji` | `analysis.reduce_aji` | ✅ |
 | `aji_reduction_intensity` | `analysis.aji_reduction_intensity` | ✅ |
 | `creates_new_group` | `analysis.creates_new_group` | ✅ |
-| `only_move` | `analysis.only_move` | ✅ |
+| `forcing` | `analysis.forcing` | ✅ |
 | `tenuki` | `analysis.tenuki` | ✅ |
 | `urgency` | `analysis.urgency` | ✅ |
 | `urgency_intensity` | `analysis.urgency_intensity` | ✅ |

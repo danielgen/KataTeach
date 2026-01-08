@@ -30,7 +30,7 @@ TAU_ONLY_MOVE = 0.05    # "Only move" threshold
 TAU_GROUP_IOU = 0.1     # Group matching IoU threshold
 TAU_GROUP_BELONGING = 0.2  # Ownership threshold for grouping stones by influence paths
 TAU_AJI_VICINITY = 5    # Aji reduction L1 radius
-TAU_DELTA_MIN = 0.1     # Minimum ownership delta for solidification/reduction
+TAU_DELTA_MIN = 0.05     # Minimum ownership delta for solidification/reduction
 
 REGIONS = ["corner_tl", "corner_tr", "corner_bl", "corner_br",
            "side_left", "side_right", "side_top", "side_bottom", "center"]
@@ -88,6 +88,92 @@ def region_map(size: int = 19) -> np.ndarray:
 
 def _empty_region_dict(default=0.0) -> Dict[str, Any]:
     return {r: default for r in REGIONS}
+
+
+CORNER_REGIONS = {"corner_tl", "corner_tr", "corner_bl", "corner_br"}
+
+
+def count_stones_in_corner(board: Board, corner_region: str) -> Tuple[int, int]:
+    """
+    Count stones in a corner region.
+    
+    Args:
+        board: Current board state
+        corner_region: One of "corner_tl", "corner_tr", "corner_bl", "corner_br"
+    
+    Returns:
+        (black_count, white_count) tuple
+    """
+    black_count = 0
+    white_count = 0
+    size = board.size
+    
+    for y in range(size):
+        for x in range(size):
+            if classify_region(x, y, size) == corner_region:
+                loc = board.loc(x, y)
+                stone = board.board[loc]
+                if stone == Board.BLACK:
+                    black_count += 1
+                elif stone == Board.WHITE:
+                    white_count += 1
+    
+    return black_count, white_count
+
+
+def is_occupy_corner(board: Board, before_board: Optional[Board], move_loc: int, player: int) -> bool:
+    """
+    Check if move is the first stone in a corner area.
+    
+    Returns True when a player places the first stone in a corner region
+    (i.e., no stones existed in that corner before the move).
+    """
+    if before_board is None:
+        return False
+    
+    x, y = loc_to_xy(board, move_loc)
+    region = classify_region(x, y, board.size)
+    
+    # Must be in a corner
+    if region not in CORNER_REGIONS:
+        return False
+    
+    # Check if corner was empty before this move
+    black_before, white_before = count_stones_in_corner(before_board, region)
+    return black_before == 0 and white_before == 0
+
+
+def is_approaching_corner(board: Board, before_board: Optional[Board], move_loc: int, player: int) -> bool:
+    """
+    Check if move approaches an opponent's corner stone.
+    
+    Returns True when the move is the second stone in a corner area
+    and the only other stone in that corner is an opponent's stone.
+    """
+    if before_board is None:
+        return False
+    
+    x, y = loc_to_xy(board, move_loc)
+    region = classify_region(x, y, board.size)
+    
+    # Must be in a corner
+    if region not in CORNER_REGIONS:
+        return False
+    
+    # Check stones in corner before the move
+    black_before, white_before = count_stones_in_corner(before_board, region)
+    total_before = black_before + white_before
+    
+    # Must be exactly one stone before (opponent's)
+    if total_before != 1:
+        return False
+    
+    # The existing stone must be opponent's
+    opponent = Board.get_opp(player)
+    if opponent == Board.BLACK:
+        return black_before == 1
+    else:
+        return white_before == 1
 
 
 def _stone_mask(board: Board) -> np.ndarray:
@@ -637,7 +723,7 @@ def urgency_intensity_by_region(policy: np.ndarray) -> Dict[str, float]:
     return {r: urg[r] / total if total > 0 else 0.0 for r in urg}
 
 
-def is_only_move(policy: np.ndarray) -> bool:
+def is_forcing(policy: np.ndarray) -> bool:
     """Check if one move dominates (>95% probability)."""
     return float(np.max(policy)) > (1.0 - TAU_ONLY_MOVE)
 
@@ -1067,7 +1153,9 @@ def analyze_position_comprehensive(
     last_move_loc: Optional[int] = None,
     before_ownership: Optional[np.ndarray] = None,
     before_board: Optional[Board] = None,
-    ownership_frame_player: Optional[int] = None
+    ownership_frame_player: Optional[int] = None,
+    pass_counterfactual_ownership: Optional[np.ndarray] = None,
+    pass_counterfactual_frame_player: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Comprehensive position analysis returning tactical and territorial metrics.
@@ -1082,6 +1170,12 @@ def analyze_position_comprehensive(
         before_ownership: Ownership array before the move (for delta calculations)
         before_board: Board state before the move (for group comparisons)
         ownership_frame_player: If set, ownership is already normalized to this player's perspective
+        pass_counterfactual_ownership: Ownership array if player had passed instead of playing the move.
+            Used for territory-related concepts to avoid "anticipatory ownership" issues where
+            the pre-move ownership already reflects the model's expectation of the move.
+            If provided, territory concepts (building, solidification, reduction, invasion)
+            will compare pass_counterfactual vs actual ownership instead of before vs after.
+        pass_counterfactual_frame_player: Player perspective for pass_counterfactual_ownership
 
     Returns:
         Dict with the following features:
@@ -1111,6 +1205,9 @@ def analyze_position_comprehensive(
             current_group_strength_delta: Change in strength of that specific group
             current_group_connectivity: Connectivity of the group containing the move after the move
             current_group_connectivity_delta: Change in connectivity of that specific group
+            must_live: True if group would be dead under pass counterfactual but is alive after move
+                       Only applies when move connects to existing stones (not new single-stone groups)
+            counterfactual_group_strength: Strength the pre-existing stones would have if player passed
 
         Influence Features (delta):
             influence_count_delta: Change in count of adjacent empty points with favorable ownership
@@ -1142,15 +1239,17 @@ def analyze_position_comprehensive(
 
         Sacrifice Features:
             direct_sacrifice: The played stone is in opponent territory AFTER the move (sacrifice stone)
-            sacrifice_intensity: Absolute ownership value of sacrificed stone
+            direct_sacrifice_intensity: Absolute ownership value of sacrificed stone
             indirect_sacrifice: Count of own stones that flipped to opponent territory
             indirect_sacrifice_intensity: Average ownership swing of sacrificed stones
 
         Policy Features:
             urgency: Dict of policy probability mass by region
             urgency_intensity: Dict of normalized urgency per region
-            only_move: True if top move has >95% probability
+            forcing: True if top move has >95% probability
             tenuki: Move is far from last move, ignoring local follow-up
+            occupy_corner: First stone played in a corner area (corner was empty before)
+            approaching_corner: Second stone in corner, responding to opponent's corner stone
 
         Regional Breakdowns:
             building_count_by_region, building_intensity_by_region
@@ -1166,6 +1265,9 @@ def analyze_position_comprehensive(
     results: Dict[str, Any] = {}
     player = player if player is not None else board.pla
     is_pass = move_loc is not None and move_loc == Board.PASS_LOC
+    
+    # Track whether pass counterfactual is being used for territory concepts
+    results["used_pass_counterfactual"] = pass_counterfactual_ownership is not None
 
     # Normalize ownership to current player's perspective
     frame = ownership_frame_player if ownership_frame_player is not None else Board.WHITE
@@ -1184,6 +1286,26 @@ def analyze_position_comprehensive(
             before_frame = Board.get_opp(frame) if ownership_frame_player is not None else Board.WHITE
             own_before = normalize_ownership(before_ownership, before_frame, player)
 
+    # Normalize pass_counterfactual_ownership for territory concepts
+    # This is the ownership if the player had passed instead of playing the actual move.
+    # After a pass, it's the opponent's turn, so the ownership is from opponent's perspective.
+    own_pass_counterfactual = None
+    if pass_counterfactual_ownership is not None:
+        if pass_counterfactual_frame_player is not None:
+            own_pass_counterfactual = normalize_ownership(
+                pass_counterfactual_ownership, pass_counterfactual_frame_player, player
+            )
+        else:
+            # Default: after pass, it's opponent's turn (same as after actual move)
+            own_pass_counterfactual = normalize_ownership(
+                pass_counterfactual_ownership, Board.get_opp(player), player
+            )
+    
+    # Determine which "before" ownership to use for all before/after comparisons
+    # If pass counterfactual is available, use it to avoid anticipatory ownership issues
+    # This affects both territory AND group features (group strength, attack analysis, etc.)
+    own_baseline = own_pass_counterfactual if own_pass_counterfactual is not None else own_before
+
     # Urgency
     results["urgency"] = urgency_by_region(policy)
     results["urgency_intensity"] = urgency_intensity_by_region(policy)
@@ -1195,11 +1317,15 @@ def analyze_position_comprehensive(
     compute_group_influence(groups, own_curr, board)
 
     # Territory analysis
-    if own_before is not None and not is_pass:
-        bc, bi = count_building_territory(own_before, own_curr, board)
-        sc, si = solidify_territory_delta(own_before, own_curr, board)
-        rc, ri = reduce_opponent_territory(own_before, own_curr, board)
-        inv, inv_i = invasion_effect(own_before, own_curr, board, move_loc, groups)
+    # Use own_baseline (pass counterfactual if available, otherwise own_before)
+    # This helps avoid "anticipatory ownership" where pre-move ownership already reflects
+    # the model's expectation of the move being played.
+    if own_baseline is not None and not is_pass:
+        bc, bi = count_building_territory(own_baseline, own_curr, board)
+        sc, si = solidify_territory_delta(own_baseline, own_curr, board)
+        rc, ri = reduce_opponent_territory(own_baseline, own_curr, board)
+        # Invasion uses own_before (not counterfactual) - we want to see actual board change
+        inv, inv_i = invasion_effect(own_before if own_before is not None else own_baseline, own_curr, board, move_loc, groups)
 
         results.update({
             "building_count": bc, "building_intensity": bi,
@@ -1209,8 +1335,8 @@ def analyze_position_comprehensive(
         })
 
         # Regional analysis
-        bc_r, bi_r, sc_r, si_r = compute_territory_delta_by_region(own_before, own_curr, board)
-        rc_r, ri_r = compute_reduction_by_region(own_before, own_curr, board)
+        bc_r, bi_r, sc_r, si_r = compute_territory_delta_by_region(own_baseline, own_curr, board)
+        rc_r, ri_r = compute_reduction_by_region(own_baseline, own_curr, board)
         results.update({
             "building_count_by_region": bc_r, "building_intensity_by_region": bi_r,
             "solidification_count_by_region": sc_r, "solidification_intensity_by_region": si_r,
@@ -1230,24 +1356,27 @@ def analyze_position_comprehensive(
             "reduction_intensity_by_region": _empty_region_dict(0.0),
         })
 
-    # Territory sizes (delta - change from before to after)
-    if own_before is not None:
-        territory_data = territory_sizes_with_delta(own_before, own_curr, board, player)
+    # Territory sizes (delta - change from baseline to after)
+    # Use territory baseline (pass counterfactual if available) for consistent territory measurement
+    if own_baseline is not None:
+        territory_data = territory_sizes_with_delta(own_baseline, own_curr, board, player)
         results.update(territory_data)
     else:
-        # No before state available, so delta is 0
+        # No baseline available, so delta is 0
         results["potential_territory"] = 0
         results["solid_territory"] = 0
     
     # Sacrifices
     if move_loc is not None:
-        # Use before_ownership to check if location was in opponent territory before the move
-        ds, ds_i = direct_sacrifice(move_loc, own_curr, board, before_ownership=own_before)
+        # Use baseline ownership to check if location was in opponent territory before the move
+        ds, ds_i = direct_sacrifice(move_loc, own_curr, board, before_ownership=own_baseline)
         results["direct_sacrifice"] = ds
+        results["direct_sacrifice_intensity"] = ds_i
+        # Keep backward compatibility
         results["sacrifice_intensity"] = ds_i
-        if own_before is not None:
+        if own_baseline is not None:
             # Pass before_board to detect captured stones that are no longer on current board
-            ind, ind_i = indirect_sacrifice(own_before, own_curr, player, board, before_board)
+            ind, ind_i = indirect_sacrifice(own_baseline, own_curr, player, board, before_board)
             results["indirect_sacrifice"] = ind
             results["indirect_sacrifice_intensity"] = ind_i
         else:
@@ -1255,16 +1384,17 @@ def analyze_position_comprehensive(
             results["indirect_sacrifice_intensity"] = 0.0
     else:
         results.update({
-            "direct_sacrifice": False, "sacrifice_intensity": 0.0,
+            "direct_sacrifice": False, "direct_sacrifice_intensity": 0.0,
+            "sacrifice_intensity": 0.0,  # Backward compatibility
             "indirect_sacrifice": 0, "indirect_sacrifice_intensity": 0.0,
         })
 
     # Tactical concepts
     if move_loc is not None and not is_pass:
         results["cut"] = is_cut_move(board, move_loc)
-        # Connection check using group enumeration (requires before_board and before_ownership)
-        if before_board is not None and own_before is not None:
-            conn, conn_gain, merged_regions, merged_head_locs = is_connection_move(board, move_loc, player, before_board, own_before, own_curr)
+        # Connection check using group enumeration (requires before_board and baseline ownership)
+        if before_board is not None and own_baseline is not None:
+            conn, conn_gain, merged_regions, merged_head_locs = is_connection_move(board, move_loc, player, before_board, own_baseline, own_curr)
             results["merged_groups_regions"] = merged_regions
             results["merged_groups_head_locs"] = merged_head_locs
         else:
@@ -1283,7 +1413,7 @@ def analyze_position_comprehensive(
             "extension": False, "liberties": 0, "atari": False,
         })
 
-    results["only_move"] = is_only_move(policy) if not is_pass else False
+    results["forcing"] = is_forcing(policy) if not is_pass else False
 
     if last_move_loc is not None and move_loc is not None and not is_pass:
         move_idx = loc_to_xy(board, move_loc)[1] * 19 + loc_to_xy(board, move_loc)[0]
@@ -1291,17 +1421,25 @@ def analyze_position_comprehensive(
     else:
         results["tenuki"] = False
     
-    # Attack analysis
-    if own_before is not None:
-        ra, ra_i = reduce_aji(own_before, own_curr, board, player, move_loc)
+    # Corner occupation features
+    if move_loc is not None and not is_pass:
+        results["occupy_corner"] = is_occupy_corner(board, before_board, move_loc, player)
+        results["approaching_corner"] = is_approaching_corner(board, before_board, move_loc, player)
+    else:
+        results["occupy_corner"] = False
+        results["approaching_corner"] = False
+    
+    # Attack analysis (uses baseline ownership for before/after comparisons)
+    if own_baseline is not None:
+        ra, ra_i = reduce_aji(own_baseline, own_curr, board, player, move_loc)
         results["reduce_aji"] = ra
         results["aji_reduction_intensity"] = ra_i
 
         if before_board is not None:
-            groups_before = enumerate_groups(before_board, own_before, player)
-            compute_group_strengths(groups_before, own_before, before_board)
-            compute_group_connectivity(groups_before, own_before, before_board)
-            compute_group_influence(groups_before, own_before, before_board)
+            groups_before = enumerate_groups(before_board, own_baseline, player)
+            compute_group_strengths(groups_before, own_baseline, before_board)
+            compute_group_connectivity(groups_before, own_baseline, before_board)
+            compute_group_influence(groups_before, own_baseline, before_board)
             
             # Compute current group (the group containing the move) delta
             if move_loc is not None and not is_pass:
@@ -1317,27 +1455,63 @@ def analyze_position_comprehensive(
                 results["current_group_influence_count_delta"] = curr_inf_count_delta
                 results["current_group_influence_strength"] = curr_inf_str
                 results["current_group_influence_strength_delta"] = curr_inf_str_delta
+                
+                # "must_live" feature: True if group would be dead under counterfactual but is alive after move
+                # This detects moves that are necessary to save a group from dying
+                # Only applies to groups that existed before the move (not new single-stone groups)
+                must_live = False
+                counterfactual_strength = 0.0
+                if own_pass_counterfactual is not None:
+                    # Find the current group containing move_loc
+                    current_group = None
+                    for g in groups:
+                        if move_loc in g.stones:
+                            current_group = g
+                            break
+                    
+                    if current_group is not None:
+                        # Only consider stones that existed BEFORE the move (exclude the just-played stone)
+                        # In counterfactual, the move_loc stone doesn't exist since player passed
+                        pre_existing_stones = [loc for loc in current_group.stones if loc != move_loc]
+                        
+                        # Only compute must_live if there are pre-existing stones
+                        # (i.e., the move connected to an existing group, not just a new single stone)
+                        if pre_existing_stones:
+                            stone_ownerships = []
+                            for loc in pre_existing_stones:
+                                y, x = board.loc_y(loc), board.loc_x(loc)
+                                if 0 <= y < own_pass_counterfactual.shape[0] and 0 <= x < own_pass_counterfactual.shape[1]:
+                                    stone_ownerships.append(own_pass_counterfactual[y, x])
+                            
+                            if stone_ownerships:
+                                counterfactual_strength = float(np.mean(stone_ownerships))
+                                # Group is "dead" under counterfactual if strength <= 0
+                                # Group is "alive" after move if current strength > 0
+                                must_live = (counterfactual_strength <= 0.0) and (curr_str > 0.0)
+                
+                results["must_live"] = must_live
+                results["counterfactual_group_strength"] = counterfactual_strength
             else:
                 results.update({
                     "current_group_strength": 0.0, "current_group_strength_delta": 0.0,
                     "current_group_connectivity": 0.0, "current_group_connectivity_delta": 0.0,
                     "current_group_influence_count": 0, "current_group_influence_count_delta": 0,
                     "current_group_influence_strength": 0.0, "current_group_influence_strength_delta": 0.0,
+                    "must_live": False, "counterfactual_group_strength": 0.0,
                 })
             
             # Also compute opponent groups for attack analysis
             opp = Board.get_opp(player)
             opp_own_curr = -own_curr  # Opponent's perspective (negated)
-            opp_own_before = -own_before if own_before is not None else None
+            opp_own_baseline = -own_baseline  # Use baseline for opponent too
             opp_groups = enumerate_groups(board, opp_own_curr, opp)
-            opp_groups_before = enumerate_groups(before_board, opp_own_before, opp) if opp_own_before is not None else []
+            opp_groups_before = enumerate_groups(before_board, opp_own_baseline, opp)
             compute_group_strengths(opp_groups, opp_own_curr, board)
             compute_group_connectivity(opp_groups, opp_own_curr, board)
             compute_group_influence(opp_groups, opp_own_curr, board)
-            if opp_own_before is not None:
-                compute_group_strengths(opp_groups_before, opp_own_before, before_board)
-                compute_group_connectivity(opp_groups_before, opp_own_before, before_board)
-                compute_group_influence(opp_groups_before, opp_own_before, before_board)
+            compute_group_strengths(opp_groups_before, opp_own_baseline, before_board)
+            compute_group_connectivity(opp_groups_before, opp_own_baseline, before_board)
+            compute_group_influence(opp_groups_before, opp_own_baseline, before_board)
 
             # Attack metrics (using opponent groups)
             is_atk, avg_atk, max_atk = attack_strength_delta(opp_groups_before, opp_groups, board)
@@ -1363,7 +1537,7 @@ def analyze_position_comprehensive(
             
             # Influence delta - use accurate computation that avoids double-counting
             inf_count_delta, inf_str_delta = compute_influence_delta_accurate(
-                groups_before, groups, own_before, own_curr, before_board, board
+                groups_before, groups, own_baseline, own_curr, before_board, board
             )
 
             results["group_strength_delta"] = avg_str_delta
@@ -1385,6 +1559,7 @@ def analyze_position_comprehensive(
                 "current_group_connectivity": 0.0, "current_group_connectivity_delta": 0.0,
                 "current_group_influence_count": 0, "current_group_influence_count_delta": 0,
                 "current_group_influence_strength": 0.0, "current_group_influence_strength_delta": 0.0,
+                "must_live": False, "counterfactual_group_strength": 0.0,
             })
     else:
         results.update({
@@ -1400,6 +1575,7 @@ def analyze_position_comprehensive(
             "current_group_connectivity": 0.0, "current_group_connectivity_delta": 0.0,
             "current_group_influence_count": 0, "current_group_influence_count_delta": 0,
             "current_group_influence_strength": 0.0, "current_group_influence_strength_delta": 0.0,
+            "must_live": False, "counterfactual_group_strength": 0.0,
         })
 
     return results
@@ -1628,10 +1804,11 @@ __all__ = [
     "compute_territory_delta_by_region", "compute_reduction_by_region", "compute_reduction_delta_by_region",
     "compute_group_strength_delta_by_region", "compute_group_connectivity_delta_by_region",
     "compute_influence_delta_by_region",
-    "urgency_by_region", "urgency_intensity_by_region", "is_only_move", "is_tenuki",
+    "urgency_by_region", "urgency_intensity_by_region", "is_forcing", "is_tenuki",
     "is_cut_move", "is_connection_move", "is_extension_move",
     "liberties_of_group", "atari_move", "creates_new_group",
     "find_group_containing", "compute_current_group_delta",
+    "is_occupy_corner", "is_approaching_corner", "CORNER_REGIONS",
     "reduce_aji", "attack_strength_delta", "get_attacked_groups_info", "killing_attack",
     "analyze_position_comprehensive",
 ]

@@ -80,15 +80,22 @@ function getMoveConcepts(moveNumber) {{
 function formatConceptBadges(move, showDeltas = true) {{
     let html = '<div class="concept-badges">';
     
-    // Top activated concepts
-    if (move.top_concepts && move.top_concepts.length > 0) {{
-        html += '<div class="active-concepts"><strong>Active:</strong> ';
-        for (const concept of move.top_concepts) {{
-            const score = move.scores[concept];
-            const color = score > 0 ? '#2196F3' : '#FF9800';
-            html += `<span class="concept-badge" style="background: ${{color}}; color: white; padding: 2px 6px; border-radius: 3px; margin: 2px; font-size: 11px;">${{concept}}: ${{score.toFixed(2)}}</span>`;
+    // Top activated concepts - sort by score value (highest positive first)
+    if (move.scores && Object.keys(move.scores).length > 0) {{
+        // Get all concepts with scores, filter for significant ones, sort by value (highest first)
+        const sortedConcepts = Object.entries(move.scores)
+            .filter(([c, s]) => s !== null && s !== undefined && Math.abs(s) > 0.5)
+            .sort((a, b) => b[1] - a[1])  // Sort by score descending (highest positive first)
+            .slice(0, 5);
+        
+        if (sortedConcepts.length > 0) {{
+            html += '<div class="active-concepts"><strong>Active:</strong> ';
+            for (const [concept, score] of sortedConcepts) {{
+                const color = score > 0 ? '#2196F3' : '#FF9800';
+                html += `<span class="concept-badge" style="background: ${{color}}; color: white; padding: 2px 6px; border-radius: 3px; margin: 2px; font-size: 11px;">${{concept}}: ${{score.toFixed(2)}}</span>`;
+            }}
+            html += '</div>';
         }}
-        html += '</div>';
     }}
     
     // Top delta concepts (what changed)

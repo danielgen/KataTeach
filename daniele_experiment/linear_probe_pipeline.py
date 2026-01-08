@@ -26,10 +26,9 @@ from tqdm import tqdm
 
 # ML imports
 from sklearn.linear_model import LogisticRegression
-from sklearn.svm import LinearSVC
 from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import GroupKFold, cross_val_score
-from sklearn.metrics import accuracy_score, f1_score, roc_auc_score, classification_report
+from sklearn.model_selection import GroupKFold
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
 import joblib
 
 
@@ -49,6 +48,7 @@ class ConceptDefinition:
     direction: Optional[str] = None  # "high" or "low" for quantile
     use_abs: Optional[bool] = None  # Use absolute value for quantile (default False)
     filters: Optional[List[Dict[str, Any]]] = None  # Filter conditions before quantile
+    stratify_by_phase: Optional[bool] = None  # If True, compute quantiles separately per game phase
 
 
 def load_concepts(yaml_path: str) -> Tuple[List[ConceptDefinition], Dict]:
@@ -71,9 +71,33 @@ def load_concepts(yaml_path: str) -> Tuple[List[ConceptDefinition], Dict]:
             direction=spec.get('direction'),
             use_abs=spec.get('use_abs', False),
             filters=spec.get('filters'),
+            stratify_by_phase=spec.get('stratify_by_phase', False),
         ))
     
     return concepts, config
+
+
+def get_game_phase(move_number: int) -> str:
+    """
+    Determine game phase from move number.
+    
+    Uses absolute move ranges to handle variable-length games:
+    - Early: moves 1-60 (opening)
+    - Mid: moves 61-150 (middle game)
+    - End: moves 151+ (endgame)
+    
+    Args:
+        move_number: Move number (1-based)
+    
+    Returns:
+        'early', 'mid', or 'end'
+    """
+    if move_number <= 60:
+        return 'early'
+    elif move_number <= 150:
+        return 'mid'
+    else:
+        return 'end'
 
 
 def extract_value(analysis: Dict, concept: ConceptDefinition) -> Optional[float]:
@@ -220,14 +244,16 @@ def compute_quantile_thresholds(
     """
     Compute quantile thresholds for a concept on training data only.
     Applies filters before computing thresholds.
+    Optionally stratifies by game phase if concept.stratify_by_phase is True.
     
     Args:
-        df: Full dataframe
+        df: Full dataframe (must have 'game_phase' column if stratify_by_phase=True)
         concept: Concept definition
         train_indices: Indices of training samples
     
     Returns:
         (low_threshold, high_threshold) tuple or None if insufficient data
+        If stratify_by_phase=True, returns dict mapping phase -> (low, high) thresholds
     """
     train_df = df.iloc[train_indices].copy()
     
@@ -242,6 +268,39 @@ def compute_quantile_thresholds(
         if len(train_df) == 0:
             return None
     
+    # If stratifying by phase, compute thresholds per phase
+    if concept.stratify_by_phase:
+        if 'game_phase' not in train_df.columns:
+            # Fall back to non-stratified if phase column missing
+            pass
+        else:
+            phase_thresholds = {}
+            for phase in ['early', 'mid', 'end']:
+                phase_df = train_df[train_df['game_phase'] == phase]
+                if len(phase_df) == 0:
+                    continue
+                
+                phase_values = phase_df[value_col].values
+                phase_values = phase_values[~pd.isna(phase_values)]
+                
+                if len(phase_values) < 10:  # Need at least 10 samples per phase
+                    continue
+                
+                # Apply use_abs if specified
+                if concept.use_abs:
+                    phase_values = np.abs(phase_values)
+                
+                q = concept.q or 0.1
+                low_thr = float(np.quantile(phase_values, q))
+                high_thr = float(np.quantile(phase_values, 1 - q))
+                phase_thresholds[phase] = (low_thr, high_thr)
+            
+            # Return dict if we got thresholds for at least one phase
+            if phase_thresholds:
+                return phase_thresholds
+            # Fall through to non-stratified if no phases had enough data
+    
+    # Non-stratified: compute thresholds on all data
     values = train_df[value_col].values
     values = values[~pd.isna(values)]
     
@@ -365,6 +424,7 @@ def build_dataset(
                 'move_number': move_num,
                 'player': player,
                 'move_loc': move_loc,
+                'game_phase': get_game_phase(move_num),  # Add game phase for stratification
             }
             
             # Add features (store as list for parquet compatibility)
@@ -390,11 +450,17 @@ def build_dataset(
                 row[f"rawval_{concept.name}"] = raw_value
             
             # Also keep legacy raw values for backward compatibility
+            # Add all analysis values as direct columns for filter compatibility
             for key in ['building_count', 'solidification_count', 'reduction_count',
                        'potential_territory', 'solid_territory', 'liberties',
-                       'group_strength_delta', 'influence_count_delta']:
+                       'group_strength_delta', 'influence_count_delta',
+                       'attacked_groups_count', 'building_intensity', 
+                       'solidification_intensity', 'reduction_intensity']:
+                # Store as both raw_<key> (legacy) and direct column name (for filters)
+                value = analysis.get(key)
+                row[key] = value
                 if f"raw_{key}" not in row:
-                    row[f"raw_{key}"] = analysis.get(key)
+                    row[f"raw_{key}"] = value
             
             all_rows.append(row)
     
@@ -463,6 +529,17 @@ def train_probes(
     For quantile concepts, computes thresholds per fold to avoid leakage.
     Moves scaling inside CV folds to avoid test leakage.
     
+    Note on quantile labeling:
+    - Final model thresholds are computed on all data (for consistency)
+    - CV metrics (AUC) use per-fold thresholds (honest generalization estimates)
+    - Training set metrics (train_accuracy, train_f1) are optimistic (same data used for training)
+    - Use CV metrics for honest performance estimates
+    
+    Note on sparse sources:
+    - For sparse quantile sources (e.g., building_count, reduction_count), add filters
+      to ensure source > 0 before computing quantiles. Otherwise "top 10%" might mean ">= 1"
+      and labels become binary noise.
+    
     Args:
         df: Dataset DataFrame
         concepts: List of concepts to train probes for
@@ -518,67 +595,128 @@ def train_probes(
         fold_best_Cs = []
         
         # Define helper functions for labeling (will be used as closures over thresholds)
-        def _apply_single_filter(row, filt):
-            """Check if a single filter condition passes."""
-            col = filt['column']
-            op = filt['operator']
-            val = filt['value']
-            
-            if col not in row.index:
-                return False
-            
-            row_val = row[col]
-            if pd.isna(row_val):
-                return False
-            
-            if op == '<=':
-                return row_val <= val
-            elif op == '>=':
-                return row_val >= val
-            elif op == '==':
-                return row_val == val
-            elif op == '!=':
-                return row_val != val
-            elif op == '<':
-                return row_val < val
-            elif op == '>':
-                return row_val > val
-            return False
+        # Precompute arrays for performance (avoid df.iloc in loops)
+        raw_col = f"rawval_{concept.name}"
+        if raw_col not in df.columns:
+            print(f"Skipping {concept.name}: raw value column not found")
+            continue
         
-        def make_label_sample_fn(low_thr, high_thr):
-            """Create a labeling function that closes over thresholds."""
-            def label_sample(row_idx):
-                """Label a single sample, applying filters."""
-                row = df.iloc[row_idx]
+        raw_values = df[raw_col].to_numpy()
+        raw_values_abs = np.abs(raw_values) if concept.use_abs else raw_values
+        
+        # Precompute filter masks if filters exist
+        # If any filter column is missing, skip the concept entirely
+        filters_ok = True
+        filter_masks = []
+        if concept.filters:
+            for filt in concept.filters:
+                col = filt['column']
+                op = filt['operator']
+                val = filt['value']
                 
-                # Apply filters first
-                if concept.filters:
-                    if not all(_apply_single_filter(row, filt) for filt in concept.filters):
-                        return None, False
+                if col not in df.columns:
+                    print(f"Skipping {concept.name}: filter column {col} not found")
+                    filters_ok = False
+                    break
                 
-                # Get raw value using per-concept column
-                raw_col = f"rawval_{concept.name}"
-                if raw_col not in df.columns:
-                    return None, False
-                raw_val = row[raw_col]
-                if pd.isna(raw_val):
-                    return None, False
-                
-                # Apply use_abs
-                val = float(raw_val)
-                if concept.use_abs:
-                    val = abs(val)
-                
-                # Apply direction
-                if concept.direction == 'high':
-                    label = 1 if val >= high_thr else (0 if val <= low_thr else None)
-                elif concept.direction == 'low':
-                    label = 1 if val <= low_thr else (0 if val >= high_thr else None)
+                col_values = df[col].to_numpy()
+                if op == '<=':
+                    mask = col_values <= val
+                elif op == '>=':
+                    mask = col_values >= val
+                elif op == '==':
+                    mask = col_values == val
+                elif op == '!=':
+                    mask = col_values != val
+                elif op == '<':
+                    mask = col_values < val
+                elif op == '>':
+                    mask = col_values > val
                 else:
-                    label = None
+                    mask = np.ones(len(df), dtype=bool)
                 
-                return label, label is not None
-            return label_sample
+                # Also check for NaN
+                mask = mask & ~pd.isna(col_values)
+                filter_masks.append(mask)
+        
+        if not filters_ok:
+            continue
+        
+        # Precompute game_phase array if stratifying by phase
+        game_phases = None
+        if concept.stratify_by_phase and 'game_phase' in df.columns:
+            game_phases = df['game_phase'].to_numpy()
+        
+        def make_label_sample_fn_vectorized(thresholds):
+            """Create a vectorized labeling function.
+            
+            Args:
+                thresholds: Either (low_thr, high_thr) tuple or dict mapping phase -> (low_thr, high_thr)
+            """
+            # Normalize to dict format for uniform handling
+            if isinstance(thresholds, tuple):
+                # Non-stratified: use same thresholds for all phases
+                phase_thresholds = {'early': thresholds, 'mid': thresholds, 'end': thresholds}
+            else:
+                # Stratified: use provided phase thresholds
+                phase_thresholds = thresholds
+            
+            def label_sample_vectorized(indices):
+                """Label samples using vectorized operations.
+                
+                Returns:
+                    (labels, valid_mask) where:
+                    - labels: np.array with 0, 1, or -1 (for invalid/unlabeled)
+                    - valid_mask: boolean array indicating which samples have valid labels
+                """
+                # Apply filters if they exist
+                if filter_masks:
+                    # Combine all filter masks
+                    combined_mask = np.ones(len(indices), dtype=bool)
+                    for mask in filter_masks:
+                        combined_mask = combined_mask & mask[indices]
+                else:
+                    combined_mask = np.ones(len(indices), dtype=bool)
+                
+                # Get raw values for these indices
+                vals = raw_values_abs[indices]
+                
+                # Check for NaN
+                valid_mask = combined_mask & ~pd.isna(vals)
+                
+                # Initialize labels with -1 (invalid/unlabeled)
+                labels = np.full(len(indices), -1, dtype=np.int8)
+                
+                # If stratifying by phase, label per phase
+                if game_phases is not None:
+                    for phase in ['early', 'mid', 'end']:
+                        if phase not in phase_thresholds:
+                            continue
+                        low_thr, high_thr = phase_thresholds[phase]
+                        phase_mask = (game_phases[indices] == phase) & valid_mask
+                        
+                        if concept.direction == 'high':
+                            labels[phase_mask & (vals >= high_thr)] = 1
+                            labels[phase_mask & (vals <= low_thr)] = 0
+                        elif concept.direction == 'low':
+                            labels[phase_mask & (vals <= low_thr)] = 1
+                            labels[phase_mask & (vals >= high_thr)] = 0
+                else:
+                    # Non-stratified: use first available threshold (all phases same)
+                    low_thr, high_thr = next(iter(phase_thresholds.values()))
+                    
+                    if concept.direction == 'high':
+                        labels[valid_mask & (vals >= high_thr)] = 1
+                        labels[valid_mask & (vals <= low_thr)] = 0
+                    elif concept.direction == 'low':
+                        labels[valid_mask & (vals <= low_thr)] = 1
+                        labels[valid_mask & (vals >= high_thr)] = 0
+                
+                # Valid mask: samples that passed filters, aren't NaN, and have a label (0 or 1)
+                valid_mask = valid_mask & (labels >= 0)
+                
+                return labels, valid_mask
+            return label_sample_vectorized
         
         for fold_idx, (train_idx, val_idx) in enumerate(gkf.split(X, groups=groups)):
             X_train_fold = X[train_idx]
@@ -593,53 +731,33 @@ def train_probes(
             
             # Get labels for this fold
             if labeling == "quantile" and concept.type == "quantile":
-                # Check filter columns exist
-                if concept.filters:
-                    if not check_filter_columns(df, concept.filters, concept.name, warned_concepts):
-                        # Skip this fold if filters can't be applied
-                        continue
-                
                 # Compute quantile thresholds on training fold only
                 thresholds = compute_quantile_thresholds(df, concept, train_idx)
+                
                 if thresholds is None:
                     continue
                 
-                low_thr, high_thr = thresholds
-                fold_thresholds.append((low_thr, high_thr))
+                # Normalize thresholds format
+                if isinstance(thresholds, dict):
+                    # Phase-stratified: store dict
+                    fold_thresholds.append(thresholds)
+                else:
+                    # Non-stratified: store tuple
+                    fold_thresholds.append(thresholds)
                 
-                # Create labeling function for this fold's thresholds
-                label_sample = make_label_sample_fn(low_thr, high_thr)
+                # Create vectorized labeling function for this fold's thresholds
+                label_samples = make_label_sample_fn_vectorized(thresholds)
                 
-                # Label train samples
-                y_train_fold = []
-                train_valid_mask = []
-                for idx in train_idx:
-                    label, is_valid = label_sample(idx)
-                    if is_valid:
-                        y_train_fold.append(label)
-                        train_valid_mask.append(True)
-                    else:
-                        train_valid_mask.append(False)
+                # Label train samples (vectorized)
+                train_labels, train_valid_mask = label_samples(train_idx)
+                y_train_fold = train_labels[train_valid_mask].astype(int)
                 
-                # Label val samples
-                y_val_fold = []
-                val_valid_mask = []
-                for idx in val_idx:
-                    label, is_valid = label_sample(idx)
-                    if is_valid:
-                        y_val_fold.append(label)
-                        val_valid_mask.append(True)
-                    else:
-                        val_valid_mask.append(False)
-                
-                train_valid_mask = np.array(train_valid_mask)
-                val_valid_mask = np.array(val_valid_mask)
+                # Label val samples (vectorized)
+                val_labels, val_valid_mask = label_samples(val_idx)
+                y_val_fold = val_labels[val_valid_mask].astype(int)
                 
                 if len(y_train_fold) < 20:
                     continue
-                
-                y_train_fold = np.array(y_train_fold)
-                y_val_fold = np.array(y_val_fold)
                 
                 # Check class balance in train
                 pos_rate_train = y_train_fold.mean()
@@ -733,92 +851,24 @@ def train_probes(
         # Train final model on all labeled data
         # First, create labels for all data if quantile
         if labeling == "quantile" and concept.type == "quantile":
-            # Check filter columns exist before computing final thresholds
-            if concept.filters:
-                if not check_filter_columns(df, concept.filters, concept.name, warned_concepts):
-                    print(f"Skipping {concept.name}: missing filter columns")
-                    continue
-            
             # Compute final thresholds on full filtered dataset (deterministic)
             # This is more consistent than averaging fold thresholds
-            final_thresholds = compute_quantile_thresholds(df, concept, np.arange(len(df)))
+            # Note: CV AUC uses per-fold thresholds (honest generalization),
+            # while final model uses global thresholds (for consistency)
+            
+            all_indices = np.arange(len(df))
+            final_thresholds = compute_quantile_thresholds(df, concept, all_indices)
+            
             if final_thresholds is None:
                 print(f"Skipping {concept.name}: could not compute final thresholds on full dataset")
                 continue
             
-            final_low, final_high = final_thresholds
-            all_quantile_thresholds[concept.name] = (final_low, final_high)
+            all_quantile_thresholds[concept.name] = final_thresholds
             
-            # Create labels for all data (with filters applied)
-            def label_sample_final(row_idx):
-                """Label a single sample for final model, applying filters."""
-                row = df.iloc[row_idx]
-                
-                # Apply filters first
-                if concept.filters:
-                    if not all(_apply_single_filter_final(row, filt) for filt in concept.filters):
-                        return None, False
-                
-                # Get raw value using per-concept column
-                raw_col = f"rawval_{concept.name}"
-                if raw_col not in df.columns:
-                    return None, False
-                raw_val = row[raw_col]
-                if pd.isna(raw_val):
-                    return None, False
-                
-                val = float(raw_val)
-                if concept.use_abs:
-                    val = abs(val)
-                
-                if concept.direction == 'high':
-                    label = 1 if val >= final_high else (0 if val <= final_low else None)
-                elif concept.direction == 'low':
-                    label = 1 if val <= final_low else (0 if val >= final_high else None)
-                else:
-                    label = None
-                
-                return label, label is not None
+            # Create labels for all data (with filters applied) - vectorized
+            all_labels, valid_mask_all = make_label_sample_fn_vectorized(final_thresholds)(all_indices)
             
-            def _apply_single_filter_final(row, filt):
-                """Check if a single filter condition passes."""
-                col = filt['column']
-                op = filt['operator']
-                val = filt['value']
-                
-                if col not in row.index:
-                    return False
-                
-                row_val = row[col]
-                if pd.isna(row_val):
-                    return False
-                
-                if op == '<=':
-                    return row_val <= val
-                elif op == '>=':
-                    return row_val >= val
-                elif op == '==':
-                    return row_val == val
-                elif op == '!=':
-                    return row_val != val
-                elif op == '<':
-                    return row_val < val
-                elif op == '>':
-                    return row_val > val
-                return False
-            
-            y_all = []
-            valid_mask_all = []
-            for idx in range(len(df)):
-                label, is_valid = label_sample_final(idx)
-                if is_valid:
-                    y_all.append(label)
-                    valid_mask_all.append(True)
-                else:
-                    valid_mask_all.append(False)
-            
-            y_all = np.array(y_all)
-            valid_mask_all = np.array(valid_mask_all)
+            y_all = all_labels[valid_mask_all].astype(int)
         else:
             y_all = df[label_col].values
             valid_mask_all = ~pd.isna(y_all)
@@ -870,8 +920,10 @@ def train_probes(
             'cv_auc_std': np.std(fold_scores) if len(fold_scores) > 1 else 0.0,
             'n_folds_scored': len(fold_scores),
             'best_C': best_C,
-            'accuracy': accuracy_score(y_all, y_pred),
-            'f1': f1_score(y_all, y_pred),
+            # Training set metrics (optimistic - same data used for training)
+            # Use CV metrics for honest generalization estimates
+            'train_accuracy': accuracy_score(y_all, y_pred),
+            'train_f1': f1_score(y_all, y_pred),
             'pos_rate': pos_rate,
             'pos_count': pos_count,
             'neg_count': neg_count,
@@ -882,24 +934,62 @@ def train_probes(
         # Add quantile thresholds if applicable
         if labeling == "quantile" and concept.type == "quantile":
             if concept.name in all_quantile_thresholds:
-                low_thr, high_thr = all_quantile_thresholds[concept.name]
-                results[concept.name]['quantile_low_threshold'] = low_thr
-                results[concept.name]['quantile_high_threshold'] = high_thr
+                thresholds = all_quantile_thresholds[concept.name]
+                
+                # Handle both non-stratified (tuple) and phase-stratified (dict) cases
+                if isinstance(thresholds, dict):
+                    # Phase-stratified: store per-phase thresholds
+                    results[concept.name]['quantile_thresholds_by_phase'] = thresholds
+                    results[concept.name]['stratify_by_phase'] = True
+                    # Also compute average thresholds across phases for summary
+                    all_lows = [t[0] for t in thresholds.values()]
+                    all_highs = [t[1] for t in thresholds.values()]
+                    results[concept.name]['quantile_avg_low_threshold'] = np.mean(all_lows)
+                    results[concept.name]['quantile_avg_high_threshold'] = np.mean(all_highs)
+                else:
+                    # Non-stratified: store as before
+                    low_thr, high_thr = thresholds
+                    results[concept.name]['quantile_low_threshold'] = low_thr
+                    results[concept.name]['quantile_high_threshold'] = high_thr
+                    results[concept.name]['stratify_by_phase'] = False
+                
                 results[concept.name]['quantile_q'] = concept.q or 0.1
                 results[concept.name]['quantile_direction'] = concept.direction
+                results[concept.name]['labeling_scheme'] = 'extreme_quantiles_drop_middle'
+                
                 # Report fold thresholds for reference (average across folds)
                 if len(fold_thresholds) > 0:
-                    avg_fold_low = np.mean([t[0] for t in fold_thresholds])
-                    avg_fold_high = np.mean([t[1] for t in fold_thresholds])
-                    results[concept.name]['quantile_fold_avg_low_threshold'] = avg_fold_low
-                    results[concept.name]['quantile_fold_avg_high_threshold'] = avg_fold_high
+                    # Handle both tuple and dict fold thresholds
+                    if isinstance(fold_thresholds[0], dict):
+                        # Phase-stratified folds: average per phase
+                        phase_avgs = {}
+                        for phase in ['early', 'mid', 'end']:
+                            phase_lows = [t.get(phase, (None, None))[0] for t in fold_thresholds if phase in t]
+                            phase_highs = [t.get(phase, (None, None))[1] for t in fold_thresholds if phase in t]
+                            phase_lows = [x for x in phase_lows if x is not None]
+                            phase_highs = [x for x in phase_highs if x is not None]
+                            if phase_lows and phase_highs:
+                                phase_avgs[phase] = (np.mean(phase_lows), np.mean(phase_highs))
+                        if phase_avgs:
+                            results[concept.name]['quantile_fold_avg_thresholds_by_phase'] = phase_avgs
+                    else:
+                        # Non-stratified folds: average as before
+                        avg_fold_low = np.mean([t[0] for t in fold_thresholds])
+                        avg_fold_high = np.mean([t[1] for t in fold_thresholds])
+                        results[concept.name]['quantile_fold_avg_low_threshold'] = avg_fold_low
+                        results[concept.name]['quantile_fold_avg_high_threshold'] = avg_fold_high
+        elif concept.type == "binary":
+            results[concept.name]['labeling_scheme'] = 'binary'
+        elif concept.type == "threshold":
+            results[concept.name]['labeling_scheme'] = 'threshold'
+            results[concept.name]['threshold'] = concept.threshold
         
         # Save model and per-concept scaler
         joblib.dump(final_model, output_path / f"probe_{concept.name}.joblib")
         joblib.dump(concept_scaler, output_path / f"scaler_{concept.name}.joblib")
         
         print(f"  {concept.name}: AUC={best_score:.3f}±{results[concept.name]['cv_auc_std']:.3f}, "
-              f"F1={results[concept.name]['f1']:.3f}, pos={pos_count}, neg={neg_count}, n={len(y_all)}")
+              f"train_F1={results[concept.name]['train_f1']:.3f}, pos={pos_count}, neg={neg_count}, n={len(y_all)}")
     
     # Save concept vectors
     np.savez(output_path / "concept_vectors.npz", **concept_vectors)
@@ -914,7 +1004,7 @@ def train_probes(
 def compute_move_concepts(
     df: pd.DataFrame,
     output_dir: str,
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, List[str]]:
     """
     Compute per-move concept scores and delta scores.
     
@@ -1064,7 +1154,8 @@ def generate_html_data(
         res = results[name]
         concepts_meta[name] = {
             'auc': res.get('cv_auc'),
-            'f1': res.get('f1'),
+            'train_f1': res.get('train_f1'),
+            'train_accuracy': res.get('train_accuracy'),
             'pos_rate': res.get('pos_rate'),
             'n_samples': res.get('n_samples'),
         }
@@ -1138,7 +1229,9 @@ def main():
     parser.add_argument('--output-dir', type=str, default='linear_probes',
                         help='Output directory for models and data')
     parser.add_argument('--dataset-path', type=str, default=None,
-                        help='Path to existing dataset parquet (skip building)')
+                        help='Path to existing dataset parquet (overrides default location)')
+    parser.add_argument('--rebuild-dataset', action='store_true',
+                        help='Force rebuild dataset even if it exists')
     parser.add_argument('--skip-training', action='store_true',
                         help='Skip training, only compute move concepts')
     parser.add_argument('--labeling', type=str, default='quantile',
@@ -1162,7 +1255,7 @@ def main():
     print(f"Loaded {len(concepts)} concept definitions")
     
     # Build or load dataset
-    if dataset_path.exists() and args.dataset_path:
+    if dataset_path.exists() and not args.rebuild_dataset:
         print(f"Loading existing dataset from {dataset_path}")
         df = pd.read_parquet(dataset_path)
     else:

@@ -34,7 +34,7 @@ from snorkel_board_positions import (
     compute_reduction_delta_by_region,
     
     # Policy and move analysis
-    urgency_by_region, urgency_intensity_by_region, is_cut_move, is_only_move,
+    urgency_by_region, urgency_intensity_by_region, is_cut_move, is_forcing,
     is_tenuki, creates_new_group, is_connection_move, is_extension_move,
     liberties_of_group, atari_move,
     
@@ -168,8 +168,8 @@ class TestSnorkelBoardPositions(unittest.TestCase):
                 self.center_policy[idx] = 0.25
         
         # Policy with single strong move (only move scenario)
-        self.only_move_policy = np.zeros(total_moves)
-        self.only_move_policy[100] = 0.95  # Single strong move
+        self.forcing_policy = np.zeros(total_moves)
+        self.forcing_policy[100] = 0.95  # Single strong move
         
         # Policy with multiple candidates (normalized to sum to 1.0)
         self.multi_candidate_policy = np.zeros(total_moves)
@@ -464,13 +464,13 @@ class TestPolicyAndMoveAnalysis(TestSnorkelBoardPositions):
         is_cut = is_cut_move(self.center_board, move_loc)
         self.assertIsInstance(is_cut, bool)
     
-    def test_is_only_move(self):
+    def test_is_forcing(self):
         """Test only move detection."""
         # Test with single strong move
-        self.assertTrue(is_only_move(self.only_move_policy))
+        self.assertTrue(is_forcing(self.forcing_policy))
         
         # Test with multiple candidates
-        self.assertFalse(is_only_move(self.multi_candidate_policy))
+        self.assertFalse(is_forcing(self.multi_candidate_policy))
     
     def test_is_tenuki(self):
         """Test tenuki detection."""
@@ -609,7 +609,7 @@ class TestComprehensiveAnalysis(TestSnorkelBoardPositions):
             "invasion", "invasion_intensity", "leaves_weakness", "potential_territory", "solid_territory",
             "direct_sacrifice", "sacrifice_intensity", "indirect_sacrifice", "indirect_sacrifice_intensity",
             "cut", "connection", "connection_strength_gain", "extension", "liberties", "atari",
-            "only_move", "tenuki", "reduce_aji", "aji_reduction_intensity", "attack", "attack_intensity",
+            "forcing", "tenuki", "reduce_aji", "aji_reduction_intensity", "attack", "attack_intensity",
             "group_strength_delta", "group_connectivity_delta",
             "influence_count_delta", "influence_strength_delta", "creates_new_group", "killing_attack", "kill_intensity"
         ]
@@ -727,7 +727,7 @@ class TestComprehensiveAnalysis(TestSnorkelBoardPositions):
         
         # Boolean flags should be actual booleans (handle NumPy booleans)
         boolean_keys = ["invasion", "direct_sacrifice", "cut", "connection", "extension", 
-                       "atari", "only_move", "tenuki", "reduce_aji", "attack", 
+                       "atari", "forcing", "tenuki", "reduce_aji", "attack", 
                        "creates_new_group", "killing_attack"]
         for key in boolean_keys:
             if key in results:

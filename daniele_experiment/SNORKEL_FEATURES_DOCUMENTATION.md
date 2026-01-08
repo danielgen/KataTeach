@@ -623,14 +623,14 @@ Each group has these computed properties:
 
 **Code**: `urgency_intensity_by_region()` lines 589-593
 
-### 49. `only_move` (boolean)
+### 49. `forcing` (boolean)
 **Definition**: True if one move dominates (>95% probability).
 
 **Logic**:
 - Returns `True` if `max(policy) > (1.0 - TAU_ONLY_MOVE)` = `max(policy) > 0.95`
 - Returns `False` if move is pass
 
-**Code**: `is_only_move()` lines 596-598
+**Code**: `is_forcing()` lines 596-598
 
 ### 50. `tenuki` (boolean)
 **Definition**: True if move is far from last move, ignoring local follow-up.
@@ -725,7 +725,7 @@ Total features: **58 features** organized into:
 - **9 Tactical Features** (cut, connection, connection_strength_gain, merged_groups_regions, merged_groups_head_locs, extension, liberties, atari, creates_new_group)
 - **11 Attack Features** (attack, killing_attack, reduce_aji, and attacked groups info)
 - **4 Sacrifice Features** (direct and indirect sacrifice)
-- **4 Policy Features** (urgency, only_move, tenuki)
+- **4 Policy Features** (urgency, forcing, tenuki)
 - **6 Regional Features** (breakdowns of territory features by region)
 
 All features are computed by `analyze_position_comprehensive()` which normalizes ownership to the analyzing player's perspective and handles edge cases (pass moves, missing before state, etc.).
