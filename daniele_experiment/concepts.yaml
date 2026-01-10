@@ -85,6 +85,12 @@ concepts:
     type: binary
     source: approaching_corner
     description: "Approach move responding to opponent's corner stone (kakari)"
+
+  seki:
+    type: binary
+    source: has_seki
+    description: "Position involves seki (mutual life) - groups alive through mutual standoff"
+
   # -------------------------------------
   # 2) Combat archetypes (quantile-based)
   # -------------------------------------

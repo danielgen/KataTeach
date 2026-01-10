@@ -63,6 +63,11 @@ def play_short_game(model, max_moves=10):
         # Convert ownership to numpy array (19x19)
         ownership = np.array(initial_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
         policy = np.array(initial_outputs.get("policy0", [0.0] * 361))
+        seki = initial_outputs.get("seki")
+        if seki is not None:
+            seki = np.array(seki)
+            if seki.ndim == 3:
+                seki = seki[0]
         
         analysis = analyze_position_comprehensive(
             board=game_state.board,
@@ -72,7 +77,8 @@ def play_short_game(model, max_moves=10):
             move_loc=None,
             last_move_loc=None,
             before_ownership=None,
-            before_board=None
+            before_board=None,
+            seki=seki
         )
         analysis_serializable = convert_numpy_to_python(analysis)
     except Exception as e:
@@ -219,6 +225,11 @@ def play_short_game(model, max_moves=10):
             try:
                 ownership_after = np.array(post_move_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
                 policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
+                seki_data = post_move_outputs.get("seki")
+                if seki_data is not None:
+                    seki_data = np.array(seki_data)
+                    if seki_data.ndim == 3:
+                        seki_data = seki_data[0]
                 last_move_loc = moves[-1][1] if moves else None
                 
                 # Analyze from the perspective of the player who MADE the move
@@ -242,7 +253,8 @@ def play_short_game(model, max_moves=10):
                     before_board=board_before,         # pre-move board (for deltas/attack)
                     ownership_frame_player=post_move_player,  # Frame of ownership_after
                     pass_counterfactual_ownership=pass_counterfactual,  # "What if I passed?"
-                    pass_counterfactual_frame_player=pass_counterfactual_frame_player
+                    pass_counterfactual_frame_player=pass_counterfactual_frame_player,
+                    seki=seki_data
                 )
                 analysis_serializable = convert_numpy_to_python(analysis)
                 
@@ -286,6 +298,11 @@ def play_short_game(model, max_moves=10):
         try:
             ownership_after = np.array(post_move_outputs.get("ownership", [0.0] * 361)).reshape(19, 19)
             policy = np.array(post_move_outputs.get("policy0", [0.0] * 361))
+            seki_data = post_move_outputs.get("seki")
+            if seki_data is not None:
+                seki_data = np.array(seki_data)
+                if seki_data.ndim == 3:
+                    seki_data = seki_data[0]
             last_move_loc = moves[-2][1] if len(moves) > 1 else None  # Previous move
             
             # Analyze from the perspective of the player who MADE the move
@@ -309,7 +326,8 @@ def play_short_game(model, max_moves=10):
                 before_board=board_before,         # pre-move board (for deltas/attack)
                 ownership_frame_player=post_move_player,  # Frame of ownership_after
                 pass_counterfactual_ownership=pass_counterfactual,  # "What if I passed?"
-                pass_counterfactual_frame_player=pass_counterfactual_frame_player
+                pass_counterfactual_frame_player=pass_counterfactual_frame_player,
+                seki=seki_data
             )
             analysis_serializable = convert_numpy_to_python(analysis)
             
@@ -644,13 +662,31 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
         }}
         
         .go-board {{
-            width: 380px;
-            height: 380px;
+            width: 400px;
+            height: 400px;
             margin: 0 auto;
             border: 2px solid #8B4513;
             border-radius: 4px;
             background: #DEB887;
             position: relative;
+        }}
+        
+        .coord-label {{
+            position: absolute;
+            font-size: 9px;
+            font-weight: bold;
+            color: #5D4037;
+            z-index: 5;
+        }}
+        
+        .coord-label-col {{
+            top: 2px;
+            transform: translateX(-50%);
+        }}
+        
+        .coord-label-row {{
+            left: 2px;
+            transform: translateY(-50%);
         }}
         
         
@@ -949,11 +985,7 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
         function getMoveString(move) {{
             if (!move) return '';
             if (move[1] === 361) return 'Pass';
-            // Convert KataGo location to x,y coordinates using the same logic as KataGo's loc_x/loc_y
-            const dy = 20; // size + 1 = 19 + 1 = 20
-            const x = (move[1] % dy) - 1;
-            const y = Math.floor(move[1] / dy) - 1;
-            return String.fromCharCode(97 + x) + String.fromCharCode(97 + y);
+            return locToGoCoord(move[1]);
         }}
         
         function getMoveLocation(move) {{
@@ -986,12 +1018,6 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             // Scoring
             addBoardSection('Scoring', 'scoring');
             
-            // Future position
-            addBoardSection('Future Position 0', 'futurepos0');
-            addBoardSection('Future Position 1', 'futurepos1');
-            
-            // Seki
-            addBoardSection('Seki', 'seki');
             
         }}
         
@@ -1169,6 +1195,11 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                             <span class="feature-explanation">isolated</span>
                             <span id="creates-new-group">-</span>
                         </div>
+                        <div class="sticky-value-item" title="Move saves group that would die under counterfactual (pass)">
+                            <strong>Must Live</strong>
+                            <span class="feature-explanation">saves group</span>
+                            <span id="must-live">-</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -1213,11 +1244,26 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                 <div class="feature-category">
                     <div class="category-header">Tactics</div>
                     <div class="feature-grid">
-                        <div class="sticky-value-item" title="Move separates 2+ opponent groups">
+                        <div class="sticky-value-item" title="Move separates opponent groups that were previously connected">
                         <strong>Cut</strong>
                         <span class="feature-explanation">separates</span>
                         <span id="is-cut">-</span>
                     </div>
+                        <div class="sticky-value-item detail-value" id="cut-groups-created-item" style="display: none;" title="Number of new groups created by the cut">
+                            <strong>Groups Split</strong>
+                            <span class="feature-explanation">count</span>
+                            <span id="cut-groups-created">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="cut-regions-item" style="display: none;" title="Regions where cut groups are located">
+                            <strong>Cut Regions</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="cut-regions">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="cut-heads-item" style="display: none;" title="Head stone locations of cut groups">
+                            <strong>Cut Heads</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="cut-heads">-</span>
+                        </div>
                         <div class="sticky-value-item" title="Move connects 2+ own groups">
                         <strong>Connection</strong>
                         <span class="feature-explanation">joins</span>
@@ -1248,6 +1294,16 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                         <span class="feature-explanation">2 liberties</span>
                         <span id="atari">-</span>
                     </div>
+                        <div class="sticky-value-item" title="First stone played in a corner area">
+                            <strong>Occupy Corner</strong>
+                            <span class="feature-explanation">first stone</span>
+                            <span id="occupy-corner">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Approach move to opponent's corner stone (kakari)">
+                            <strong>Approach</strong>
+                            <span class="feature-explanation">kakari</span>
+                            <span id="approaching-corner">-</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -1269,6 +1325,11 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                             <strong>Reduce Aji</strong>
                             <span class="feature-explanation">potential</span>
                             <span id="reduce-aji">-</span>
+                        </div>
+                        <div class="sticky-value-item detail-value" id="aji-reduction-intensity-item" style="display: none;" title="Intensity of aji reduction (ownership swing)">
+                            <strong>Aji Intensity</strong>
+                            <span class="feature-explanation">reduction</span>
+                            <span id="aji-reduction-intensity">-</span>
                         </div>
                         <div class="sticky-value-item detail-value" title="Attack intensities: avg / max">
                             <strong>Intensity</strong>
@@ -1322,6 +1383,11 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                             <span class="feature-explanation">avg swing</span>
                         <span id="indirect-sacrifice-intensity">-</span>
                     </div>
+                        <div class="sticky-value-item detail-value" id="indirect-sacrifice-locs-item" style="display: none;" title="Locations of stones lost via indirect sacrifice">
+                            <strong>Sacrificed At</strong>
+                            <span class="feature-explanation">locations</span>
+                            <span id="indirect-sacrifice-locs">-</span>
+                        </div>
                     </div>
                 </div>
                 
@@ -1347,6 +1413,28 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     </div>
                 </div>
                 
+                <!-- Seki Section -->
+                <div class="feature-category" id="seki-category" style="display: none;">
+                    <div class="category-header">Seki</div>
+                    <div class="feature-grid">
+                        <div class="sticky-value-item" title="Maximum seki probability on the board">
+                            <strong>Max Prob</strong>
+                            <span class="feature-explanation">highest</span>
+                            <span id="seki-max-prob">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Number of points with seki probability > 10%">
+                            <strong>Points</strong>
+                            <span class="feature-explanation">count</span>
+                            <span id="seki-point-count">-</span>
+                        </div>
+                        <div class="sticky-value-item" title="Locations with highest seki probability">
+                            <strong>Locations</strong>
+                            <span class="feature-explanation">coords</span>
+                            <span id="seki-locations">-</span>
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Regional Summary -->
                 <div class="feature-category" id="regional-category" style="display: none;">
                     <div class="category-header">Regional</div>
@@ -1367,9 +1455,6 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             updateOwnership(data);
             updatePassCounterfactual(data);
             updateScoring(data);
-            updateFuturePos(data, 'futurepos0', 0);
-            updateFuturePos(data, 'futurepos1', 1);
-            updateSeki(data);
             
             // Update value info
             updateValueInfo(data);
@@ -1379,14 +1464,18 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
         }}
         
         function drawGridLines(board) {{
+            const gridOffset = 20;  // Offset for coordinate labels
+            const gridSpacing = 20;
+            const gridSize = 18 * gridSpacing;  // Lines span 18 intervals (19 points)
+            
             // Draw horizontal lines
             for (let i = 0; i < 19; i++) {{
                 const line = document.createElement('div');
                 line.style.position = 'absolute';
-                line.style.left = '10px';
-                line.style.right = '10px';
+                line.style.left = `${{gridOffset}}px`;
+                line.style.width = `${{gridSize}}px`;
                 line.style.height = '1px';
-                line.style.top = `${{10 + i * 20}}px`;
+                line.style.top = `${{gridOffset + i * gridSpacing}}px`;
                 line.style.backgroundColor = '#8B4513';
                 line.style.zIndex = '1';
                 board.appendChild(line);
@@ -1396,13 +1485,32 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             for (let i = 0; i < 19; i++) {{
                 const line = document.createElement('div');
                 line.style.position = 'absolute';
-                line.style.top = '10px';
-                line.style.bottom = '10px';
+                line.style.top = `${{gridOffset}}px`;
+                line.style.height = `${{gridSize}}px`;
                 line.style.width = '1px';
-                line.style.left = `${{10 + i * 20}}px`;
+                line.style.left = `${{gridOffset + i * gridSpacing}}px`;
                 line.style.backgroundColor = '#8B4513';
                 line.style.zIndex = '1';
                 board.appendChild(line);
+            }}
+            
+            // Draw column labels (A-T, skipping I)
+            const colLabels = 'ABCDEFGHJKLMNOPQRST';  // Skip I
+            for (let i = 0; i < 19; i++) {{
+                const label = document.createElement('div');
+                label.className = 'coord-label coord-label-col';
+                label.textContent = colLabels[i];
+                label.style.left = `${{gridOffset + i * gridSpacing}}px`;
+                board.appendChild(label);
+            }}
+            
+            // Draw row labels (19-1, from top to bottom)
+            for (let i = 0; i < 19; i++) {{
+                const label = document.createElement('div');
+                label.className = 'coord-label coord-label-row';
+                label.textContent = 19 - i;
+                label.style.top = `${{gridOffset + i * gridSpacing}}px`;
+                board.appendChild(label);
             }}
         }}
 
@@ -1428,8 +1536,8 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     }}
                     
                     // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
+                    const pixelX = 20 + x * 20;  // 20px offset for coords + 20px spacing
+                    const pixelY = 20 + y * 20;  // 20px offset for coords + 20px spacing
                     
                     if (stone === 1 || stone === -1) {{
                         const stoneEl = document.createElement('div');
@@ -1483,8 +1591,8 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     const loc = (x + 1) + dy * (y + 1);
                     
                     // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
+                    const pixelX = 20 + x * 20;  // 20px offset for coords + 20px spacing
+                    const pixelY = 20 + y * 20;  // 20px offset for coords + 20px spacing
                     
                     // Add stones
                     const stone = data.board_state[loc];
@@ -1537,8 +1645,8 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     const ownership = data.ownership[0][y][x];
                     
                     // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
+                    const pixelX = 20 + x * 20;  // 20px offset for coords + 20px spacing
+                    const pixelY = 20 + y * 20;  // 20px offset for coords + 20px spacing
                     
                     // Add stones
                     // Convert x,y to KataGo location for board state lookup
@@ -1634,8 +1742,8 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     }}
                     
                     // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
+                    const pixelX = 20 + x * 20;  // 20px offset for coords + 20px spacing
+                    const pixelY = 20 + y * 20;  // 20px offset for coords + 20px spacing
                     
                     // Add stones (same as ownership board)
                     const dy = 20; // size + 1 = 19 + 1 = 20
@@ -1697,8 +1805,8 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     const scoring = data.scoring[0][y][x];
                     
                     // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
+                    const pixelX = 20 + x * 20;  // 20px offset for coords + 20px spacing
+                    const pixelY = 20 + y * 20;  // 20px offset for coords + 20px spacing
                     
                     // Add stones
                     // Convert x,y to KataGo location for board state lookup
@@ -1748,129 +1856,6 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             }}
         }}
         
-        function updateFuturePos(data, type, channel) {{
-            const board = document.getElementById(`board-${{type}}`);
-            if (!board || !data.futurepos) return;
-            
-            board.innerHTML = '';
-            drawGridLines(board);
-            
-            // Create stones and future position values at proper Go board coordinates
-            for (let y = 0; y < 19; y++) {{
-                for (let x = 0; x < 19; x++) {{
-                    // Future position is 2D array with [y][x] indexing
-                    const futurepos = data.futurepos[channel][y][x];
-                    
-                    // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
-                    
-                    // Add stones
-                    // Convert x,y to KataGo location for board state lookup
-                    const dy = 20; // size + 1 = 19 + 1 = 20
-                    const loc = (x + 1) + dy * (y + 1);
-                    const stone = data.board_state[loc] || 0; // Default to 0 if out of bounds
-                    if (stone === 1 || stone === -1) {{
-                        const stoneEl = document.createElement('div');
-                        stoneEl.className = `stone ${{stone === 1 ? 'black' : 'white'}}`;
-                        stoneEl.style.position = 'absolute';
-                        stoneEl.style.left = `${{pixelX - 9}}px`;  // Center the stone (18px wide)
-                        stoneEl.style.top = `${{pixelY - 9}}px`;   // Center the stone (18px high)
-                        stoneEl.style.zIndex = '10';
-                        board.appendChild(stoneEl);
-                    }}
-                    
-                    // Add future position
-                    if (Math.abs(futurepos) > 0.1) {{
-                        const label = document.createElement('div');
-                        label.className = 'label';
-                        label.textContent = Math.round(Math.abs(futurepos) * 10);
-                        label.style.position = 'absolute';
-                        label.style.left = `${{pixelX - 5}}px`;
-                        label.style.top = `${{pixelY - 5}}px`;
-                    // Color based on who the value is good for:
-                    // Red text = good for White (positive futurepos from White's perspective)
-                    // Grey text = good for Black (negative futurepos from White's perspective)
-                    // KataGo always outputs futurepos from White's perspective (positive = White)
-                    const isGoodForWhite = futurepos > 0;
-                    const shouldUseBlackText = isGoodForWhite;  // Red for White, Grey for Black
-                        
-                        label.style.color = shouldUseBlackText ? 'red' : 'grey';
-                        label.style.textShadow = shouldUseBlackText ? '1px 1px 1px rgba(255,255,255,0.8)' : '1px 1px 1px rgba(0,0,0,0.8)';
-                        label.style.zIndex = '15';
-                        board.appendChild(label);
-                    }}
-                }}
-            }}
-            
-            const info = document.getElementById(`info-${{type}}`);
-            if (info) {{
-                info.innerHTML = `
-                    <div class="heatmap-legend">
-                        <span style="color: red; background: rgba(255,255,255,0.8);">Red Text: White</span>
-                        <span style="color: grey; background: rgba(0,0,0,0.8);">Grey Text: Black</span>
-                    </div>
-                `;
-            }}
-        }}
-        
-        function updateSeki(data) {{
-            const board = document.getElementById('board-seki');
-            if (!board || !data.seki) return;
-            
-            board.innerHTML = '';
-            drawGridLines(board);
-            
-            // Create stones and seki values at proper Go board coordinates
-            for (let y = 0; y < 19; y++) {{
-                for (let x = 0; x < 19; x++) {{
-                    // Seki is 2D array with [y][x] indexing
-                    const seki = data.seki[y][x];
-                    
-                    // Calculate pixel position (Go board coordinates)
-                    const pixelX = 10 + x * 20;  // 10px margin + 20px spacing
-                    const pixelY = 10 + y * 20;  // 10px margin + 20px spacing
-                    
-                    // Add stones
-                    // Convert x,y to KataGo location for board state lookup
-                    const dy = 20; // size + 1 = 19 + 1 = 20
-                    const loc = (x + 1) + dy * (y + 1);
-                    const stone = data.board_state[loc] || 0; // Default to 0 if out of bounds
-                    if (stone === 1 || stone === -1) {{
-                        const stoneEl = document.createElement('div');
-                        stoneEl.className = `stone ${{stone === 1 ? 'black' : 'white'}}`;
-                        stoneEl.style.position = 'absolute';
-                        stoneEl.style.left = `${{pixelX - 9}}px`;  // Center the stone (18px wide)
-                        stoneEl.style.top = `${{pixelY - 9}}px`;   // Center the stone (18px high)
-                        stoneEl.style.zIndex = '10';
-                        board.appendChild(stoneEl);
-                    }}
-                    
-                    // Add seki
-                    if (Math.abs(seki) > 0.1) {{
-                        const label = document.createElement('div');
-                        label.className = 'label';
-                        label.textContent = 'S';
-                        label.style.position = 'absolute';
-                        label.style.left = `${{pixelX - 5}}px`;
-                        label.style.top = `${{pixelY - 5}}px`;
-                        label.style.color = 'purple';
-                        label.style.zIndex = '15';
-                        board.appendChild(label);
-                    }}
-                }}
-            }}
-            
-            const info = document.getElementById('info-seki');
-            if (info) {{
-                info.innerHTML = `
-                    <div class="heatmap-legend">
-                        <span style="background: rgba(128,0,128,0.3);">Purple: Seki Probability</span>
-                    </div>
-                `;
-            }}
-        }}
-        
         function updateValueInfo(data) {{
             if (!data) return;
             
@@ -1905,6 +1890,19 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             }}
         }}
         
+        // Helper function to convert KataGo location to standard Go notation (e.g., A1, T19)
+        function locToGoCoord(loc) {{
+            const dy = 20; // size + 1 = 19 + 1 = 20
+            const x = (loc % dy) - 1;
+            const y = Math.floor(loc / dy) - 1;
+            // Column: A-T (skipping I)
+            const colLabels = 'ABCDEFGHJKLMNOPQRST';
+            const letter = colLabels[x] || '?';
+            // Row: 19-1 from top to bottom (y=0 is row 19)
+            const num = 19 - y;
+            return `${{letter}}${{num}}`;
+        }}
+        
         function updateSnorkelInfo(data) {{
             // Use analysis attached to the same entry you're viewing
             const analysisData = data && data.analysis ? data.analysis : null;
@@ -1932,7 +1930,11 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     'direct-sacrifice-intensity': '-',
                     'indirect-sacrifice': '-',
                     'indirect-sacrifice-intensity': '-',
+                    'indirect-sacrifice-locs': '-',
                     'is-cut': '-',
+                    'cut-groups-created': '-',
+                    'cut-regions': '-',
+                    'cut-heads': '-',
                     'is-connection': '-',
                     'connection-strength-gain': '-',
                     'merged-groups-regions': '-',
@@ -1943,12 +1945,16 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     'attack': '-',
                     'killing-attack': '-',
                     'reduce-aji': '-',
+                    'aji-reduction-intensity': '-',
                     'attack-intensity': '-',
                     'attacked-groups-count': '-',
                     'attacked-groups-regions': '-',
                     'attacked-groups-heads': '-',
                     'attacked-groups-intensities': '-',
                     'creates-new-group': '-',
+                    'must-live': '-',
+                    'occupy-corner': '-',
+                    'approaching-corner': '-',
                     'is-only-move': '-',
                     'is-tenuki': '-',
                     'urgency-summary': '-',
@@ -2018,6 +2024,36 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             const attackIntensity = analysis.attack ? 
                 `${{(analysis.avg_attack_intensity || 0).toFixed(2)}} / ${{(analysis.max_attack_intensity || 0).toFixed(2)}}` : '-';
             
+            // Build cut groups info (only if cut = yes)
+            let cutGroupsCreated = '-';
+            let cutRegions = '-';
+            let cutHeads = '-';
+            const showCutGroups = analysis.cut && analysis.cut_groups_created > 0;
+            
+            if (showCutGroups) {{
+                cutGroupsCreated = analysis.cut_groups_created || 0;
+                
+                // Format regions
+                if (analysis.cut_regions && analysis.cut_regions.length > 0) {{
+                    const regionNames = analysis.cut_regions.map(r => r.replace('_', ' '));
+                    cutRegions = regionNames.join(', ');
+                }}
+                
+                // Format head locations (convert to coordinates)
+                if (analysis.cut_head_locs && analysis.cut_head_locs.length > 0) {{
+                    const headCoords = analysis.cut_head_locs.map(loc => locToGoCoord(loc));
+                    cutHeads = headCoords.join(', ');
+                }}
+            }}
+            
+            // Show/hide cut groups info
+            const cutGroupsCreatedItem = document.getElementById('cut-groups-created-item');
+            const cutRegionsItem = document.getElementById('cut-regions-item');
+            const cutHeadsItem = document.getElementById('cut-heads-item');
+            if (cutGroupsCreatedItem) cutGroupsCreatedItem.style.display = showCutGroups ? 'flex' : 'none';
+            if (cutRegionsItem) cutRegionsItem.style.display = showCutGroups ? 'flex' : 'none';
+            if (cutHeadsItem) cutHeadsItem.style.display = showCutGroups ? 'flex' : 'none';
+            
             // Build merged groups info (only if connection = yes)
             let mergedGroupsRegions = '-';
             let mergedGroupsHeads = '-';
@@ -2032,15 +2068,7 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                 
                 // Format head locations (convert to coordinates)
                 if (analysis.merged_groups_head_locs && analysis.merged_groups_head_locs.length > 0) {{
-                    const headCoords = analysis.merged_groups_head_locs.map(loc => {{
-                        // Convert KataGo location to (x, y) coordinates
-                        const dy = 20; // size + 1 = 19 + 1 = 20
-                        const x = (loc % dy) - 1;
-                        const y = Math.floor(loc / dy) - 1;
-                        // Convert to Go notation (A-T for rows, 1-19 for columns)
-                        const letter = String.fromCharCode(65 + y); // A=0, B=1, ..., T=18
-                        return `${{letter}}${{x + 1}}`;
-                    }});
+                    const headCoords = analysis.merged_groups_head_locs.map(loc => locToGoCoord(loc));
                     mergedGroupsHeads = headCoords.join(', ');
                 }}
             }}
@@ -2069,17 +2097,7 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                 
                 // Format head locations (convert to coordinates)
                 if (analysis.attacked_groups_head_locs && analysis.attacked_groups_head_locs.length > 0) {{
-                    const headCoords = analysis.attacked_groups_head_locs.map(loc => {{
-                        // Convert KataGo location to (x, y) coordinates
-                        // KataGo uses: loc = (x + 1) + (size + 1) * (y + 1)
-                        const dy = 20; // size + 1 = 19 + 1 = 20
-                        const x = (loc % dy) - 1;
-                        const y = Math.floor(loc / dy) - 1;
-                        // Convert to Go notation (A-T for rows, 1-19 for columns)
-                        // Note: Standard Go notation skips 'I', but we'll use A-T for simplicity
-                        const letter = String.fromCharCode(65 + y); // A=0, B=1, ..., T=18
-                        return `${{letter}}${{x + 1}}`;
-                    }});
+                    const headCoords = analysis.attacked_groups_head_locs.map(loc => locToGoCoord(loc));
                     attackedGroupsHeads = headCoords.join(', ');
                 }}
                 
@@ -2103,6 +2121,25 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
             if (attackedGroupsRegionsItem) attackedGroupsRegionsItem.style.display = showAttackedGroups ? 'flex' : 'none';
             if (attackedGroupsHeadsItem) attackedGroupsHeadsItem.style.display = showAttackedGroups ? 'flex' : 'none';
             if (attackedGroupsIntensitiesItem) attackedGroupsIntensitiesItem.style.display = showAttackedGroups ? 'flex' : 'none';
+            
+            // Build indirect sacrifice locations
+            let indirectSacrificeLocs = '-';
+            const showIndirectSacrificeLocs = analysis.indirect_sacrifice && analysis.indirect_sacrifice > 0 && 
+                analysis.indirect_sacrifice_locs && analysis.indirect_sacrifice_locs.length > 0;
+            
+            if (showIndirectSacrificeLocs) {{
+                const stoneCoords = analysis.indirect_sacrifice_locs.map(loc => locToGoCoord(loc));
+                indirectSacrificeLocs = stoneCoords.join(', ');
+            }}
+            
+            // Show/hide indirect sacrifice locs
+            const indirectSacrificeLocsItem = document.getElementById('indirect-sacrifice-locs-item');
+            if (indirectSacrificeLocsItem) indirectSacrificeLocsItem.style.display = showIndirectSacrificeLocs ? 'flex' : 'none';
+            
+            // Show/hide aji reduction intensity (only when reduce_aji = yes)
+            const showAjiIntensity = analysis.reduce_aji && analysis.aji_reduction_intensity !== undefined;
+            const ajiIntensityItem = document.getElementById('aji-reduction-intensity-item');
+            if (ajiIntensityItem) ajiIntensityItem.style.display = showAjiIntensity ? 'flex' : 'none';
             
             // Build urgency summary (top 2 regions)
             const urgencyToShow = urgencyData || analysis.urgency;
@@ -2153,6 +2190,7 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                 'liberties': analysis.liberties !== undefined ? 
                     formatWithPercentile(analysis.liberties, 'liberties', 0) : '-',
                 'creates-new-group': analysis.creates_new_group !== undefined ? (analysis.creates_new_group ? 'Yes' : 'No') : '-',
+                'must-live': analysis.must_live !== undefined ? (analysis.must_live ? 'Yes' : 'No') : '-',
                 
                 // All Groups (average) - with percentiles
                 'group-strength-delta': analysis.group_strength_delta !== undefined ? 
@@ -2170,17 +2208,24 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                 
                 // Tactics
                 'is-cut': analysis.cut !== undefined ? (analysis.cut ? 'Yes' : 'No') : '-',
+                'cut-groups-created': cutGroupsCreated,
+                'cut-regions': cutRegions,
+                'cut-heads': cutHeads,
                 'is-connection': analysis.connection !== undefined ? (analysis.connection ? 'Yes' : 'No') : '-',
                 'connection-strength-gain': analysis.connection_strength_gain !== undefined ? (analysis.connection_strength_gain || 0).toFixed(1) : '-',
                 'merged-groups-regions': mergedGroupsRegions,
                 'merged-groups-heads': mergedGroupsHeads,
                 'is-extension': analysis.extension !== undefined ? (analysis.extension ? 'Yes' : 'No') : '-',
                 'atari': analysis.atari !== undefined ? (analysis.atari ? 'Yes' : 'No') : '-',
+                'occupy-corner': analysis.occupy_corner !== undefined ? (analysis.occupy_corner ? 'Yes' : 'No') : '-',
+                'approaching-corner': analysis.approaching_corner !== undefined ? (analysis.approaching_corner ? 'Yes' : 'No') : '-',
                 
                 // Attack - with percentiles for intensities
                 'attack': analysis.attack !== undefined ? (analysis.attack ? 'Yes' : 'No') : '-',
                 'killing-attack': analysis.killing_attack !== undefined ? (analysis.killing_attack ? 'Yes' : 'No') : '-',
                 'reduce-aji': analysis.reduce_aji !== undefined ? (analysis.reduce_aji ? 'Yes' : 'No') : '-',
+                'aji-reduction-intensity': analysis.reduce_aji && analysis.aji_reduction_intensity !== undefined ? 
+                    formatWithPercentile(analysis.aji_reduction_intensity, 'aji_reduction_intensity') : '-',
                 'attack-intensity': analysis.attack ? 
                     formatWithPercentile(analysis.avg_attack_intensity, 'avg_attack_intensity') + ' / ' + 
                     formatWithPercentile(analysis.max_attack_intensity, 'max_attack_intensity') : '-',
@@ -2197,6 +2242,7 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     formatWithPercentile(analysis.indirect_sacrifice, 'indirect_sacrifice', 0) : '-',
                 'indirect-sacrifice-intensity': analysis.indirect_sacrifice_intensity !== undefined ? 
                     formatWithPercentile(analysis.indirect_sacrifice_intensity, 'indirect_sacrifice_intensity') : '-',
+                'indirect-sacrifice-locs': indirectSacrificeLocs,
                 
                 // Policy
                 'is-only-move': analysis.forcing !== undefined ? (analysis.forcing ? 'Yes' : 'No') : '-',
@@ -2210,6 +2256,47 @@ def generate_html_visualization(game_data, sgf_content, output_file, global_stat
                     // Use innerHTML since percentiles include HTML spans
                     element.innerHTML = value;
                 }}
+            }}
+            
+            // Update seki information (from raw game data, not snorkel analysis)
+            const sekiCategory = document.getElementById('seki-category');
+            if (sekiCategory && data.seki && data.seki.length > 0) {{
+                let maxSekiProb = 0;
+                let sekiPoints = 0;
+                const sekiLocations = [];
+                
+                for (let y = 0; y < 19; y++) {{
+                    for (let x = 0; x < 19; x++) {{
+                        const sekiVal = Math.abs(data.seki[y][x]);
+                        if (sekiVal > maxSekiProb) {{
+                            maxSekiProb = sekiVal;
+                        }}
+                        if (sekiVal > 0.1) {{
+                            sekiPoints++;
+                            // Convert to Go notation (skip I)
+                            let col = x;
+                            if (col >= 8) col++;  // Skip I
+                            const letter = String.fromCharCode(65 + col);
+                            const num = 19 - y;  // Go coords are 1-19 from bottom
+                            sekiLocations.push({{ coord: `${{letter}}${{num}}`, prob: sekiVal }});
+                        }}
+                    }}
+                }}
+                
+                if (maxSekiProb > 0.05) {{
+                    // Sort by probability and take top 5
+                    sekiLocations.sort((a, b) => b.prob - a.prob);
+                    const topSeki = sekiLocations.slice(0, 5).map(s => s.coord).join(', ');
+                    
+                    document.getElementById('seki-max-prob').textContent = (maxSekiProb * 100).toFixed(1) + '%';
+                    document.getElementById('seki-point-count').textContent = sekiPoints;
+                    document.getElementById('seki-locations').textContent = topSeki || '-';
+                    sekiCategory.style.display = 'block';
+                }} else {{
+                    sekiCategory.style.display = 'none';
+                }}
+            }} else {{
+                if (sekiCategory) sekiCategory.style.display = 'none';
             }}
             
             // Update regional breakdown (only if there's meaningful data)

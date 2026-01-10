@@ -343,16 +343,21 @@ Each group has these computed properties:
 ## Tactical Features
 
 ### 26. `cut` (boolean)
-**Definition**: True if move separates 2+ opponent groups.
+**Definition**: True if move splits opponent groups that were previously connected.
 
 **Logic**:
-- Gets mover color from `board.board[move_loc]`
-- Gets opponent color
-- Checks 4 neighbors of move location
-- Collects unique group heads of opponent stones
-- Returns `True` if `len(heads) >= 2`
+- Enumerates opponent groups before and after the move using ownership-based grouping
+- For each before group, checks if it was split into multiple after groups
+- A group is split if its stones end up in 2+ different groups after the move
+- Returns `True` if any opponent group was split
+- Falls back to adjacency check (touching 2+ different opponent groups) if before_board/ownership not available
 
-**Code**: `is_cut_move()` lines 623-641
+**Additional outputs**:
+- `cut_groups_created`: Number of new groups created by the split
+- `cut_regions`: Regions where the split groups are located
+- `cut_head_locs`: Head stone locations of the split groups
+
+**Code**: `is_cut_move()` lines 765-840
 
 ### 27. `connection` (boolean)
 **Definition**: True if move connects 2+ previously separate own groups (using group enumeration).

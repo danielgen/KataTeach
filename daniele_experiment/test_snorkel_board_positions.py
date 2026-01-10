@@ -461,8 +461,11 @@ class TestPolicyAndMoveAnalysis(TestSnorkelBoardPositions):
         """Test cut move detection."""
         # Test with a move that creates a cut
         move_loc = self.center_board.loc(9, 8)  # Between two white stones
-        is_cut = is_cut_move(self.center_board, move_loc)
+        is_cut, cut_count, cut_regions, cut_head_locs = is_cut_move(self.center_board, move_loc)
         self.assertIsInstance(is_cut, bool)
+        self.assertIsInstance(cut_count, int)
+        self.assertIsInstance(cut_regions, list)
+        self.assertIsInstance(cut_head_locs, list)
     
     def test_is_forcing(self):
         """Test only move detection."""

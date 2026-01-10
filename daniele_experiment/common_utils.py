@@ -82,6 +82,98 @@ def select_move_with_sampling(moves_and_probs: List[Tuple[int, float]], prob_thr
     return selected_move, original_prob, was_sampled
 
 
+def select_move_with_temperature(
+    moves_and_probs: List[Tuple[int, float]], 
+    temperature: float = 1.0,
+    min_prob: float = 0.01,
+    top_k: int = 10
+) -> Tuple[int, float, bool]:
+    """Select a move using temperature-based sampling with safety filters.
+    
+    Conservative approach: applies top-k filtering and minimum probability 
+    threshold BEFORE temperature scaling to avoid selecting bad moves.
+    
+    Args:
+        moves_and_probs: List of (move, probability) tuples
+        temperature: Sampling temperature (1.0 = policy distribution, 
+                     <1.0 = more deterministic, >1.0 = more uniform)
+        min_prob: Minimum probability to consider a move (default 1%)
+        top_k: Maximum number of top moves to consider (default 10)
+    
+    Returns:
+        Tuple of (selected_move, its_probability, was_sampled)
+    """
+    import numpy as np
+    
+    if not moves_and_probs:
+        raise ValueError("No moves available")
+    
+    # Sort by probability descending
+    sorted_moves = sorted(moves_and_probs, key=lambda x: x[1], reverse=True)
+    
+    # Filter: keep only moves with prob >= min_prob AND limit to top_k
+    candidates = []
+    for move, prob in sorted_moves[:top_k]:
+        if prob >= min_prob:
+            candidates.append((move, prob))
+    
+    # Fallback: if no candidates pass threshold, take the best move
+    if not candidates:
+        return sorted_moves[0][0], sorted_moves[0][1], False
+    
+    # If only one candidate or temperature is 0, return best
+    if len(candidates) == 1 or temperature == 0:
+        return candidates[0][0], candidates[0][1], False
+    
+    moves, probs = zip(*candidates)
+    probs = np.array(probs, dtype=np.float64)
+    
+    # Apply temperature scaling
+    # temp < 1: sharpen (more deterministic), temp > 1: flatten (more diverse)
+    scaled = np.power(probs, 1.0 / temperature)
+    scaled /= scaled.sum()
+    
+    # Sample
+    selected_idx = np.random.choice(len(moves), p=scaled)
+    selected_move = moves[selected_idx]
+    original_prob = probs[selected_idx]
+    
+    # Was it the best move?
+    was_sampled = selected_idx != 0
+    
+    return selected_move, float(original_prob), was_sampled
+
+
+def calculate_temperature(
+    move_number: int, 
+    initial_temp: float = 1.2, 
+    final_temp: float = 0.8, 
+    transition_moves: int = 60
+) -> float:
+    """Calculate temperature that decays as game progresses.
+    
+    Conservative defaults:
+        - Start at 1.2 (modest diversity boost)
+        - End at 0.8 (slightly favor best move in endgame)
+        - Transition over 60 moves
+    
+    Args:
+        move_number: Current move number (0-based)
+        initial_temp: Starting temperature (default 1.2)
+        final_temp: Final temperature (default 0.8)
+        transition_moves: Number of moves to transition (default 60)
+    
+    Returns:
+        Current temperature
+    """
+    if move_number >= transition_moves:
+        return final_temp
+    
+    # Linear interpolation
+    progress = move_number / transition_moves
+    return initial_temp - (initial_temp - final_temp) * progress
+
+
 def loc_to_sgf_coords(loc: int, board: Board) -> str:
     """Convert an internal location to SGF coordinate string."""
     if loc == Board.PASS_LOC:

@@ -39,8 +39,9 @@ from load_model import load_model       # noqa: E402
 
 # Import common utilities
 from common_utils import (
-    get_device, select_move_with_sampling, create_sgf, convert_numpy_to_python,
-    _idx361_from_loc, calculate_dynamic_threshold
+    get_device, select_move_with_sampling, select_move_with_temperature,
+    create_sgf, convert_numpy_to_python,
+    _idx361_from_loc, calculate_dynamic_threshold, calculate_temperature
 )
 
 # Import snorkel analysis
@@ -66,9 +67,11 @@ def generate_games(
     output_dir: Path,
     board_size: int = 19,
     device: str | None = None,
-    initial_prob_threshold: float = 0.05,
-    final_prob_threshold: float = 0.01,
-    transition_moves: int = 50,
+    initial_temperature: float = 1.2,
+    final_temperature: float = 0.8,
+    transition_moves: int = 60,
+    min_prob: float = 0.01,
+    top_k: int = 10,
     resign_threshold: float = 0.10,
     resign_consec: int = 3,
     save_html: int = 0,
@@ -124,11 +127,11 @@ def generate_games(
                     print(f"No legal moves for {pla_str} at move {move_number}")
                     break
 
-                # Dynamic threshold
-                thr = calculate_dynamic_threshold(move_number - 1, initial_prob_threshold, final_prob_threshold, transition_moves)
+                # Dynamic temperature (decays from initial to final over transition_moves)
+                temp = calculate_temperature(move_number - 1, initial_temperature, final_temperature, transition_moves)
 
-                # Sample move
-                move_loc, move_prob, _ = select_move_with_sampling(moves_and_probs, thr)
+                # Sample move with temperature-based sampling
+                move_loc, move_prob, _ = select_move_with_temperature(moves_and_probs, temp, min_prob, top_k)
                 gs.play(pla, move_loc)
                 moves.append((pla, move_loc))
 
@@ -191,7 +194,7 @@ def generate_games(
                     })
                     print(f"    Added HTML position {move_number}, total: {len(html_positions)}")
 
-                print(f"Move {move_number}: {pla_str} plays {move_loc} (prob={move_prob:.3f}, winrate={our_win:.1%}, thr={thr:.3f})")
+                print(f"Move {move_number}: {pla_str} plays {move_loc} (prob={move_prob:.3f}, winrate={our_win:.1%}, temp={temp:.2f})")
 
                 if lows_by_player[pla] >= resign_consec:
                     print(f"{pla_str} resigns after {resign_consec} consecutive moves with winrate < {resign_threshold:.0%}")
@@ -212,9 +215,11 @@ def generate_games(
             "start_time": start_ts,
             "end_time": time.time(),
             "num_moves": len(moves),
-            "initial_prob_threshold": initial_prob_threshold,
-            "final_prob_threshold": final_prob_threshold,
+            "initial_temperature": initial_temperature,
+            "final_temperature": final_temperature,
             "transition_moves": transition_moves,
+            "min_prob": min_prob,
+            "top_k": top_k,
             "resign_threshold": resign_threshold,
             "resign_consec": resign_consec,
         }
@@ -720,9 +725,11 @@ def main() -> None:
     p.add_argument("--output-dir", type=Path, default=Path("games"), help="Output directory (default: games)")
     p.add_argument("--board-size", type=int, default=19, choices=[9, 13, 19], help="Board size")
     p.add_argument("--device", type=str, default="auto", help="Device (auto/cuda/mps/cpu)")
-    p.add_argument("--initial-prob-threshold", type=float, default=0.05, help="Early-game sampling threshold")
-    p.add_argument("--final-prob-threshold", type=float, default=0.01, help="Late-game sampling threshold")
-    p.add_argument("--transition-moves", type=int, default=50, help="Moves to decay threshold")
+    p.add_argument("--initial-temperature", type=float, default=1.2, help="Early-game sampling temperature (>1 = more diverse)")
+    p.add_argument("--final-temperature", type=float, default=0.8, help="Late-game sampling temperature (<1 = more deterministic)")
+    p.add_argument("--transition-moves", type=int, default=60, help="Moves over which temperature decays")
+    p.add_argument("--min-prob", type=float, default=0.01, help="Minimum policy probability to consider a move (safety filter)")
+    p.add_argument("--top-k", type=int, default=10, help="Maximum number of top moves to sample from (safety filter)")
     p.add_argument("--resign-threshold", type=float, default=0.10, help="Resign winrate threshold (0-1)")
     p.add_argument("--resign-consec", type=int, default=3, help="Consecutive low-win moves to resign")
     p.add_argument("--save-html", type=int, default=0, help="Render HTML for the first N games (0=off)")
@@ -755,9 +762,11 @@ def main() -> None:
         output_dir=args.output_dir,
         board_size=args.board_size,
         device=dev,
-        initial_prob_threshold=args.initial_prob_threshold,
-        final_prob_threshold=args.final_prob_threshold,
+        initial_temperature=args.initial_temperature,
+        final_temperature=args.final_temperature,
         transition_moves=args.transition_moves,
+        min_prob=args.min_prob,
+        top_k=args.top_k,
         resign_threshold=args.resign_threshold,
         resign_consec=args.resign_consec,
         save_html=save_html_during_generation,

@@ -611,7 +611,7 @@ def direct_sacrifice(move_loc: int, ownership: np.ndarray, board: Board, before_
 def indirect_sacrifice(
     before: np.ndarray, after: np.ndarray, color: int, 
     board: Board, before_board: Optional[Board] = None
-) -> Tuple[int, float]:
+) -> Tuple[int, float, List[int]]:
     """
     Count own stones that became opponent territory.
     
@@ -625,6 +625,9 @@ def indirect_sacrifice(
         color: Player color to check for sacrificed stones
         board: Board state after the move
         before_board: Board state before the move (important for detecting captured stones)
+    
+    Returns:
+        (count, intensity, stone_locs) where stone_locs is a list of board locations of sacrificed stones
     """
     # Use before_board to find stones that existed before the move
     # This is crucial for detecting captured stones that are no longer on current board
@@ -638,7 +641,16 @@ def indirect_sacrifice(
     sac = mask & (before > TAU_POS) & (after < -TAU_POS)
     count = int(np.sum(sac))
     intensity = float(np.mean(before[sac] - after[sac])) if count > 0 else 0.0
-    return count, intensity
+    
+    # Get locations of sacrificed stones
+    stone_locs = []
+    if count > 0:
+        for y in range(check_board.size):
+            for x in range(check_board.size):
+                if sac[y, x]:
+                    stone_locs.append(check_board.loc(x, y))
+    
+    return count, intensity, stone_locs
 
 
 # --- Regional Analysis ---
@@ -750,16 +762,79 @@ def is_tenuki(selected_idx: int, last_move_loc: Optional[int], policy: np.ndarra
 
 # --- Tactical Analysis ---
 
-def is_cut_move(board: Board, move_loc: int) -> bool:
-    """Check if move separates 2+ opponent groups."""
+def is_cut_move(
+    board: Board, move_loc: int, before_board: Optional[Board] = None,
+    before_ownership: Optional[np.ndarray] = None, after_ownership: Optional[np.ndarray] = None
+) -> Tuple[bool, int, List[str], List[int]]:
+    """
+    Check if move separates opponent groups that were previously connected.
+    
+    A true cut occurs when an opponent group is split into multiple groups.
+    
+    Args:
+        board: Board state after the move
+        move_loc: Location of the move
+        before_board: Board state before the move (optional, for proper comparison)
+        before_ownership: Ownership before move (optional, for group enumeration)
+        after_ownership: Ownership after move (optional, for group enumeration)
+    
+    Returns:
+        (is_cut, groups_created, cut_regions, cut_head_locs):
+        - is_cut: True if opponent groups were split
+        - groups_created: Number of new groups created by the split (0 if no cut)
+        - cut_regions: Regions where the split groups are located
+        - cut_head_locs: Head stone locations of the split groups
+    """
     if move_loc == Board.PASS_LOC:
-        return False
-    # After the move, the stone at move_loc is the player who made the move
-    # board.pla is the NEXT player to move (opponent of the mover)
+        return False, 0, [], []
+    
+    # Get the player who made the move
     mover = board.board[move_loc]
     if mover == Board.EMPTY:
-        return False  # Should not happen, but safety check
+        return False, 0, [], []
     opp = Board.get_opp(mover)
+    
+    # If we have before/after boards and ownership, use proper group enumeration
+    if before_board is not None and before_ownership is not None and after_ownership is not None:
+        # Enumerate opponent groups before and after
+        # Note: ownership is normalized to mover's perspective, so flip for opponent
+        opp_before_ownership = -before_ownership  # Flip to opponent's perspective
+        opp_after_ownership = -after_ownership
+        
+        groups_before = enumerate_groups(before_board, opp_before_ownership, opp)
+        groups_after = enumerate_groups(board, opp_after_ownership, opp)
+        
+        # For each before group, check if it was split into multiple after groups
+        cut_regions = []
+        cut_head_locs = []
+        total_new_groups = 0
+        
+        for before_group in groups_before:
+            before_stones = set(before_group.stones)
+            
+            # Find all after groups that contain stones from this before group
+            matching_after_groups = []
+            for after_group in groups_after:
+                after_stones = set(after_group.stones)
+                if before_stones & after_stones:  # Non-empty intersection
+                    matching_after_groups.append(after_group)
+            
+            # If the before group is now in 2+ separate after groups, it was cut
+            if len(matching_after_groups) >= 2:
+                new_groups_created = len(matching_after_groups) - 1
+                total_new_groups += new_groups_created
+                
+                # Record regions and heads of the split groups
+                for after_group in matching_after_groups:
+                    region = _get_group_region(after_group, board)
+                    cut_regions.append(region)
+                    cut_head_locs.append(after_group.head)
+        
+        is_cut = total_new_groups > 0
+        return is_cut, total_new_groups, cut_regions, cut_head_locs
+    
+    # Fallback: simple adjacency check (less accurate)
+    # Check if move is adjacent to 2+ different opponent groups
     x, y = loc_to_xy(board, move_loc)
     heads = set()
     for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
@@ -768,7 +843,10 @@ def is_cut_move(board: Board, move_loc: int) -> bool:
             nloc = xy_to_loc(board, nx, ny)
             if board.board[nloc] == opp:
                 heads.add(board.group_head[nloc])
-    return len(heads) >= 2
+    
+    # This is only adjacent-to-multiple check, not a true cut detection
+    is_adjacent_cut = len(heads) >= 2
+    return is_adjacent_cut, len(heads) - 1 if is_adjacent_cut else 0, [], []
 
 
 def is_connection_move(
@@ -1155,7 +1233,8 @@ def analyze_position_comprehensive(
     before_board: Optional[Board] = None,
     ownership_frame_player: Optional[int] = None,
     pass_counterfactual_ownership: Optional[np.ndarray] = None,
-    pass_counterfactual_frame_player: Optional[int] = None
+    pass_counterfactual_frame_player: Optional[int] = None,
+    seki: Optional[np.ndarray] = None
 ) -> Dict[str, Any]:
     """
     Comprehensive position analysis returning tactical and territorial metrics.
@@ -1376,22 +1455,39 @@ def analyze_position_comprehensive(
         results["sacrifice_intensity"] = ds_i
         if own_baseline is not None:
             # Pass before_board to detect captured stones that are no longer on current board
-            ind, ind_i = indirect_sacrifice(own_baseline, own_curr, player, board, before_board)
+            ind, ind_i, ind_locs = indirect_sacrifice(own_baseline, own_curr, player, board, before_board)
             results["indirect_sacrifice"] = ind
             results["indirect_sacrifice_intensity"] = ind_i
+            results["indirect_sacrifice_locs"] = ind_locs
         else:
             results["indirect_sacrifice"] = 0
             results["indirect_sacrifice_intensity"] = 0.0
+            results["indirect_sacrifice_locs"] = []
     else:
         results.update({
             "direct_sacrifice": False, "direct_sacrifice_intensity": 0.0,
             "sacrifice_intensity": 0.0,  # Backward compatibility
-            "indirect_sacrifice": 0, "indirect_sacrifice_intensity": 0.0,
+            "indirect_sacrifice": 0, "indirect_sacrifice_intensity": 0.0, "indirect_sacrifice_locs": [],
         })
 
     # Tactical concepts
     if move_loc is not None and not is_pass:
-        results["cut"] = is_cut_move(board, move_loc)
+        # Cut check using group enumeration (requires before_board and baseline ownership)
+        if before_board is not None and own_baseline is not None:
+            cut, cut_count, cut_regions, cut_head_locs = is_cut_move(
+                board, move_loc, before_board, own_baseline, own_curr
+            )
+            results["cut"] = cut
+            results["cut_groups_created"] = cut_count
+            results["cut_regions"] = cut_regions
+            results["cut_head_locs"] = cut_head_locs
+        else:
+            cut, _, _, _ = is_cut_move(board, move_loc)  # Fallback to adjacency check
+            results["cut"] = cut
+            results["cut_groups_created"] = 0
+            results["cut_regions"] = []
+            results["cut_head_locs"] = []
+        
         # Connection check using group enumeration (requires before_board and baseline ownership)
         if before_board is not None and own_baseline is not None:
             conn, conn_gain, merged_regions, merged_head_locs = is_connection_move(board, move_loc, player, before_board, own_baseline, own_curr)
@@ -1408,7 +1504,8 @@ def analyze_position_comprehensive(
         results["atari"] = atari_move(board, move_loc)
     else:
         results.update({
-            "cut": False, "connection": False, "connection_strength_gain": 0.0,
+            "cut": False, "cut_groups_created": 0, "cut_regions": [], "cut_head_locs": [],
+            "connection": False, "connection_strength_gain": 0.0,
             "merged_groups_regions": [], "merged_groups_head_locs": [],
             "extension": False, "liberties": 0, "atari": False,
         })
@@ -1577,6 +1674,23 @@ def analyze_position_comprehensive(
             "current_group_influence_strength": 0.0, "current_group_influence_strength_delta": 0.0,
             "must_live": False, "counterfactual_group_strength": 0.0,
         })
+
+    # Seki analysis - detect if position involves seki (mutual life)
+    SEKI_THRESHOLD = 0.5  # 50% probability threshold
+    if seki is not None:
+        seki_arr = np.array(seki)
+        if seki_arr.ndim == 3:  # Handle batch dimension [1, 19, 19]
+            seki_arr = seki_arr[0]
+        max_seki_prob = float(np.max(np.abs(seki_arr)))
+        seki_point_count = int(np.sum(np.abs(seki_arr) > SEKI_THRESHOLD))
+        has_seki = max_seki_prob > SEKI_THRESHOLD
+        results["has_seki"] = has_seki
+        results["max_seki_prob"] = max_seki_prob
+        results["seki_point_count"] = seki_point_count
+    else:
+        results["has_seki"] = False
+        results["max_seki_prob"] = 0.0
+        results["seki_point_count"] = 0
 
     return results
 
