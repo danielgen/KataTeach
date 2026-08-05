@@ -1,0 +1,49 @@
+# Canonical-only concepts for the prospective validity_v5 run.
+#
+# No field in this file is migrated from quarantined legacy snorkel output.
+# Each source is recomputed from raw game records by build_validated_labels.py
+# under the versioned operational contract named below.
+
+concepts:
+  tenuki:
+    type: binary
+    source: tenuki_distance6
+    contract_id: "tenuki_distance6@2"
+    feature_mode: pre
+    description: "Recorded move is at least six Manhattan intersections from the preceding non-pass move."
+
+  forcing:
+    type: binary
+    source: reply_peak95
+    contract_id: "reply_peak95@2"
+    feature_mode: pre
+    description: "Recorded move leaves the opponent a legal-plus-pass reply policy whose maximum probability exceeds 0.95."
+
+  urgency_peak:
+    type: quantile
+    source: regional_policy_peak
+    contract_id: "regional_policy_peak@2"
+    q: 0.15
+    direction: high
+    feature_mode: pre
+    no_drop: true
+    description: "Maximum nine-region mass in the current player's pre-move legal board policy; an urgency proxy."
+
+feature_extraction:
+  representations: [global, local, combined]
+  global: "per-channel spatial mean"
+  local: "per-channel vector at the selected move's idx361 coordinate"
+  combined: "concatenated global and local blocks"
+  local_coordinate: "idx361 (row-major 19x19 tensor index), never padded move_loc"
+
+training:
+  models: [logistic_regression]
+  outer_cv_folds: 5
+  inner_cv_folds: 4
+  group_column: "game_id"
+  class_weight: "balanced"
+  C_values: [0.001, 0.01, 0.1, 1.0, 10.0]
+  hyperparameter_selection: "maximum mean inner-fold average precision"
+  classification_threshold: "maximum F1 on inner out-of-fold predictions"
+  probability_calibration: false
+  quality_gate: "none; every canonical concept and null result is reported"

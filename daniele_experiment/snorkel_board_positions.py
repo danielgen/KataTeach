@@ -27,10 +27,11 @@ TAU_SOLID = 0.70        # Solid territory threshold
 TAU_POS_LOW = 0.08      # Hysteresis low
 TAU_POS_HIGH = 0.12     # Hysteresis high
 TAU_ONLY_MOVE = 0.05    # "Only move" threshold
-TAU_GROUP_IOU = 0.1     # Group matching IoU threshold
+TAU_GROUP_IOU = 0.4     # Group matching IoU threshold (raised from 0.1 to reduce false matches)
 TAU_GROUP_BELONGING = 0.2  # Ownership threshold for grouping stones by influence paths
 TAU_AJI_VICINITY = 5    # Aji reduction L1 radius
-TAU_DELTA_MIN = 0.05     # Minimum ownership delta for solidification/reduction
+TAU_DELTA_MIN = 0.05     # Minimum ownership delta for solidification/reduction (docs may lag)
+SEKI_THRESHOLD = 0.5     # Min seki probability to flag has_seki
 
 REGIONS = ["corner_tl", "corner_tr", "corner_bl", "corner_br",
            "side_left", "side_right", "side_top", "side_bottom", "center"]
@@ -762,28 +763,104 @@ def is_tenuki(selected_idx: int, last_move_loc: Optional[int], policy: np.ndarra
 
 # --- Tactical Analysis ---
 
+def is_hard_cut_move(board: Board, move_loc: int, before_board: Board) -> Tuple[bool, int, List[str], List[int]]:
+    """
+    Board-level cut: the move is adjacent to 2+ distinct opponent Board groups
+    that were previously connected via an empty path through move_loc.
+
+    Uses physical stone connectivity (Board.group_head), not ownership soft-groups.
+    """
+    if move_loc == Board.PASS_LOC:
+        return False, 0, [], []
+    mover = board.board[move_loc]
+    if mover == Board.EMPTY:
+        return False, 0, [], []
+    opp = Board.get_opp(mover)
+
+    x, y = loc_to_xy(board, move_loc)
+    adj_heads_after: Set[int] = set()
+    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+        nx, ny = x + dx, y + dy
+        if in_bounds(nx, ny, board.size):
+            nloc = xy_to_loc(board, nx, ny)
+            if board.board[nloc] == opp:
+                adj_heads_after.add(board.group_head[nloc])
+
+    if len(adj_heads_after) < 2:
+        return False, 0, [], []
+
+    # Confirm these stones were one soft/hard connection before: on before_board,
+    # move_loc was empty and the adjacent opp stones belonged to fewer Board groups
+    # OR were connected through the empty point.
+    adj_heads_before: Set[int] = set()
+    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+        nx, ny = x + dx, y + dy
+        if in_bounds(nx, ny, before_board.size):
+            nloc = xy_to_loc(before_board, nx, ny)
+            if before_board.board[nloc] == opp:
+                adj_heads_before.add(before_board.group_head[nloc])
+
+    # Classic cut: stone sits between 2+ opponent groups that were distinct before
+    # (playing into a multi-group adjacency), or that split from one group.
+    is_cut = len(adj_heads_after) >= 2 and (
+        len(adj_heads_before) >= 2 or len(adj_heads_after) > len(adj_heads_before)
+    )
+    if not is_cut:
+        return False, 0, [], []
+
+    regions = []
+    heads = []
+    for head in adj_heads_after:
+        hx, hy = loc_to_xy(board, head)
+        regions.append(classify_region(hx, hy, board.size))
+        # Convert to idx361 for consistency with soft-cut output
+        heads.append(hy * board.size + hx)
+    return True, len(adj_heads_after) - 1, regions, heads
+
+
+def is_hard_connection_move(
+    board: Board, move_loc: int, color: int, before_board: Board
+) -> Tuple[bool, float, List[str], List[int]]:
+    """
+    Board-level connect: the played stone merges 2+ of the player's Board groups
+    that were separate before the move (physical adjacency via Board.group_head).
+    """
+    if move_loc == Board.PASS_LOC:
+        return False, 0.0, [], []
+    if board.board[move_loc] != color:
+        return False, 0.0, [], []
+
+    x, y = loc_to_xy(board, move_loc)
+    before_heads: Set[int] = set()
+    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+        nx, ny = x + dx, y + dy
+        if in_bounds(nx, ny, before_board.size):
+            nloc = xy_to_loc(before_board, nx, ny)
+            if before_board.board[nloc] == color:
+                before_heads.add(before_board.group_head[nloc])
+
+    if len(before_heads) < 2:
+        return False, 0.0, [], []
+
+    strength_gain = float(len(before_heads) - 1)
+    regions = []
+    heads = []
+    for head in before_heads:
+        hx, hy = loc_to_xy(before_board, head)
+        regions.append(classify_region(hx, hy, before_board.size))
+        heads.append(hy * before_board.size + hx)
+    return True, strength_gain, regions, heads
+
+
 def is_cut_move(
     board: Board, move_loc: int, before_board: Optional[Board] = None,
     before_ownership: Optional[np.ndarray] = None, after_ownership: Optional[np.ndarray] = None
 ) -> Tuple[bool, int, List[str], List[int]]:
     """
-    Check if move separates opponent groups that were previously connected.
-    
-    A true cut occurs when an opponent group is split into multiple groups.
-    
-    Args:
-        board: Board state after the move
-        move_loc: Location of the move
-        before_board: Board state before the move (optional, for proper comparison)
-        before_ownership: Ownership before move (optional, for group enumeration)
-        after_ownership: Ownership after move (optional, for group enumeration)
-    
-    Returns:
-        (is_cut, groups_created, cut_regions, cut_head_locs):
-        - is_cut: True if opponent groups were split
-        - groups_created: Number of new groups created by the split (0 if no cut)
-        - cut_regions: Regions where the split groups are located
-        - cut_head_locs: Head stone locations of the split groups
+    Soft (ownership-path) cut: opponent soft-groups split after the move.
+
+    Prefer is_hard_cut_move for probe/commentary grounding. This soft version is
+    retained for diagnostics and soft_cut fields.
     """
     if move_loc == Board.PASS_LOC:
         return False, 0, [], []
@@ -854,22 +931,7 @@ def is_connection_move(
     before_board: Board, before_ownership: np.ndarray, after_ownership: np.ndarray
 ) -> Tuple[bool, float, List[str], List[int]]:
     """
-    Check if move connects 2+ previously separate groups using group enumeration logic.
-    
-    Args:
-        board: Board state after the move
-        move_loc: Location of the move
-        color: Player color
-        before_board: Board state before the move
-        before_ownership: Ownership array before the move (normalized to color's perspective)
-        after_ownership: Ownership array after the move (normalized to color's perspective)
-    
-    Returns:
-        (is_connection, strength_gain, merged_regions, merged_head_locs):
-        - is_connection: True if 2+ groups were merged
-        - strength_gain: Number of groups merged minus 1
-        - merged_regions: List of regions where merged groups are located
-        - merged_head_locs: List of head stone locations of merged groups
+    Soft (ownership-path) connection. Prefer is_hard_connection_move for grounding.
     """
     if move_loc == Board.PASS_LOC:
         return False, 0.0, [], []
@@ -1349,7 +1411,16 @@ def analyze_position_comprehensive(
     results["used_pass_counterfactual"] = pass_counterfactual_ownership is not None
 
     # Normalize ownership to current player's perspective
-    frame = ownership_frame_player if ownership_frame_player is not None else Board.WHITE
+    if ownership_frame_player is not None:
+        frame = ownership_frame_player
+    else:
+        frame = board.pla
+        import warnings
+        warnings.warn(
+            "ownership_frame_player omitted; defaulting to board.pla.",
+            UserWarning,
+            stacklevel=2,
+        )
     own_curr = normalize_ownership(ownership, frame, player)
 
     # Normalize before_ownership
@@ -1380,10 +1451,11 @@ def analyze_position_comprehensive(
                 pass_counterfactual_ownership, Board.get_opp(player), player
             )
     
-    # Determine which "before" ownership to use for all before/after comparisons
-    # If pass counterfactual is available, use it to avoid anticipatory ownership issues
-    # This affects both territory AND group features (group strength, attack analysis, etc.)
-    own_baseline = own_pass_counterfactual if own_pass_counterfactual is not None else own_before
+    # Territory baseline: prefer pass-counterfactual to avoid anticipatory ownership.
+    # Structural/tactical baseline: always use true own_before on before_board stones.
+    own_territory_baseline = own_pass_counterfactual if own_pass_counterfactual is not None else own_before
+    own_baseline = own_territory_baseline  # alias kept for territory / sacrifice code below
+    own_tactical_before = own_before  # never substitute pass-counterfactual for cut/connect/attack
 
     # Urgency
     results["urgency"] = urgency_by_region(policy)
@@ -1472,33 +1544,58 @@ def analyze_position_comprehensive(
 
     # Tactical concepts
     if move_loc is not None and not is_pass:
-        # Cut check using group enumeration (requires before_board and baseline ownership)
-        if before_board is not None and own_baseline is not None:
-            cut, cut_count, cut_regions, cut_head_locs = is_cut_move(
-                board, move_loc, before_board, own_baseline, own_curr
+        # Primary cut/connect: hard Board connectivity (probe + commentary source of truth)
+        if before_board is not None:
+            hard_cut, hard_cut_count, hard_cut_regions, hard_cut_heads = is_hard_cut_move(
+                board, move_loc, before_board
             )
-            results["cut"] = cut
-            results["cut_groups_created"] = cut_count
-            results["cut_regions"] = cut_regions
-            results["cut_head_locs"] = cut_head_locs
+            hard_conn, hard_conn_gain, hard_merged_regions, hard_merged_heads = is_hard_connection_move(
+                board, move_loc, player, before_board
+            )
+            results["cut"] = hard_cut
+            results["cut_groups_created"] = hard_cut_count
+            results["cut_regions"] = hard_cut_regions
+            results["cut_head_locs"] = hard_cut_heads
+            results["connection"] = hard_conn
+            results["connection_strength_gain"] = hard_conn_gain
+            results["merged_groups_regions"] = hard_merged_regions
+            results["merged_groups_head_locs"] = hard_merged_heads
         else:
-            cut, _, _, _ = is_cut_move(board, move_loc)  # Fallback to adjacency check
-            results["cut"] = cut
+            results["cut"] = False
             results["cut_groups_created"] = 0
             results["cut_regions"] = []
             results["cut_head_locs"] = []
-        
-        # Connection check using group enumeration (requires before_board and baseline ownership)
-        if before_board is not None and own_baseline is not None:
-            conn, conn_gain, merged_regions, merged_head_locs = is_connection_move(board, move_loc, player, before_board, own_baseline, own_curr)
-            results["merged_groups_regions"] = merged_regions
-            results["merged_groups_head_locs"] = merged_head_locs
-        else:
-            conn, conn_gain = False, 0.0
+            results["connection"] = False
+            results["connection_strength_gain"] = 0.0
             results["merged_groups_regions"] = []
             results["merged_groups_head_locs"] = []
-        results["connection"] = conn
-        results["connection_strength_gain"] = conn_gain
+
+        # Soft ownership-path variants (diagnostic; not used as primary labels)
+        if before_board is not None and own_tactical_before is not None:
+            soft_cut, soft_cut_count, soft_cut_regions, soft_cut_heads = is_cut_move(
+                board, move_loc, before_board, own_tactical_before, own_curr
+            )
+            soft_conn, soft_conn_gain, soft_merged_regions, soft_merged_heads = is_connection_move(
+                board, move_loc, player, before_board, own_tactical_before, own_curr
+            )
+            results["soft_cut"] = soft_cut
+            results["soft_cut_groups_created"] = soft_cut_count
+            results["soft_cut_regions"] = soft_cut_regions
+            results["soft_cut_head_locs"] = soft_cut_heads
+            results["soft_connection"] = soft_conn
+            results["soft_connection_strength_gain"] = soft_conn_gain
+            results["soft_merged_groups_regions"] = soft_merged_regions
+            results["soft_merged_groups_head_locs"] = soft_merged_heads
+        else:
+            results["soft_cut"] = False
+            results["soft_cut_groups_created"] = 0
+            results["soft_cut_regions"] = []
+            results["soft_cut_head_locs"] = []
+            results["soft_connection"] = False
+            results["soft_connection_strength_gain"] = 0.0
+            results["soft_merged_groups_regions"] = []
+            results["soft_merged_groups_head_locs"] = []
+
         results["extension"] = is_extension_move(board, move_loc, player)
         results["liberties"] = liberties_of_group(board, move_loc, groups)
         results["atari"] = atari_move(board, move_loc)
@@ -1507,6 +1604,9 @@ def analyze_position_comprehensive(
             "cut": False, "cut_groups_created": 0, "cut_regions": [], "cut_head_locs": [],
             "connection": False, "connection_strength_gain": 0.0,
             "merged_groups_regions": [], "merged_groups_head_locs": [],
+            "soft_cut": False, "soft_cut_groups_created": 0, "soft_cut_regions": [], "soft_cut_head_locs": [],
+            "soft_connection": False, "soft_connection_strength_gain": 0.0,
+            "soft_merged_groups_regions": [], "soft_merged_groups_head_locs": [],
             "extension": False, "liberties": 0, "atari": False,
         })
 
@@ -1526,17 +1626,17 @@ def analyze_position_comprehensive(
         results["occupy_corner"] = False
         results["approaching_corner"] = False
     
-    # Attack analysis (uses baseline ownership for before/after comparisons)
-    if own_baseline is not None:
-        ra, ra_i = reduce_aji(own_baseline, own_curr, board, player, move_loc)
+    # Attack analysis (uses true pre-move ownership for structural comparisons)
+    if own_tactical_before is not None:
+        ra, ra_i = reduce_aji(own_tactical_before, own_curr, board, player, move_loc)
         results["reduce_aji"] = ra
         results["aji_reduction_intensity"] = ra_i
 
         if before_board is not None:
-            groups_before = enumerate_groups(before_board, own_baseline, player)
-            compute_group_strengths(groups_before, own_baseline, before_board)
-            compute_group_connectivity(groups_before, own_baseline, before_board)
-            compute_group_influence(groups_before, own_baseline, before_board)
+            groups_before = enumerate_groups(before_board, own_tactical_before, player)
+            compute_group_strengths(groups_before, own_tactical_before, before_board)
+            compute_group_connectivity(groups_before, own_tactical_before, before_board)
+            compute_group_influence(groups_before, own_tactical_before, before_board)
             
             # Compute current group (the group containing the move) delta
             if move_loc is not None and not is_pass:
@@ -1600,7 +1700,7 @@ def analyze_position_comprehensive(
             # Also compute opponent groups for attack analysis
             opp = Board.get_opp(player)
             opp_own_curr = -own_curr  # Opponent's perspective (negated)
-            opp_own_baseline = -own_baseline  # Use baseline for opponent too
+            opp_own_baseline = -own_tactical_before  # True pre-move ownership for opponent
             opp_groups = enumerate_groups(board, opp_own_curr, opp)
             opp_groups_before = enumerate_groups(before_board, opp_own_baseline, opp)
             compute_group_strengths(opp_groups, opp_own_curr, board)
@@ -1634,7 +1734,7 @@ def analyze_position_comprehensive(
             
             # Influence delta - use accurate computation that avoids double-counting
             inf_count_delta, inf_str_delta = compute_influence_delta_accurate(
-                groups_before, groups, own_baseline, own_curr, before_board, board
+                groups_before, groups, own_tactical_before, own_curr, before_board, board
             )
 
             results["group_strength_delta"] = avg_str_delta
@@ -1676,7 +1776,6 @@ def analyze_position_comprehensive(
         })
 
     # Seki analysis - detect if position involves seki (mutual life)
-    SEKI_THRESHOLD = 0.5  # 50% probability threshold
     if seki is not None:
         seki_arr = np.array(seki)
         if seki_arr.ndim == 3:  # Handle batch dimension [1, 19, 19]
@@ -1919,7 +2018,8 @@ __all__ = [
     "compute_group_strength_delta_by_region", "compute_group_connectivity_delta_by_region",
     "compute_influence_delta_by_region",
     "urgency_by_region", "urgency_intensity_by_region", "is_forcing", "is_tenuki",
-    "is_cut_move", "is_connection_move", "is_extension_move",
+    "is_cut_move", "is_connection_move", "is_hard_cut_move", "is_hard_connection_move",
+    "is_extension_move",
     "liberties_of_group", "atari_move", "creates_new_group",
     "find_group_containing", "compute_current_group_delta",
     "is_occupy_corner", "is_approaching_corner", "CORNER_REGIONS",

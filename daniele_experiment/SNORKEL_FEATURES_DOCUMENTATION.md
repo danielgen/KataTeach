@@ -24,10 +24,15 @@ All features use these threshold constants:
 - **TAU_POS_LOW = 0.08**: Hysteresis low threshold (for building territory detection)
 - **TAU_POS_HIGH = 0.12**: Hysteresis high threshold (for building territory detection)
 - **TAU_ONLY_MOVE = 0.05**: "Only move" threshold (move has >95% probability)
-- **TAU_GROUP_IOU = 0.1**: Group matching IoU threshold (groups match if IoU >= 0.1)
+- **TAU_GROUP_IOU = 0.4**: Group matching IoU threshold (groups match if IoU >= 0.4)
 - **TAU_GROUP_BELONGING = 0.2**: Ownership threshold for grouping stones by influence paths
 - **TAU_AJI_VICINITY = 5**: Aji reduction L1 radius (Manhattan distance)
-- **TAU_DELTA_MIN = 0.1**: Minimum ownership delta for solidification/reduction (change must be >= 0.1)
+- **TAU_DELTA_MIN = 0.05**: Minimum ownership delta for solidification/reduction (change must be >= 0.05)
+- **SEKI_THRESHOLD = 0.5**: Minimum |seki| probability to set has_seki
+
+**Cut/connect note**: Primary `cut` / `connection` use hard Board connectivity. Soft ownership-path
+variants are `soft_cut` / `soft_connection`. Territory uses pass-counterfactual ownership when available;
+tactics/groups/attack use true pre-move ownership.
 
 **Regions**: The board is divided into 9 regions:
 - `corner_tl`, `corner_tr`, `corner_bl`, `corner_br` (corners, 6x6 each)

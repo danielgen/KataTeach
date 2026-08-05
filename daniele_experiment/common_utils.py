@@ -86,7 +86,8 @@ def select_move_with_temperature(
     moves_and_probs: List[Tuple[int, float]], 
     temperature: float = 1.0,
     min_prob: float = 0.01,
-    top_k: int = 10
+    top_k: int = 10,
+    rng=None,
 ) -> Tuple[int, float, bool]:
     """Select a move using temperature-based sampling with safety filters.
     
@@ -134,7 +135,14 @@ def select_move_with_temperature(
     scaled /= scaled.sum()
     
     # Sample
-    selected_idx = np.random.choice(len(moves), p=scaled)
+    # A caller-supplied Generator makes dataset production reproducible without
+    # relying on process-global NumPy state. Keep the global fallback for older
+    # scripts that do not yet pass an RNG.
+    selected_idx = (
+        np.random.choice(len(moves), p=scaled)
+        if rng is None
+        else rng.choice(len(moves), p=scaled)
+    )
     selected_move = moves[selected_idx]
     original_prob = probs[selected_idx]
     

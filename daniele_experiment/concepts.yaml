@@ -1,3 +1,11 @@
+# LEGACY-LABEL EXPLORATORY CONFIGURATION.
+#
+# This file is retained to retrain the full historical concept set with the
+# corrected idx361/nested-CV probe machinery. Most sources are migrated from
+# quarantined legacy snorkel labels and must not be merged with or described as
+# the canonical validity-v5 results. The canonical run uses
+# concepts_validated_v5.yaml instead.
+#
 # Archetype concepts for linear probe training (intent-level)
 # Goal: fewer, more meaningful concepts; less brittle than raw deltas.
 #
@@ -10,10 +18,17 @@
 # Game Phase Stratification:
 #   For quantile concepts, you can set stratify_by_phase: true to compute thresholds
 #   separately per game phase (early: moves 1-60, mid: 61-150, end: 151+).
-#   This is useful when concept intensity varies significantly by game phase.
-#   Example: territory_building might be "high" at different absolute values in
-#   opening vs endgame. Without stratification, early-game moves might dominate
-#   the quantiles, making endgame moves rarely labeled as positive.
+#
+# no_drop: true keeps middle quantile samples as negatives (label=0) instead of
+# dropping them. Useful when you want ranking over the full filtered set.
+#
+# enabled: false quarantines a concept from training until labels are wired.
+#
+# feature_mode: pre | post | delta
+#   pre (default): train on h (pre-move) — good for intent/location
+#   post: train on h_next (post-move) — better for effect concepts
+#   delta: train on h_next - h
+# activation_manipulation.py only accepts feature_mode: pre (hook is pre-move).
 
 concepts:
   # -------------------------
@@ -22,74 +37,92 @@ concepts:
   cut:
     type: binary
     source: cut
-    description: "Cut: separates opponent groups (local tactical)."
+    feature_mode: post
+    description: "Cut: hard Board cut separating opponent groups (local tactical)."
 
   connect:
     type: binary
     source: connection
-    description: "Connect: joins own groups."
+    feature_mode: post
+    description: "Connect: hard Board connect joining own groups."
 
   multi_connect:
     type: threshold
     source: connection_strength_gain
-    threshold: 1.0
-    description: "Multi-connect: connects multiple groups (gain >= 1.0)."
+    threshold: 2.0
+    feature_mode: post
+    description: "Multi-connect: connects 3+ groups (gain >= 2.0)."
 
   extend:
     type: binary
     source: extension
+    feature_mode: post
     description: "Extend: adjacent to own stone (shape/extension)."
 
   atari:
     type: binary
     source: atari
+    feature_mode: post
     description: "Atari: puts opponent group in atari."
   
   forcing:
     type: binary
-    source: forcing
-    description: "Only move: only move has >95% probability."
+    source: reply_peak95
+    contract_id: "reply_peak95@2"
+    feature_mode: pre
+    description: "Forcing proxy: the recorded move leaves the opponent a legal reply policy with max probability > 0.95."
 
   tenuki:
     type: binary
-    source: tenuki
-    description: "Tenuki: plays away from local situation."
+    source: tenuki_distance6
+    contract_id: "tenuki_distance6@2"
+    feature_mode: pre
+    description: "Tenuki distance proxy: the recorded move is at least six Manhattan intersections from the preceding non-pass move."
 
   invasion:
     type: binary
     source: invasion
+    feature_mode: post
     description: "Invasion: plays into opponent territory / flips region."
 
   sacrifice_direct:
     type: binary
     source: direct_sacrifice
+    feature_mode: post
     description: "Direct sacrifice: stone immediately 'lost' (negative ownership)."
 
   sacrifice_indirect:
     type: threshold
     source: indirect_sacrifice
     threshold: 1
+    feature_mode: post
     description: "Indirect sacrifice: move causes own stones to flip (>= 1)."
 
   must_live:
     type: binary
     source: must_live
+    feature_mode: post
     description: "Move that saves a group from dying (dead in counterfactual, alive after)"
 
   occupy_corner:
     type: binary
     source: occupy_corner
-    description: "First stone played in a corner area (opening corner occupation)"
+    feature_mode: pre
+    description: "First stone played in a corner area; local and combined probes are retained explicitly as spatial sanity-check ablations."
 
   approaching_corner:
     type: binary
     source: approaching_corner
-    description: "Approach move responding to opponent's corner stone (kakari)"
+    feature_mode: pre
+    description: "Approach move responding to an opponent corner stone; local and combined probes are retained explicitly as spatial sanity-check ablations."
 
+  # Seki: enabled when generate_games_dataset wires KataGo seki head into snorkel
   seki:
     type: binary
     source: has_seki
-    description: "Position involves seki (mutual life) - groups alive through mutual standoff"
+    feature_mode: post
+    enabled: false
+    description: "Disabled validity check: has_seki has zero positive examples in all 50,503 recorded moves, so no binary probe can be fitted or evaluated."
 
   # -------------------------------------
   # 2) Combat archetypes (quantile-based)
@@ -99,6 +132,7 @@ concepts:
     source: max_attack_intensity
     q: 0.15
     direction: high
+    feature_mode: post
     filters:
       - {column: attacked_groups_count, operator: '>=', value: 1}
     description: "Fight pressure: strong local attack pressure (max intensity, only if attacking)."
@@ -107,6 +141,7 @@ concepts:
     type: threshold
     source: attacked_groups_count
     threshold: 2
+    feature_mode: post
     filters:
       - {column: attacked_groups_count, operator: '>=', value: 1}
     description: "Fight wide: attacks many groups (only among attacking moves)."
@@ -114,11 +149,13 @@ concepts:
   kill_attack:
     type: binary
     source: killing_attack
+    feature_mode: post
     description: "Kill threat: attack likely kills / makes group dead."
 
   aji_reduction:
     type: binary
     source: reduce_aji
+    feature_mode: post
     description: "Reduce aji: makes already-dead/weak stones 'more dead' (cleanup)."
 
   # --------------------------------------------
@@ -129,67 +166,118 @@ concepts:
     source: building_intensity
     q: 0.15
     direction: high
-    stratify_by_phase: true  # Compute quantiles separately per game phase
+    feature_mode: post
+    stratify_by_phase: true
     filters:
       - {column: move_number, operator: '>=', value: 8}
       - {column: building_intensity, operator: '>', value: 0}
-    description: "Build territory: strong creation of new owned points (intensity, not too early). Stratified by phase so early/mid/endgame have separate thresholds."
+    description: "Build territory: strong creation of new owned points (intensity, not too early)."
 
   territory_securing:
     type: quantile
     source: solidification_intensity
     q: 0.15
     direction: high
+    feature_mode: post
     stratify_by_phase: true
     filters:
       - {column: move_number, operator: '>=', value: 8}
       - {column: solidification_intensity, operator: '>', value: 0}
-    description: "Secure territory: strengthens already-owned points (solidification intensity). Stratified by phase so early/mid/endgame have separate thresholds."
+    description: "Secure territory: strengthens already-owned points (solidification intensity)."
 
   opponent_reduction:
     type: quantile
     source: reduction_intensity
     q: 0.15
     direction: high
+    feature_mode: post
     stratify_by_phase: true
     filters:
       - {column: move_number, operator: '>=', value: 8}
       - {column: reduction_intensity, operator: '>', value: 0}
-    description: "Reduce opponent: strong reduction of opponent territory (reduction intensity). Stratified by phase so early/mid/endgame have separate thresholds."
+    description: "Reduce opponent: strong reduction of opponent territory (reduction intensity)."
 
   influence_surge:
     type: quantile
     source: influence_count_delta
     q: 0.15
     direction: high
+    feature_mode: post
     stratify_by_phase: true
     no_drop: true
     filters:
       - {column: move_number, operator: '>=', value: 8}
       - {column: influence_count_delta, operator: '>', value: 0}
-    description: "Influence surge: expands influence area significantly. Stratified by phase so early/mid/endgame have separate thresholds."
+    description: "Influence surge: expands influence area significantly."
 
   urgency_peak:
     type: quantile
-    source: urgency
-    threshold_key: "max"
+    source: regional_policy_peak
+    contract_id: "regional_policy_peak@2"
     q: 0.15
     direction: high
+    feature_mode: pre
     no_drop: true
-    description: "Urgency peak: move lies in a highly urgent region (max urgency mass)."
+    description: "Urgency proxy: maximum nine-region mass in the current player's pre-move legal board policy."
 
   # --------------------------------------------
   # 4) Group-shape / stability shifts (quantile)
   # --------------------------------------------
+  group_strength_up:
+    type: quantile
+    source: group_strength_delta
+    q: 0.15
+    direction: high
+    feature_mode: post
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: group_strength_delta, operator: '>', value: 0}
+    description: "Group strength up: large positive change in group strength."
+
+  group_strength_down:
+    type: quantile
+    source: group_strength_delta
+    q: 0.15
+    direction: low
+    feature_mode: post
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: group_strength_delta, operator: '<', value: 0}
+    description: "Group strength down: large negative change in group strength."
+
+  group_connectivity_up:
+    type: quantile
+    source: current_group_connectivity_delta
+    q: 0.15
+    direction: high
+    feature_mode: post
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: current_group_connectivity_delta, operator: '>', value: 0}
+    description: "Connectivity up: large positive change in current group connectivity."
+
+  group_connectivity_down:
+    type: quantile
+    source: current_group_connectivity_delta
+    q: 0.15
+    direction: low
+    feature_mode: post
+    filters:
+      - {column: move_number, operator: '>=', value: 8}
+      - {column: current_group_connectivity_delta, operator: '<', value: 0}
+    description: "Connectivity down: large negative change in current group connectivity."
+
+  # Legacy abs-shift concepts kept disabled; use directional variants above
   group_strength_shift:
     type: quantile
     source: group_strength_delta
     q: 0.15
     direction: high
     use_abs: true
+    enabled: false
     filters:
       - {column: move_number, operator: '>=', value: 8}
-    description: "Group strength shift: large change in current group strength (by magnitude). Note: Consider splitting into group_strength_up and group_strength_down for directional meaning."
+    description: "DEPRECATED: use group_strength_up/down."
 
   group_connectivity_shift:
     type: quantile
@@ -197,29 +285,40 @@ concepts:
     q: 0.15
     direction: high
     use_abs: true
+    enabled: false
     filters:
       - {column: move_number, operator: '>=', value: 8}
-    description: "Connectivity shift: large change in current group connectivity (by magnitude). Note: Consider splitting into group_connectivity_up and group_connectivity_down for directional meaning."
+      - {column: current_group_connectivity_delta, operator: '!=', value: 0}
+    description: "DEPRECATED: use group_connectivity_up/down."
 
   sacrifice_commitment:
     type: quantile
     source: sacrifice_intensity
     q: 0.15
     direction: high
+    feature_mode: post
     filters:
       - {column: label_sacrifice_direct, operator: '==', value: 1}
     description: "Sacrifice commitment: large immediate self-loss (among direct sacrifices)."
 
-# Feature extraction settings
+# Declarative mirror of the validated pipeline. The executable values are also
+# frozen in each run manifest; unsupported legacy calibration/quality-gate keys
+# are intentionally absent so this file cannot overstate what was run.
 feature_extraction:
-  aggregation: "global_pool"
-  include_move_location: true
-  pool_type: "mean"
+  representations: [global, local, combined]
+  global: "per-channel spatial mean"
+  local: "per-channel vector at the selected move's idx361 coordinate"
+  combined: "concatenated global and local blocks"
+  local_coordinate: "idx361 (row-major 19x19 tensor index), never padded move_loc"
 
 training:
   models: [logistic_regression]
-  cv_folds: 5
+  outer_cv_folds: 5
+  inner_cv_folds: 4
   group_column: "game_id"
   class_weight: "balanced"
   C_values: [0.001, 0.01, 0.1, 1.0, 10.0]
-  min_val_samples: 80
+  hyperparameter_selection: "maximum mean inner-fold average precision"
+  classification_threshold: "maximum F1 on inner out-of-fold predictions"
+  probability_calibration: false
+  quality_gate: "none; every enabled trainable concept and null result is reported"

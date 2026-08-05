@@ -109,3 +109,17 @@ concept_viz/
 bin/
 cbm_output/
 games/
+.venv_study/
+
+# Study app: keep site assets, exclude huge local KataGo nets / logs
+study_app/*.bin.gz
+study_app/**/*.bin.gz
+analysis_logs/
+
+# Experiment artifacts are immutable local data products. Keep pipeline code in
+# git, but never accidentally stage archived invalid results or multi-GB runs.
+daniele_experiment/artifacts/archive/*/files/
+daniele_experiment/artifacts/runs/
+daniele_experiment/artifacts/causal/
+daniele_experiment/artifacts/logs/
+daniele_experiment/artifacts/protocols/

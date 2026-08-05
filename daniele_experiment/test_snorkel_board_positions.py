@@ -20,7 +20,7 @@ from snorkel_board_positions import (
     classify_region, region_map, xy_to_loc, loc_to_xy, in_bounds,
     
     # Group analysis
-    enumerate_groups_deterministic, enumerate_groups_ownership,
+    enumerate_groups,
     compute_group_strengths, compute_group_connectivity, compute_group_influence,
     
     # Territory analysis
@@ -36,6 +36,7 @@ from snorkel_board_positions import (
     # Policy and move analysis
     urgency_by_region, urgency_intensity_by_region, is_cut_move, is_forcing,
     is_tenuki, creates_new_group, is_connection_move, is_extension_move,
+    is_hard_cut_move, is_hard_connection_move,
     liberties_of_group, atari_move,
     
     # Attack concepts
@@ -48,6 +49,18 @@ from snorkel_board_positions import (
     TAU_POS, TAU_SOLID, TAU_CONN, EPSILON_POL
 )
 
+
+
+# Compatibility aliases for older test names
+def enumerate_groups_deterministic(board, player=None):
+    import numpy as np
+    from board import Board as _B
+    player = player if player is not None else _B.BLACK
+    own = np.ones((board.size, board.size), dtype=np.float32)
+    return enumerate_groups(board, own, player)
+
+def enumerate_groups_ownership(board, ownership, player):
+    return enumerate_groups(board, ownership, player)
 
 class TestSnorkelBoardPositions(unittest.TestCase):
     """Test suite for snorkel_board_positions module with synthetic data."""

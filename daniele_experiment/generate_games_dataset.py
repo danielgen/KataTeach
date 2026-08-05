@@ -21,7 +21,12 @@ Example:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone
+import hashlib
+import importlib.metadata
 import json
+import math
+import platform
 import sys
 import time
 import uuid
@@ -30,6 +35,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Any
 
 import numpy as np
+import torch
 
 # Add KataGo python directory to path
 sys.path.append(str(Path(__file__).parent.parent / "python"))
@@ -49,6 +55,137 @@ from snorkel_board_positions import analyze_position_comprehensive
 
 # Import HTML renderer directly (must be importable)
 from visualize_katago_outputs_custom import generate_html_visualization  # type: ignore
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _verify_frozen_generation_protocol(
+    protocol_path: Path,
+    *,
+    cohort: str | None,
+    seed: int | None,
+    num_games: int,
+    checkpoint_sha256: str,
+    device: str,
+    torch_threads: int,
+    board_size: int,
+    initial_temperature: float,
+    final_temperature: float,
+    transition_moves: int,
+    min_prob: float,
+    top_k: int,
+    resign_threshold: float,
+    resign_consec: int,
+    save_html: int,
+    immutable: bool,
+) -> Dict[str, Any]:
+    """Verify the prospective protocol before evaluating a single position."""
+
+    try:
+        protocol = json.loads(protocol_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Protocol is not valid JSON: {protocol_path}") from exc
+    fresh = protocol.get("fresh_holdout")
+    generation = protocol.get("game_generation")
+    sources = protocol.get("source_sha256")
+    if (
+        protocol.get("status") != "frozen_before_fresh_data_generation"
+        or not isinstance(fresh, dict)
+        or not isinstance(generation, dict)
+        or not isinstance(sources, dict)
+        or not sources
+    ):
+        raise ValueError("Generation requires a complete prospectively frozen protocol")
+    if cohort != fresh.get("cohort") or seed is None:
+        raise ValueError("Cohort/base seed differ from the frozen fresh-holdout design")
+    first = int(fresh.get("game_seed_first", -1))
+    last = int(fresh.get("game_seed_last", -1))
+    count = int(fresh.get("game_seed_count", -1))
+    shard_seeds = list(range(int(seed), int(seed) + int(num_games)))
+    if (
+        count != last - first + 1
+        or not shard_seeds
+        or shard_seeds[0] < first
+        or shard_seeds[-1] > last
+    ):
+        raise ValueError("Generation shard seeds fall outside the frozen seed set")
+    if (protocol.get("checkpoint") or {}).get("sha256") != checkpoint_sha256:
+        raise ValueError("Checkpoint differs from the frozen generation protocol")
+
+    observed_generation = {
+        "board_size": int(board_size),
+        "device": device,
+        "torch_threads": int(torch_threads),
+        "initial_temperature": float(initial_temperature),
+        "final_temperature": float(final_temperature),
+        "transition_moves": int(transition_moves),
+        "minimum_raw_policy_probability": float(min_prob),
+        "top_k": int(top_k),
+        "resign_threshold": float(resign_threshold),
+        "resign_consecutive_moves": int(resign_consec),
+        "maximum_moves": 400,
+        "save_html": int(save_html),
+        "run_legacy_snorkel": False,
+    }
+    for key, observed in observed_generation.items():
+        expected = generation.get(key)
+        if isinstance(observed, float):
+            try:
+                agrees = math.isclose(
+                    observed, float(expected), rel_tol=0.0, abs_tol=1e-12
+                )
+            except (TypeError, ValueError):
+                agrees = False
+        else:
+            agrees = observed == expected
+        if not agrees:
+            raise ValueError(
+                f"Generation setting {key!r} differs from frozen protocol: "
+                f"observed={observed!r}, expected={expected!r}"
+            )
+    if immutable is not True or fresh.get("write_once") is not True:
+        raise ValueError("Prospective fresh generation must use immutable outputs")
+
+    expected_environment = protocol.get("environment") or {}
+    observed_environment = {
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "torch": torch.__version__,
+        "scikit_learn": importlib.metadata.version("scikit-learn"),
+    }
+    if expected_environment != observed_environment:
+        raise ValueError(
+            "Runtime package versions differ from the frozen generation protocol"
+        )
+
+    repo = Path(__file__).resolve().parent.parent
+    verified_sources: Dict[str, str] = {}
+    for identity, expected_hash in sources.items():
+        path = (repo / str(identity)).resolve()
+        try:
+            path.relative_to(repo)
+        except ValueError as exc:
+            raise ValueError(f"Protocol source escapes repository: {identity}") from exc
+        if not path.is_file() or _sha256(path) != str(expected_hash):
+            raise ValueError(f"Runtime source differs from frozen protocol: {identity}")
+        verified_sources[str(identity)] = str(expected_hash)
+    return {
+        "status": "passed_before_model_load",
+        "protocol_id": protocol.get("protocol_id"),
+        "protocol_sha256": _sha256(protocol_path),
+        "verified_source_sha256": verified_sources,
+        "shard_seed_first": shard_seeds[0],
+        "shard_seed_last": shard_seeds[-1],
+        "shard_game_count": len(shard_seeds),
+        "generation_settings": observed_generation,
+        "environment": observed_environment,
+    }
 
 
 
@@ -76,22 +213,92 @@ def generate_games(
     resign_consec: int = 3,
     save_html: int = 0,
     html_max_moves: int = 200,
+    seed: int | None = None,
+    cohort: str | None = None,
+    protocol_manifest: Path | None = None,
+    immutable: bool = False,
+    torch_threads: int | None = None,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load model
+    if seed is not None and seed < 0:
+        raise ValueError("seed must be non-negative")
+    if cohort is not None and not cohort.strip():
+        raise ValueError("cohort must be non-empty when provided")
+    if torch_threads is not None:
+        if torch_threads < 1:
+            raise ValueError("torch_threads must be positive")
+        torch.set_num_threads(int(torch_threads))
+    protocol_record = None
+    if protocol_manifest is not None:
+        protocol_manifest = protocol_manifest.resolve()
+        if not protocol_manifest.is_file():
+            raise FileNotFoundError(protocol_manifest)
+        protocol_record = {
+            "path": str(protocol_manifest),
+            "sha256": _sha256(protocol_manifest),
+        }
+
+    model_path = model_path.resolve()
+    checkpoint_sha256 = _sha256(model_path)
+    generator_source = Path(__file__).resolve()
+    common_utils_source = Path(__file__).resolve().parent / "common_utils.py"
+    generator_source_sha256 = hashlib.sha256(generator_source.read_bytes()).hexdigest()
+    common_utils_source_sha256 = hashlib.sha256(common_utils_source.read_bytes()).hexdigest()
+
     dev = device or get_device()
+    if protocol_manifest is not None:
+        protocol_record["verification"] = _verify_frozen_generation_protocol(
+            protocol_manifest,
+            cohort=cohort,
+            seed=seed,
+            num_games=num_games,
+            checkpoint_sha256=checkpoint_sha256,
+            device=dev,
+            torch_threads=int(torch.get_num_threads()),
+            board_size=board_size,
+            initial_temperature=initial_temperature,
+            final_temperature=final_temperature,
+            transition_moves=transition_moves,
+            min_prob=min_prob,
+            top_k=top_k,
+            resign_threshold=resign_threshold,
+            resign_consec=resign_consec,
+            save_html=save_html,
+            immutable=immutable,
+        )
+
+    # Load model only after all prospective commitments have been verified.
     print(f"Loading model: {model_path} on device {dev}")
     model, swa_model, _ = load_model(str(model_path), use_swa=False, device=dev, pos_len=board_size, verbose=False)
     if swa_model is not None:
-        model = swa_model
+        raise RuntimeError("Non-SWA loading unexpectedly returned an SWA model")
     model.eval()
+    model_config = convert_numpy_to_python(model.config)
+    model_config_sha256 = hashlib.sha256(
+        (json.dumps(model_config, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    ).hexdigest()
 
     for game_index in range(1, num_games + 1):
-        game_uuid = str(uuid.uuid4())
+        game_seed = None if seed is None else int(seed) + game_index - 1
+        game_rng = None if game_seed is None else np.random.default_rng(game_seed)
+        game_uuid = (
+            str(uuid.uuid4())
+            if game_seed is None
+            else str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"katateach:{cohort or 'unscoped'}:{game_seed}",
+                )
+            )
+        )
         game_dir = output_dir / game_uuid
         trunk_dir = game_dir / "trunkfinal"
-        trunk_dir.mkdir(parents=True, exist_ok=True)
+        if game_dir.exists():
+            raise FileExistsError(
+                f"Refusing to reuse deterministic game directory: {game_dir}"
+            )
+        trunk_dir.mkdir(parents=True)
 
         print(f"\n=== Game {game_index}/{num_games} | uuid={game_uuid} ===")
 
@@ -131,7 +338,9 @@ def generate_games(
                 temp = calculate_temperature(move_number - 1, initial_temperature, final_temperature, transition_moves)
 
                 # Sample move with temperature-based sampling
-                move_loc, move_prob, _ = select_move_with_temperature(moves_and_probs, temp, min_prob, top_k)
+                move_loc, move_prob, _ = select_move_with_temperature(
+                    moves_and_probs, temp, min_prob, top_k, rng=game_rng
+                )
                 gs.play(pla, move_loc)
                 moves.append((pla, move_loc))
 
@@ -210,8 +419,10 @@ def generate_games(
         (game_dir / "game.sgf").write_text(sgf_content, encoding="utf-8")
         meta = {
             "uuid": game_uuid,
+            "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "board_size": board_size,
             "device": dev,
+            "torch_threads": int(torch.get_num_threads()),
             "start_time": start_ts,
             "end_time": time.time(),
             "num_moves": len(moves),
@@ -222,6 +433,31 @@ def generate_games(
             "top_k": top_k,
             "resign_threshold": resign_threshold,
             "resign_consec": resign_consec,
+            "maximum_moves": max_moves_safety,
+            "rules": convert_numpy_to_python(GameState.RULES_TT),
+            "policy_source": "direct_neural_policy_without_mcts",
+            "save_html": int(save_html),
+            "rng": {
+                "algorithm": "numpy.default_rng/PCG64",
+                "game_seed": game_seed,
+            },
+            "cohort": cohort,
+            "immutable_outputs": bool(immutable),
+            "protocol_manifest": protocol_record,
+            "checkpoint": {
+                "path": str(model_path),
+                "sha256": checkpoint_sha256,
+                "use_swa": False,
+                "selected_weights": "raw_model",
+                "model_config": model_config,
+                "model_config_sha256": model_config_sha256,
+            },
+            "generator": {
+                "source": str(generator_source),
+                "source_sha256": generator_source_sha256,
+                "common_utils_source": str(common_utils_source),
+                "common_utils_source_sha256": common_utils_source_sha256,
+            },
         }
         (game_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -268,6 +504,17 @@ def generate_games(
                 print(f"  HTML saved: {viz_path}")
             except Exception as e:
                 print(f"  HTML generation failed: {e}")
+
+        if immutable:
+            for produced in sorted(path for path in game_dir.rglob("*") if path.is_file()):
+                produced.chmod(0o444)
+            for directory in sorted(
+                (path for path in game_dir.rglob("*") if path.is_dir()),
+                key=lambda path: len(path.parts),
+                reverse=True,
+            ):
+                directory.chmod(0o555)
+            game_dir.chmod(0o555)
 
 
 def generate_html_with_snorkel(games_dir: Path, save_html: int, html_max_moves: int, model_path: Path, device: str | None = None) -> None:
@@ -556,6 +803,7 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                     # Raw ownership from get_model_outputs is from current player to move's perspective
                     # After the move, gs.board.pla is the opponent (next to play)
                     ownership_after = rec.get("ownership_after")
+                    outputs_after = None
                     if ownership_after is not None:
                         ownership_after_raw = np.array(ownership_after).reshape(board_size, board_size)
                     else:
@@ -564,6 +812,20 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                         ownership_after_raw = outputs_after.get("ownership", np.zeros((board_size, board_size), dtype=np.float32))
                         if ownership_after_raw.ndim == 3:
                             ownership_after_raw = ownership_after_raw[0]
+
+                    # Optional seki head from KataGo (when present in model outputs)
+                    seki_map = None
+                    if outputs_after is None:
+                        try:
+                            outputs_after = gs.get_model_outputs(model)
+                        except Exception:
+                            outputs_after = None
+                    if outputs_after is not None:
+                        seki_map = outputs_after.get("seki")
+                        if seki_map is not None:
+                            seki_map = np.array(seki_map)
+                            if seki_map.ndim == 3:
+                                seki_map = seki_map[0]
                     
                     # Who is to play after the move (opponent)
                     post_move_player = gs.board.pla
@@ -584,7 +846,8 @@ def run_snorkel(games_dir: Path, model_path: Path, device: str | None = None) ->
                         before_board=board_before,  # Pre-move board state (board_before.pla == current_player)
                         ownership_frame_player=post_move_player,  # Frame of ownership_after_raw
                         pass_counterfactual_ownership=pass_counterfactual_raw,  # "What if I passed?"
-                        pass_counterfactual_frame_player=pass_counterfactual_frame_player
+                        pass_counterfactual_frame_player=pass_counterfactual_frame_player,
+                        seki=seki_map,
                     )
                     
                     # Convert numpy arrays to lists for JSON serialization
@@ -734,10 +997,40 @@ def main() -> None:
     p.add_argument("--resign-consec", type=int, default=3, help="Consecutive low-win moves to resign")
     p.add_argument("--save-html", type=int, default=0, help="Render HTML for the first N games (0=off)")
     p.add_argument("--html-max-moves", type=int, default=200, help="Max moves to include in HTML")
+    p.add_argument(
+        "--seed",
+        type=int,
+        help="Base seed; game i uses NumPy PCG64 seed + i - 1",
+    )
+    p.add_argument(
+        "--cohort",
+        help="Explicit dataset cohort persisted in every game metadata file",
+    )
+    p.add_argument(
+        "--protocol-manifest",
+        type=Path,
+        help="Frozen pre-generation protocol JSON to bind by SHA-256 in metadata",
+    )
+    p.add_argument(
+        "--immutable",
+        action="store_true",
+        help="Mark each completed raw game tree read-only",
+    )
+    p.add_argument(
+        "--torch-threads",
+        type=int,
+        help="Pin PyTorch intra-op threads and record the value in every game",
+    )
     p.add_argument("--run-snorkel", action="store_true", help="Run snorkel_board_positions.py over games after generation")
     p.add_argument("--compute-stats", action="store_true", help="Compute global stats from all snorkel data (for percentiles)")
     p.add_argument("--stats-only", action="store_true", help="Only compute stats, skip game generation")
     args = p.parse_args()
+
+    if args.immutable and (args.run_snorkel or args.compute_stats or args.save_html):
+        p.error(
+            "--immutable fresh raw games cannot be combined with derived snorkel, "
+            "stats, or HTML generation"
+        )
 
     # Handle stats-only mode (doesn't require model)
     if args.stats_only:
@@ -771,6 +1064,11 @@ def main() -> None:
         resign_consec=args.resign_consec,
         save_html=save_html_during_generation,
         html_max_moves=args.html_max_moves,
+        seed=args.seed,
+        cohort=args.cohort,
+        protocol_manifest=args.protocol_manifest,
+        immutable=args.immutable,
+        torch_threads=args.torch_threads,
     )
 
     if args.run_snorkel:
@@ -793,5 +1091,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,0 +1,1216 @@
+{
+  "analysis": "tenuki_single_site_analysis_f5",
+  "broadcast_decomposition": {
+    "decomposition_identity_max_error": 8.673617379884035e-19,
+    "description": "The confirmatory far-mass dose derivative decomposed over board sites: contribution(site) = aligned_mask[site] * (grad_far_mass[:, site] @ learned_delta). Far sites carry positive mask weight, near sites negative.",
+    "far_sites_contribution": {
+      "fraction_positive": 0.08,
+      "mean": -0.00016159733618982677,
+      "n": 100,
+      "sd": 0.0001521364183417769,
+      "stratified_mean": -0.00016159733618982677
+    },
+    "near_sites_contribution": {
+      "fraction_positive": 0.01,
+      "mean": -0.0007104956431098066,
+      "n": 100,
+      "sd": 0.0007387677980847533,
+      "stratified_mean": -0.0007104956431098067
+    },
+    "stratified_mean_total": -0.0008720929792996334,
+    "unmasked_mean_site_coupling": {
+      "description": "Mean over sites of grad_far_mass[:, site] @ learned_delta: the effect on far-region mass of one probe-score unit at one site, before mask weighting.",
+      "far_sites": {
+        "fraction_positive": 0.08,
+        "mean": -1.5981011531759368e-06,
+        "n": 100,
+        "sd": 1.5117919269123593e-06
+      },
+      "near_sites": {
+        "fraction_positive": 0.99,
+        "mean": 7.413607613611549e-06,
+        "n": 100,
+        "sd": 9.050426572283413e-06
+      }
+    }
+  },
+  "evidential_status": "exploratory_diagnostic_only; cannot alter the registered validity_v5 verdict",
+  "per_position": [
+    {
+      "broadcast_far_sites_contribution": -0.0001541211822053467,
+      "broadcast_near_sites_contribution": -0.002887443861208205,
+      "far_candidates_mean_self_effect": -0.0003962719442864556,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00013066404576512892,
+      "position_id": "055a2c70-e9dc-577d-b9e0-bb32c046c80a:40",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005929678338103672
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0004562169964170843,
+      "broadcast_near_sites_contribution": -0.0015938862920794501,
+      "far_candidates_mean_self_effect": -0.0002593318507933285,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003018040472158931,
+      "position_id": "0b24cd46-3d38-5b3e-beb2-de81bc999b4a:113",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0008049371670270032
+    },
+    {
+      "broadcast_far_sites_contribution": -5.072198382735629e-05,
+      "broadcast_near_sites_contribution": -0.0005137542860081018,
+      "far_candidates_mean_self_effect": -0.0003740809969198234,
+      "label": 1,
+      "near_candidates_mean_self_effect": -4.4500318440506444e-05,
+      "position_id": "0cbae46b-d573-5ffe-a5ae-a5b407e50fee:3",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00047023659672275017
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003246257566267446,
+      "broadcast_near_sites_contribution": -0.0014507370119083455,
+      "far_candidates_mean_self_effect": -0.00026424448565451136,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00015277269873040933,
+      "position_id": "0ec42449-bce7-5967-82a5-f30313046e8a:97",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.000690052045545534
+    },
+    {
+      "broadcast_far_sites_contribution": -5.329203266496995e-05,
+      "broadcast_near_sites_contribution": -0.00011114171487015205,
+      "far_candidates_mean_self_effect": -2.5255312719889027e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -5.2949821665228326e-05,
+      "position_id": "0f24e328-3c25-5bb1-9182-5bb87e03a902:11",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00014596510377555292
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003231576227826948,
+      "broadcast_near_sites_contribution": -0.0017603601360235716,
+      "far_candidates_mean_self_effect": -0.0002702686998233213,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00015392579568387696,
+      "position_id": "0fcbbc9f-8cfc-50fb-8ce0-ddf71aa56a12:24",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -8.154828160522589e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -9.048535896233583e-06,
+      "broadcast_near_sites_contribution": -7.352462765768564e-06,
+      "far_candidates_mean_self_effect": -3.988410082463001e-06,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.4905017006089479e-06,
+      "position_id": "1101c5cb-e167-56bb-a7b9-efdd43fc7d9c:22",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -7.026621156904874e-06
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00036293094049233985,
+      "broadcast_near_sites_contribution": -0.0013486682313176472,
+      "far_candidates_mean_self_effect": -0.00020861332677930234,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00012900469344441008,
+      "position_id": "1fa43a83-6873-5cdf-808f-72d69f74e561:20",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.000830430834780634
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0001498200493237273,
+      "broadcast_near_sites_contribution": -0.0005768079789570765,
+      "far_candidates_mean_self_effect": -7.709480559844672e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003638281002730215,
+      "position_id": "2ae6cd57-6d50-58a1-bf0b-cc6fa1a2f492:89",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00042271100812492606
+    },
+    {
+      "broadcast_far_sites_contribution": -2.2677643725700863e-05,
+      "broadcast_near_sites_contribution": -6.403705970902159e-05,
+      "far_candidates_mean_self_effect": -8.864319229651274e-06,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003164956972667206,
+      "position_id": "2e244f42-330e-5645-a371-4b2f425c8e87:6",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0008694687258805986
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00018348104898129148,
+      "broadcast_near_sites_contribution": -0.0012636451251102235,
+      "far_candidates_mean_self_effect": -0.00017998329229263092,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00030366543774990897,
+      "position_id": "2f8197e8-f3c2-5784-b649-679471efabd9:82",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00045436002975077634
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00030063464958044584,
+      "broadcast_near_sites_contribution": -0.00106725603029879,
+      "far_candidates_mean_self_effect": -0.0002702748362756363,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00010635600622357611,
+      "position_id": "34abf957-9168-5fd4-a6d1-497f1161b6b9:46",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0003204175341375871
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00021813184332745883,
+      "broadcast_near_sites_contribution": -0.00018617838513004323,
+      "far_candidates_mean_self_effect": -0.0001078150935848487,
+      "label": 0,
+      "near_candidates_mean_self_effect": -3.518779984593986e-05,
+      "position_id": "361bf4b4-1d46-5b7a-b45f-4bac0c69d70d:38",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00014058980195603402
+    },
+    {
+      "broadcast_far_sites_contribution": -3.9329649416719233e-07,
+      "broadcast_near_sites_contribution": -1.4739358034693268e-05,
+      "far_candidates_mean_self_effect": -5.355108569895621e-07,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00042558607860251435,
+      "position_id": "37fb5167-778f-59fd-ba22-84b5e73aac7e:58",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0004502409206500814
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00010770498942376857,
+      "broadcast_near_sites_contribution": -0.001791561275628119,
+      "far_candidates_mean_self_effect": -0.00020964977968715147,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.0001216085874066535,
+      "position_id": "395d9d0b-bcbb-5f7c-8cda-b6510cf63ceb:45",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00035977199999633877
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003505092925089085,
+      "broadcast_near_sites_contribution": -0.0014217180958357555,
+      "far_candidates_mean_self_effect": -0.000194400016011623,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0002469483726877416,
+      "position_id": "3ab1efe3-5123-5730-b6b7-5cc67a1cfa7b:28",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0005815832909770234
+    },
+    {
+      "broadcast_far_sites_contribution": -5.5699268426414156e-05,
+      "broadcast_near_sites_contribution": -0.0013969660384758264,
+      "far_candidates_mean_self_effect": -0.000383839207669419,
+      "label": 1,
+      "near_candidates_mean_self_effect": -6.664122524178661e-05,
+      "position_id": "3c418a9d-5b5f-53ce-a87a-12e77b41de92:44",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0003462616590208261
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00010450353440955227,
+      "broadcast_near_sites_contribution": 3.749208572046484e-05,
+      "far_candidates_mean_self_effect": -4.454701389801817e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": 2.969991762585204e-07,
+      "position_id": "3dfd89de-d877-5a03-94c7-ef703f44971d:20",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": 1.5184117747682541e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003955873601005759,
+      "broadcast_near_sites_contribution": -0.0019488289417527956,
+      "far_candidates_mean_self_effect": -0.0003362435278391602,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00021702073287512927,
+      "position_id": "40274916-014d-5a6b-9fc7-9028dbc62af5:67",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0004134101224577483
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00014644583571731557,
+      "broadcast_near_sites_contribution": -0.0005083861475453185,
+      "far_candidates_mean_self_effect": -8.135353001945449e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00011836963642858035,
+      "position_id": "40cc7e3c-169f-5e60-bcc8-57759aeb264c:7",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0002519130719288771
+    },
+    {
+      "broadcast_far_sites_contribution": -7.892419677709771e-07,
+      "broadcast_near_sites_contribution": -5.681845086788721e-07,
+      "far_candidates_mean_self_effect": -0.0005262333155603974,
+      "label": 1,
+      "near_candidates_mean_self_effect": -3.23551311080748e-08,
+      "position_id": "489501b0-65a1-5b2c-975f-0ad9607655e7:15",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0008216665400868256
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0004196555870009292,
+      "broadcast_near_sites_contribution": -0.0016013863688113378,
+      "far_candidates_mean_self_effect": -0.00019480965745385755,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003470961267110621,
+      "position_id": "48e6366e-bd54-5bb5-8a80-c3c062f6422f:53",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0004539082473081346
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00012708285966486115,
+      "broadcast_near_sites_contribution": -0.002136516284802679,
+      "far_candidates_mean_self_effect": -7.711332034014436e-05,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.0003679652274193198,
+      "position_id": "4ab3de65-3f58-5d5d-83ad-efdaeaa1c608:52",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00037778020104065
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00013774787673679955,
+      "broadcast_near_sites_contribution": -0.001632994601068014,
+      "far_candidates_mean_self_effect": -0.00021173292538073716,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00013967573696675842,
+      "position_id": "4e5508d4-b3ca-5de6-814c-690949d18ded:6",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0004208153474616781
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002587788609836286,
+      "broadcast_near_sites_contribution": -0.000998285823849756,
+      "far_candidates_mean_self_effect": -0.00017741873674463715,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00020368320784564935,
+      "position_id": "5152a09e-6d14-58fe-8fd1-a2b1c8706fe4:103",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00020698568593380265
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00016495614713034495,
+      "broadcast_near_sites_contribution": -0.0020204545844999832,
+      "far_candidates_mean_self_effect": -0.000288235593828784,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.0001704190095524019,
+      "position_id": "54e98624-d2d7-58da-aef6-6b2b5276f5a7:90",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.000347431668799815
+    },
+    {
+      "broadcast_far_sites_contribution": -5.986044929808028e-07,
+      "broadcast_near_sites_contribution": -2.228152386163654e-05,
+      "far_candidates_mean_self_effect": -2.401005225474039e-07,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00046484249237399057,
+      "position_id": "54f4d8f3-5ab5-5f52-9809-51ddc7d8d4a7:20",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0009384485429173006
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002793586064846064,
+      "broadcast_near_sites_contribution": -0.0002148578221135704,
+      "far_candidates_mean_self_effect": -0.00014082139109572832,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00012113305094227586,
+      "position_id": "5635dec7-19d3-50cd-8b7e-9025460c99b2:42",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00023467796777599265
+    },
+    {
+      "broadcast_far_sites_contribution": -5.6299963718836866e-06,
+      "broadcast_near_sites_contribution": -4.171349846088842e-05,
+      "far_candidates_mean_self_effect": -2.6778088171000593e-06,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00042733079240294834,
+      "position_id": "569876f0-98f2-5c11-a7d2-fec572d22900:12",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.000803115328662173
+    },
+    {
+      "broadcast_far_sites_contribution": 4.560228956540421e-08,
+      "broadcast_near_sites_contribution": -3.2024419583089786e-05,
+      "far_candidates_mean_self_effect": -1.4998416843173198e-06,
+      "label": 0,
+      "near_candidates_mean_self_effect": -3.839977038022284e-06,
+      "position_id": "56ba2105-5f0d-509d-b75d-36b1933c40ac:21",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -1.7248700013002823e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -5.764986821577078e-06,
+      "broadcast_near_sites_contribution": -9.88382291560186e-05,
+      "far_candidates_mean_self_effect": -0.00031483483750413614,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.45281460353587e-06,
+      "position_id": "59edb403-584d-5ecd-88c5-120428e37381:6",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005081630205960141
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00038944606912000047,
+      "broadcast_near_sites_contribution": -0.00062165668218618,
+      "far_candidates_mean_self_effect": -0.00021042543338952818,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.000129847153083702,
+      "position_id": "5d44df0c-f7d1-5c36-906f-977e35c64a65:30",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0007635820959292687
+    },
+    {
+      "broadcast_far_sites_contribution": -9.311038044375634e-05,
+      "broadcast_near_sites_contribution": -0.0010957366071814524,
+      "far_candidates_mean_self_effect": -0.00023420371644363122,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.716125894136538e-05,
+      "position_id": "5f689d24-235c-5be7-87ea-fec02ce3d684:75",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00020330415203905237
+    },
+    {
+      "broadcast_far_sites_contribution": -7.826981976205007e-06,
+      "broadcast_near_sites_contribution": -0.00017949799255676996,
+      "far_candidates_mean_self_effect": -0.0003472271793495725,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.795097862875216e-06,
+      "position_id": "63e74daf-369b-5dc2-b4a7-bb09c692223f:57",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0006491992614617197
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0001395378054181758,
+      "broadcast_near_sites_contribution": -0.00010565562691930357,
+      "far_candidates_mean_self_effect": -5.573460227513657e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0002083736843177855,
+      "position_id": "641f1633-794d-50d9-89c1-577f130e6cbe:18",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0001574854376366161
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00029720763578033925,
+      "broadcast_near_sites_contribution": -0.00023263471358330706,
+      "far_candidates_mean_self_effect": -0.00012653989765034116,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0001402514096239029,
+      "position_id": "67144dcd-92a9-562d-810b-d47bf8a99e04:48",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": 2.4978310330413683e-05
+    },
+    {
+      "broadcast_far_sites_contribution": 1.0558986165401548e-06,
+      "broadcast_near_sites_contribution": -1.0396070785419876e-05,
+      "far_candidates_mean_self_effect": -1.1681711521891408e-07,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.3886133839594769e-06,
+      "position_id": "686a798e-f142-5a60-9e5f-f6a25e7e93dc:28",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -4.579759305745285e-06
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00017899521272083622,
+      "broadcast_near_sites_contribution": -0.0002218689110984843,
+      "far_candidates_mean_self_effect": -6.72355542500618e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00026084942819480075,
+      "position_id": "68c2e17d-a6d4-5192-b36f-f6dec0132d2c:16",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0004434180612440042
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0001132456835840029,
+      "broadcast_near_sites_contribution": -0.00041014479717535473,
+      "far_candidates_mean_self_effect": -0.0001295558612138824,
+      "label": 0,
+      "near_candidates_mean_self_effect": -2.81587572661342e-05,
+      "position_id": "69368e81-6d8e-551b-bbd2-898700601d62:53",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00013899056859561828
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00031556950674777214,
+      "broadcast_near_sites_contribution": -0.0006922832963371531,
+      "far_candidates_mean_self_effect": -0.0001269459814420949,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00033021572155665115,
+      "position_id": "6ad3b9eb-b246-5085-85c8-30ddfff679af:53",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00011611312563793882
+    },
+    {
+      "broadcast_far_sites_contribution": -0.000295692999555344,
+      "broadcast_near_sites_contribution": -0.001292551686970828,
+      "far_candidates_mean_self_effect": -0.00016802578426774794,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00022325716571264275,
+      "position_id": "6b5df1a6-1cbc-5a07-a89a-4d51dc014658:51",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005414905261768132
+    },
+    {
+      "broadcast_far_sites_contribution": 3.932141278690763e-06,
+      "broadcast_near_sites_contribution": -1.5583000618452433e-05,
+      "far_candidates_mean_self_effect": -3.6449227742402777e-07,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.5479610647415234e-06,
+      "position_id": "6de338ed-66df-5248-b89d-5fbdfba0e662:29",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -7.500936754916028e-06
+    },
+    {
+      "broadcast_far_sites_contribution": -0.000290159713394215,
+      "broadcast_near_sites_contribution": -0.0011330045921108475,
+      "far_candidates_mean_self_effect": -0.0002423659533585155,
+      "label": 1,
+      "near_candidates_mean_self_effect": -9.978329260063092e-05,
+      "position_id": "6fedc61e-a1a4-5158-b176-eaa28b6e15a7:157",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0002945765168948457
+    },
+    {
+      "broadcast_far_sites_contribution": -3.583027998814927e-05,
+      "broadcast_near_sites_contribution": -0.0004021780266782679,
+      "far_candidates_mean_self_effect": -0.0002886754056570771,
+      "label": 1,
+      "near_candidates_mean_self_effect": -2.9983919679880358e-05,
+      "position_id": "71592ff2-df43-59d3-ad05-a02352d3fc05:45",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00035274811491846185
+    },
+    {
+      "broadcast_far_sites_contribution": -8.747834967550885e-06,
+      "broadcast_near_sites_contribution": -8.90852533990643e-05,
+      "far_candidates_mean_self_effect": -0.0003402212521379009,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.091068318829048e-06,
+      "position_id": "74d6a521-b64e-59b3-88f9-76f22b7a5679:11",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00040430231061109895
+    },
+    {
+      "broadcast_far_sites_contribution": -1.1802313730744022e-05,
+      "broadcast_near_sites_contribution": -0.00020423772600369983,
+      "far_candidates_mean_self_effect": -0.0004268352287397642,
+      "label": 1,
+      "near_candidates_mean_self_effect": -1.5563830262244775e-05,
+      "position_id": "754fd998-e064-5d7f-b164-0a0bbbfc87dd:2",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005239210779226046
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003747090859320514,
+      "broadcast_near_sites_contribution": -0.0009144727831795971,
+      "far_candidates_mean_self_effect": -0.00025633630675990466,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00010561884973080374,
+      "position_id": "772785cf-3102-52b0-8ef0-fb51767946f5:59",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00018396818387485955
+    },
+    {
+      "broadcast_far_sites_contribution": -8.746388125870673e-07,
+      "broadcast_near_sites_contribution": -1.6215326098653583e-05,
+      "far_candidates_mean_self_effect": -2.1654633016030036e-06,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.000474011600903e-05,
+      "position_id": "778fbb08-fa64-526d-a029-ce767a1f4820:21",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -2.2899462093176615e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -9.652039537307982e-05,
+      "broadcast_near_sites_contribution": -0.00031735657066873837,
+      "far_candidates_mean_self_effect": -5.23646577820053e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00048738874714977207,
+      "position_id": "7f3c2c59-09cf-5a75-bc3c-305a4c2d0cbc:59",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0005854337106943536
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00033157781932001526,
+      "broadcast_near_sites_contribution": -0.0006900460235964653,
+      "far_candidates_mean_self_effect": -0.00014811807489724241,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00020093420818835975,
+      "position_id": "82fbd356-9930-529d-b171-159ec123d4ab:56",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00018390644365591746
+    },
+    {
+      "broadcast_far_sites_contribution": 4.283175939328213e-06,
+      "broadcast_near_sites_contribution": -1.4286938693025592e-05,
+      "far_candidates_mean_self_effect": -1.7015679926068495e-08,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.0861383448878322e-06,
+      "position_id": "87b7131d-1f22-5815-bc70-5785b45bc5b4:31",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -5.436840942802614e-06
+    },
+    {
+      "broadcast_far_sites_contribution": -7.97740168241929e-05,
+      "broadcast_near_sites_contribution": -0.00020966321686099494,
+      "far_candidates_mean_self_effect": -3.852879753792327e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003242580901768349,
+      "position_id": "92513e75-3d6f-53c3-8074-375a53d9141d:16",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0008376875473934041
+    },
+    {
+      "broadcast_far_sites_contribution": -6.413817210963124e-05,
+      "broadcast_near_sites_contribution": -0.0008347640429805759,
+      "far_candidates_mean_self_effect": -0.0002778345533019092,
+      "label": 1,
+      "near_candidates_mean_self_effect": -4.442053642828301e-05,
+      "position_id": "9267b134-3094-508e-bde1-2f1d34cb4664:55",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00023919335119270064
+    },
+    {
+      "broadcast_far_sites_contribution": -5.189719290525544e-06,
+      "broadcast_near_sites_contribution": -0.00012642006046507877,
+      "far_candidates_mean_self_effect": -3.814297152004332e-05,
+      "label": 1,
+      "near_candidates_mean_self_effect": -9.67583831484947e-06,
+      "position_id": "957de45e-7122-50d8-8fa0-a8c3a145c7d6:19",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -6.390196753517329e-05
+    },
+    {
+      "broadcast_far_sites_contribution": 6.211109464778571e-06,
+      "broadcast_near_sites_contribution": -2.750426578766931e-05,
+      "far_candidates_mean_self_effect": -2.2012033646533734e-06,
+      "label": 0,
+      "near_candidates_mean_self_effect": -2.853073503891514e-06,
+      "position_id": "968475af-6cf5-54c1-9d2e-652fde6e737a:94",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -1.3735225474818774e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00017771545188543215,
+      "broadcast_near_sites_contribution": -0.0006317083269306937,
+      "far_candidates_mean_self_effect": -0.00010687490048004394,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.000277056624467652,
+      "position_id": "98c33a5d-98b2-535c-9ded-a42cc82fef99:36",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0008482641606917654
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002896810080719971,
+      "broadcast_near_sites_contribution": -0.00037668731474501017,
+      "far_candidates_mean_self_effect": -0.0001799473664202274,
+      "label": 0,
+      "near_candidates_mean_self_effect": -3.698989866623437e-05,
+      "position_id": "991e4fb1-9832-5697-9543-d3ac8189b892:102",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00015857023114050614
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0004094926796922125,
+      "broadcast_near_sites_contribution": -0.001502325795745105,
+      "far_candidates_mean_self_effect": -0.00023163708185865536,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00017343979741644028,
+      "position_id": "9e03b406-4262-5b33-a10c-b8197686b062:52",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00023072797112655112
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00044559227130597223,
+      "broadcast_near_sites_contribution": -0.0005760255158223166,
+      "far_candidates_mean_self_effect": -0.0002921554488649694,
+      "label": 0,
+      "near_candidates_mean_self_effect": -4.5967070710888136e-05,
+      "position_id": "a0b2e3cc-3481-5c53-a725-392d85e9d2e7:100",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00020860583989998276
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002581710475106696,
+      "broadcast_near_sites_contribution": -0.00012892704323746976,
+      "far_candidates_mean_self_effect": -0.00010843975947162777,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00011062218177955733,
+      "position_id": "a38ef354-7294-566a-adf2-677cf52397b8:98",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -2.716811586994424e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -9.314406324629384e-05,
+      "broadcast_near_sites_contribution": -0.0010375567731054432,
+      "far_candidates_mean_self_effect": -0.0001745472726898942,
+      "label": 1,
+      "near_candidates_mean_self_effect": -9.139872207168438e-05,
+      "position_id": "a4d21a43-276d-564c-b329-d1f1b7303e60:7",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00025807128416848504
+    },
+    {
+      "broadcast_far_sites_contribution": -1.7690316025880176e-05,
+      "broadcast_near_sites_contribution": -0.0002835779703512461,
+      "far_candidates_mean_self_effect": -0.00018573597889626632,
+      "label": 1,
+      "near_candidates_mean_self_effect": -2.3967298412313475e-05,
+      "position_id": "a4d5187f-b435-52d0-9d55-88301d94623e:5",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -6.51731808334887e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00039807203381885133,
+      "broadcast_near_sites_contribution": -0.0008555447178172779,
+      "far_candidates_mean_self_effect": -0.00015922485151809683,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003377587014044642,
+      "position_id": "a8661f4b-63ff-5aab-93e1-9480661bf89e:110",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00018954188256144596
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00025453560027985703,
+      "broadcast_near_sites_contribution": -0.001822251904280359,
+      "far_candidates_mean_self_effect": -0.00033032665161910154,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00014385912007221688,
+      "position_id": "ab15ff36-e203-5f9d-8442-fb59c076c56f:31",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00025629765874945126
+    },
+    {
+      "broadcast_far_sites_contribution": -2.1721230285404155e-06,
+      "broadcast_near_sites_contribution": -0.00012549227465122494,
+      "far_candidates_mean_self_effect": -0.0003479230696534619,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.918836873702903e-06,
+      "position_id": "ab68c28d-c728-556e-867c-e8481848f8dc:8",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.000332405693816248
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0001693152392017808,
+      "broadcast_near_sites_contribution": -0.001836382860335302,
+      "far_candidates_mean_self_effect": -0.00025131380677647405,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00014964186120433812,
+      "position_id": "af9e42f9-1c33-596e-b58b-6c1b339411fd:7",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00046286931091047193
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0005174439515909065,
+      "broadcast_near_sites_contribution": -0.000725357306656334,
+      "far_candidates_mean_self_effect": -0.00029428759767206034,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00017820595891342102,
+      "position_id": "b173f0fc-122a-56cb-ae9a-acb2e864c472:30",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00025224105807533756
+    },
+    {
+      "broadcast_far_sites_contribution": -3.8587260521631117e-07,
+      "broadcast_near_sites_contribution": -1.4267369655140793e-06,
+      "far_candidates_mean_self_effect": -1.1991992875281526e-05,
+      "label": 1,
+      "near_candidates_mean_self_effect": -7.177184314089651e-08,
+      "position_id": "b406895b-31e8-5726-8e20-f6ce514b522c:21",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -2.6853189532158572e-05
+    },
+    {
+      "broadcast_far_sites_contribution": 4.729667311951382e-06,
+      "broadcast_near_sites_contribution": -1.5595772031530064e-05,
+      "far_candidates_mean_self_effect": -3.7374815101829664e-07,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.049653073701923e-05,
+      "position_id": "b6a58208-334a-59d9-9b70-2c9a9b083d04:76",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -1.4898449381105297e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00010552393688392905,
+      "broadcast_near_sites_contribution": -0.0010579708032371355,
+      "far_candidates_mean_self_effect": -0.00030638274669888383,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.480659046730881e-05,
+      "position_id": "b725ae5d-413c-5ee2-9f4c-3f05f05bd591:3",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0004884076953490931
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00018991405775900828,
+      "broadcast_near_sites_contribution": -0.0007687917827180107,
+      "far_candidates_mean_self_effect": -8.977526100277222e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0003246483430417606,
+      "position_id": "b8313c0d-94dc-50b5-9847-c953631043d4:13",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0008302323394825289
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002430997661803293,
+      "broadcast_near_sites_contribution": -0.0003008838849173046,
+      "far_candidates_mean_self_effect": -0.00012239609971624629,
+      "label": 1,
+      "near_candidates_mean_self_effect": -2.1307939259305797e-05,
+      "position_id": "b926264e-0eaf-52b2-8de2-e9d8b0006b6d:53",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00017528128166824047
+    },
+    {
+      "broadcast_far_sites_contribution": -3.6789204598168726e-07,
+      "broadcast_near_sites_contribution": -3.924619453309669e-05,
+      "far_candidates_mean_self_effect": -0.0004897319764838779,
+      "label": 1,
+      "near_candidates_mean_self_effect": -2.1507337178848502e-06,
+      "position_id": "bb973205-f785-5fc5-bd78-723b14f5dcd5:65",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00030151466917197994
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00034836874162244325,
+      "broadcast_near_sites_contribution": -0.002266544523762278,
+      "far_candidates_mean_self_effect": -0.00035097954390483595,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00019227851832910348,
+      "position_id": "c128f788-e12b-5119-83d1-372f063eec37:58",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00041364124976694684
+    },
+    {
+      "broadcast_far_sites_contribution": -3.910446554406107e-05,
+      "broadcast_near_sites_contribution": -0.00033454644900898144,
+      "far_candidates_mean_self_effect": -0.00046185318801500626,
+      "label": 1,
+      "near_candidates_mean_self_effect": -3.0365238266183142e-05,
+      "position_id": "c543e062-85d6-57a2-b7df-f41e19f8538c:97",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005565709430048329
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003708826447703648,
+      "broadcast_near_sites_contribution": -0.0011003356630737886,
+      "far_candidates_mean_self_effect": -0.00018336604860699283,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.000378883758652409,
+      "position_id": "cbe28073-93f5-54f9-a2db-5a0d20ce7172:79",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0002104819524616474
+    },
+    {
+      "broadcast_far_sites_contribution": -8.52528728828403e-06,
+      "broadcast_near_sites_contribution": -0.00029347281853905985,
+      "far_candidates_mean_self_effect": -0.0003932434659201572,
+      "label": 1,
+      "near_candidates_mean_self_effect": -2.1707821094224636e-05,
+      "position_id": "d25b43d1-05b2-5f38-a59a-074d4d666490:4",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0007514483927400354
+    },
+    {
+      "broadcast_far_sites_contribution": -6.709734137680184e-05,
+      "broadcast_near_sites_contribution": -0.0008285690268680319,
+      "far_candidates_mean_self_effect": -0.0002703136604865961,
+      "label": 1,
+      "near_candidates_mean_self_effect": -6.653599886530161e-05,
+      "position_id": "d39d3e8f-88f2-55a4-a4d0-7d2876b28db7:3",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00043488614350612706
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002837784878490271,
+      "broadcast_near_sites_contribution": -0.00017065193908042867,
+      "far_candidates_mean_self_effect": -0.000224817531585628,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.816403604962437e-05,
+      "position_id": "d4976cc7-07ff-5fdb-8e2f-fa5286daa9a3:26",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -8.254060147922842e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -9.016195897492614e-05,
+      "broadcast_near_sites_contribution": -0.000837800295133564,
+      "far_candidates_mean_self_effect": -0.0002518254584475204,
+      "label": 1,
+      "near_candidates_mean_self_effect": -6.28540525697395e-05,
+      "position_id": "dacf1d8e-77d7-55f7-939b-bbda2190143a:58",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00012230882099101433
+    },
+    {
+      "broadcast_far_sites_contribution": -3.149992621232564e-05,
+      "broadcast_near_sites_contribution": -5.159558953983019e-05,
+      "far_candidates_mean_self_effect": -1.6497959333954457e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -3.7279692120944813e-06,
+      "position_id": "dddb83b9-da02-5f21-88db-af0418f87f6f:42",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -1.8267400707760118e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003479522416917659,
+      "broadcast_near_sites_contribution": -0.0009982409702224248,
+      "far_candidates_mean_self_effect": -0.0002969900983003946,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.0001146376052011285,
+      "position_id": "e046718d-2f55-5803-a7ad-3580b03b8c80:7",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00010211715062812336
+    },
+    {
+      "broadcast_far_sites_contribution": 6.41799895661383e-07,
+      "broadcast_near_sites_contribution": -9.206374632267282e-06,
+      "far_candidates_mean_self_effect": -9.952345680972098e-08,
+      "label": 0,
+      "near_candidates_mean_self_effect": -6.46088677304035e-07,
+      "position_id": "e2694aef-717b-56d2-9de7-cf827fbafb59:29",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -3.168683255932588e-06
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00016313491952558754,
+      "broadcast_near_sites_contribution": -0.0004514470561799212,
+      "far_candidates_mean_self_effect": -0.00011344208470760683,
+      "label": 1,
+      "near_candidates_mean_self_effect": -3.0961928898657426e-05,
+      "position_id": "e35cc15f-88ff-5017-97f2-36610d30fa92:44",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00047946221425784253
+    },
+    {
+      "broadcast_far_sites_contribution": -8.897857728327692e-06,
+      "broadcast_near_sites_contribution": -0.00019807052809118125,
+      "far_candidates_mean_self_effect": -0.0004737064162987612,
+      "label": 1,
+      "near_candidates_mean_self_effect": -1.3204811617488697e-05,
+      "position_id": "e5753055-8348-56cd-89a9-98af3f7cc018:58",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0007085444292375854
+    },
+    {
+      "broadcast_far_sites_contribution": -8.116454904718278e-05,
+      "broadcast_near_sites_contribution": -0.0011360211039397239,
+      "far_candidates_mean_self_effect": -0.0004127255305636411,
+      "label": 1,
+      "near_candidates_mean_self_effect": -8.274616485511526e-05,
+      "position_id": "e6d4b36d-c0cf-5fbd-97d3-9a8b991814e9:96",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0001064936135399748
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002888123630040087,
+      "broadcast_near_sites_contribution": -0.0038302237317765515,
+      "far_candidates_mean_self_effect": -0.00038763600026565774,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00017721868301800666,
+      "position_id": "e74b6fcf-087e-58fe-b889-e5bfcc02a8ed:68",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.001086872592289733
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0002975073227221603,
+      "broadcast_near_sites_contribution": -0.0010239663189770781,
+      "far_candidates_mean_self_effect": -0.00013802488907054938,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.0004553736387689248,
+      "position_id": "e907c8eb-fd7d-5014-8cf8-4636354975e9:90",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00047370742457040566
+    },
+    {
+      "broadcast_far_sites_contribution": -8.665854552380031e-05,
+      "broadcast_near_sites_contribution": -0.0018807947004296811,
+      "far_candidates_mean_self_effect": -0.00026975163903067916,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00011521235941477567,
+      "position_id": "e96f302b-991b-5d71-92ea-609971079b65:35",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005281876972836337
+    },
+    {
+      "broadcast_far_sites_contribution": -4.5031867788750475e-07,
+      "broadcast_near_sites_contribution": -2.682536846681041e-06,
+      "far_candidates_mean_self_effect": -0.00039028931052029827,
+      "label": 1,
+      "near_candidates_mean_self_effect": -1.4982438159113925e-07,
+      "position_id": "ea991289-0f8b-5ca4-bc6c-4ae011636706:74",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0004997093876824844
+    },
+    {
+      "broadcast_far_sites_contribution": -8.097462388370437e-05,
+      "broadcast_near_sites_contribution": -0.0009254181502938226,
+      "far_candidates_mean_self_effect": -0.00027040136520779627,
+      "label": 1,
+      "near_candidates_mean_self_effect": -7.509187395067435e-05,
+      "position_id": "ec177122-ba16-593b-9b77-fae414f8a838:3",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0004706090144582463
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0004959908991135624,
+      "broadcast_near_sites_contribution": -0.0010290115116157563,
+      "far_candidates_mean_self_effect": -0.0002566573424642755,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00026023403881096744,
+      "position_id": "eff8f70d-8e0d-5d62-86cf-7a4e1fcd2ad9:82",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.00036644282423881774
+    },
+    {
+      "broadcast_far_sites_contribution": -8.09056512376464e-05,
+      "broadcast_near_sites_contribution": -5.096931751746645e-05,
+      "far_candidates_mean_self_effect": -4.080777469423068e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -0.00010727243959181127,
+      "position_id": "effc5e19-e586-5090-8081-c936a055e69b:78",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -0.0001141670341986925
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0005211671917236564,
+      "broadcast_near_sites_contribution": -0.0012745401967753356,
+      "far_candidates_mean_self_effect": -0.0004050890109300524,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00015299650836985077,
+      "position_id": "f3d1d82d-10fc-59f2-af9e-61964ad8f2cb:66",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0005444571066707037
+    },
+    {
+      "broadcast_far_sites_contribution": -0.0003552207002558898,
+      "broadcast_near_sites_contribution": -4.796180691460437e-05,
+      "far_candidates_mean_self_effect": -0.00020125047605203697,
+      "label": 0,
+      "near_candidates_mean_self_effect": -4.694473305934885e-06,
+      "position_id": "f3e433b9-ed2a-534c-96c3-24ac7974d5d5:98",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -2.3010482577098404e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -3.0131531185949345e-05,
+      "broadcast_near_sites_contribution": -6.0049686271222407e-05,
+      "far_candidates_mean_self_effect": -1.938986648369934e-05,
+      "label": 0,
+      "near_candidates_mean_self_effect": -5.8845334953638695e-06,
+      "position_id": "f45cb537-56b6-5be3-834a-f88a80bcd01d:44",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -2.9263333157902393e-05
+    },
+    {
+      "broadcast_far_sites_contribution": -0.00017700081075114216,
+      "broadcast_near_sites_contribution": -0.0013891025707167162,
+      "far_candidates_mean_self_effect": -0.0003534794086771236,
+      "label": 1,
+      "near_candidates_mean_self_effect": -0.00012222515042849307,
+      "position_id": "f5437b23-02e7-5756-8b27-e49e1b08c001:139",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.00031204890247213033
+    },
+    {
+      "broadcast_far_sites_contribution": -9.097594060020285e-06,
+      "broadcast_near_sites_contribution": -0.00017303446200975283,
+      "far_candidates_mean_self_effect": -0.0003934947087007033,
+      "label": 1,
+      "near_candidates_mean_self_effect": -1.3186577739002545e-05,
+      "position_id": "f68e6f3c-7aab-55bd-8a0d-67d01698f7fd:2",
+      "selected_move_is_far": true,
+      "selected_move_self_effect": -0.0002574014539475048
+    },
+    {
+      "broadcast_far_sites_contribution": -4.743593892167718e-05,
+      "broadcast_near_sites_contribution": -3.917788469507198e-05,
+      "far_candidates_mean_self_effect": -0.0001050860411470178,
+      "label": 0,
+      "near_candidates_mean_self_effect": -1.818961585664889e-05,
+      "position_id": "fcbdeaec-4471-52fc-a3e3-02dd4ee66a67:117",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -4.188182082481702e-05
+    },
+    {
+      "broadcast_far_sites_contribution": 3.6291057225213724e-06,
+      "broadcast_near_sites_contribution": -2.7234220399602086e-05,
+      "far_candidates_mean_self_effect": -1.975667773157406e-07,
+      "label": 0,
+      "near_candidates_mean_self_effect": -2.8248836971358347e-05,
+      "position_id": "ffafdf5c-a0cc-567e-bd01-c53dea850654:9",
+      "selected_move_is_far": false,
+      "selected_move_self_effect": -5.23143551421062e-05
+    }
+  ],
+  "provenance": {
+    "candidates_per_region": 5,
+    "checkpoint": "/Users/danielegentili/Desktop/KataTeach/daniele_experiment/model.ckpt",
+    "checkpoint_sha256": "9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3",
+    "concept": "tenuki",
+    "dose_unit": "one raw probe-score unit at the intervened site (single-point mask has unit RMS)",
+    "positions": 100,
+    "probe_run": "/Users/danielegentili/Desktop/KataTeach/daniele_experiment/artifacts/runs/validity_v5_canonical",
+    "random_directions": 100,
+    "representation": "local",
+    "seed": 20260730,
+    "split_role": "causal_test"
+  },
+  "schema_version": 1,
+  "single_site_self_effects": {
+    "description": "Derivative of a location's legal-board policy probability with respect to a dose applied only at that location, along the learned direction. Aligned mediation predicts positive values at far candidates.",
+    "far_candidates": {
+      "pooled_candidates": {
+        "fraction_positive": 0.012,
+        "mean": -0.0001957693721316592,
+        "n": 500,
+        "sd": 0.0002014095292966729
+      },
+      "position_means": {
+        "fraction_positive": 0.0,
+        "mean": -0.0001957693721316592,
+        "n": 100,
+        "sd": 0.00014096192587013213
+      },
+      "stratified_mean_of_position_means": -0.00019576937213165922
+    },
+    "near_candidates": {
+      "pooled_candidates": {
+        "fraction_positive": 0.042,
+        "mean": -0.000128765025003334,
+        "n": 500,
+        "sd": 0.00020552291207586265
+      },
+      "position_means": {
+        "fraction_positive": 0.01,
+        "mean": -0.00012876502500333396,
+        "n": 100,
+        "sd": 0.00013036979287202197
+      },
+      "stratified_mean_of_position_means": -0.00012876502500333396
+    },
+    "random_direction_comparison_far_candidates": {
+      "random_mean": 7.855046599863698e-06,
+      "random_sd": 0.00010564838291404519,
+      "random_stratified_means": [
+        7.681270021863904e-05,
+        3.578808272638205e-05,
+        9.820239826713943e-05,
+        -5.3200142097373926e-05,
+        1.3600319566479065e-05,
+        0.0002456685151852227,
+        -4.5045078521415376e-05,
+        4.825910997251732e-05,
+        0.0001907118090884065,
+        0.0001735593188430653,
+        0.00017071229977795398,
+        0.00018609452253973456,
+        7.224799109746633e-05,
+        -7.615214751680533e-05,
+        -5.999598503488288e-05,
+        4.981687255490199e-05,
+        -0.00011307290911321567,
+        -8.05341052477978e-05,
+        4.895664193350008e-05,
+        5.268463164826516e-05,
+        9.965332178682497e-05,
+        5.4754647336797364e-05,
+        5.162056056386341e-05,
+        -0.0001141352898803614,
+        2.955407055619629e-05,
+        -4.5498072953114406e-05,
+        -8.0525328987919e-05,
+        -5.561529979913979e-05,
+        -3.579643352435618e-05,
+        1.2926490218018927e-05,
+        7.024568689677068e-06,
+        -0.00013086411512162205,
+        5.30767714774034e-05,
+        4.139424924742949e-05,
+        7.995630506310765e-05,
+        4.181188020961098e-05,
+        5.973861221125822e-06,
+        -7.238091502876757e-05,
+        -4.113899673532871e-05,
+        -3.9233000087102684e-05,
+        0.00012776627635668224,
+        9.898144756116046e-05,
+        6.081050597708019e-06,
+        4.074155921799589e-05,
+        -0.00011827748089987147,
+        0.00010750331406001511,
+        6.781727938121539e-05,
+        -0.0001239090338260088,
+        -2.4508942608199248e-05,
+        6.250313959611514e-05,
+        3.905655326977884e-05,
+        0.00011248034077500924,
+        1.6668746414865243e-05,
+        -1.6991986577676132e-05,
+        -3.715610329228626e-05,
+        9.734676934953615e-07,
+        5.556018455023946e-05,
+        -2.1057962273594752e-05,
+        5.850341518414555e-05,
+        7.920658847991494e-05,
+        -0.00017247388710630603,
+        5.724273598769293e-06,
+        -0.00010837297209029099,
+        0.00018438956556682197,
+        -5.066927310105607e-05,
+        2.6529417700790385e-05,
+        0.0001882342900988956,
+        -2.93123727298696e-05,
+        6.686052407383486e-05,
+        -2.8295002045009716e-05,
+        -6.042681798030562e-05,
+        0.0001929050651953497,
+        -0.00017853816826919266,
+        -0.00035171662301228864,
+        4.4612094763554235e-05,
+        2.615546406139827e-05,
+        -6.23737046832006e-05,
+        -0.00014201445851031358,
+        6.75619495694956e-06,
+        -6.951615118208596e-06,
+        0.0001935742410072218,
+        6.844716957255204e-05,
+        1.2734601125497287e-05,
+        -9.84481072402374e-05,
+        -0.00020015848179770647,
+        -4.127449469099429e-05,
+        2.27320353397822e-05,
+        0.00020042452961805245,
+        4.84189640934206e-05,
+        2.9287047871936076e-05,
+        7.941707161844743e-05,
+        -0.00015792039711148384,
+        -9.006384805499296e-05,
+        -3.096235248701545e-05,
+        0.00010919960938188638,
+        -7.672336709743209e-05,
+        -0.0002854859137538771,
+        -0.00015807428989736053,
+        0.00013792928557813174,
+        4.181338773899007e-05
+      ],
+      "randoms_more_positive_than_trained": 97,
+      "randoms_with_larger_absolute_value": 5,
+      "trained_stratified_mean": -0.00019576937213165922
+    },
+    "selected_move": {
+      "all": {
+        "fraction_positive": 0.02,
+        "mean": -0.00033978475187328096,
+        "n": 100,
+        "sd": 0.00026696808912714997
+      },
+      "far_selected": {
+        "fraction_positive": 0.0,
+        "mean": -0.00041465866078709246,
+        "n": 50,
+        "sd": 0.00022220748643480328
+      },
+      "near_selected": {
+        "fraction_positive": 0.04,
+        "mean": -0.0002649108429594696,
+        "n": 50,
+        "sd": 0.0002884116139021544
+      }
+    }
+  }
+}

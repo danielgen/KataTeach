@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "archive_id": "20260731_validity_v5_tenuki_failed_09eccc18ab66",
+  "status": "invalid_do_not_use",
+  "created_at_utc": "2026-07-31T08:32:48.156148+00:00",
+  "reason_codes": [
+    "FAILED_CAUSAL_EQUIVALENCE_GATE"
+  ],
+  "reason": "The fail-closed causal equivalence audit ran without the four CPU threads used for fresh generation. No causal result was produced.",
+  "file_count": 2,
+  "total_bytes": 16598,
+  "files": [
+    {
+      "original_path": "daniele_experiment/artifacts/runs/validity_v5_canonical/causal/tenuki_local/manifest.json",
+      "archived_path": "files/daniele_experiment/artifacts/runs/validity_v5_canonical/causal/tenuki_local/manifest.json",
+      "bytes": 13516,
+      "sha256": "09eccc18ab66e47e0aedfb6bb749dcffbb2fa81205c9c9737b222f3508f3b668",
+      "reason_codes": [
+        "FAILED_CAUSAL_EQUIVALENCE_GATE"
+      ]
+    },
+    {
+      "original_path": "daniele_experiment/artifacts/runs/validity_v5_canonical/causal/tenuki_local/protocol_estimate.json",
+      "archived_path": "files/daniele_experiment/artifacts/runs/validity_v5_canonical/causal/tenuki_local/protocol_estimate.json",
+      "bytes": 3082,
+      "sha256": "b9b01fd903668dd9bdbac924c1030fee9d2016a0d5215c8b84e9b4b53c026ed1",
+      "reason_codes": [
+        "FAILED_CAUSAL_EQUIVALENCE_GATE"
+      ]
+    }
+  ]
+}

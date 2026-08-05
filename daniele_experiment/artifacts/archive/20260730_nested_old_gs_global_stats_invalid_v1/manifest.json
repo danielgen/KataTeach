@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "archive_id": "20260730_nested_old_gs_global_stats_invalid_v1",
+  "status": "invalid_do_not_use",
+  "created_at_utc": "2026-07-30T21:58:35.757150+00:00",
+  "reason": "Global statistics derived from quarantined legacy labels are preserved for audit only and excluded from validated analysis.",
+  "raw_files_moved": false,
+  "file_count": 1,
+  "total_bytes": 9509,
+  "files": [
+    {
+      "original_path": "games/old gs/global_stats.json",
+      "archived_path": "files/games/old gs/global_stats.json",
+      "bytes": 9509,
+      "sha256": "1b931c4887a0b6ee2dfbfdd039a2d0e3b0e895caaff1d981fc2bae9f70c0e298",
+      "reason_codes": [
+        "DERIVED_FROM_INVALID_LEGACY_LABELS"
+      ]
+    }
+  ]
+}
