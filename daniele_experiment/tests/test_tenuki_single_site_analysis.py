@@ -13,7 +13,7 @@ from daniele_experiment.tenuki_single_site_analysis import (
     select_candidate_sites,
     single_site_flat_mask,
 )
-from daniele_experiment.test_tenuki_gradient_analysis import _StubPolicyHead, _random_setup
+from daniele_experiment.tests.test_tenuki_gradient_analysis import _StubPolicyHead, _random_setup
 
 
 def test_ratio_readout_generalises_far_mass():

@@ -9,14 +9,14 @@ these exact paths.
 
 | Goal | Entry point | Guide |
 | --- | --- | --- |
-| Reproduce the validated v5 experiment | `validated_probe_pipeline.py` | [Validity v5 runbook](VALIDITY_V5_RUNBOOK.md) |
-| Read the validated results | `validated_results_report.py` | [Experiments and results](VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md) |
-| Run the legacy/exploratory probe workflow | `linear_probe_pipeline.py` | [Linear probes workflow](LINEAR_PROBES_WORKFLOW.md) |
-| Generate self-play game data | `generate_games_dataset.py` | [Refactoring summary](REFACTORING_SUMMARY.md) |
-| Inspect or change concept labels | `snorkel_board_positions.py` | [Snorkel features](SNORKEL_FEATURES_DOCUMENTATION.md) |
-| Run activation interventions | `activation_manipulation.py` | [Activation manipulation](ACTIVATION_MANIPULATION.md) |
-| Explore tenuki interventions | `tenuki_gradient_analysis.py` | [Tenuki analysis](TENUKI_INTERVENTION_ANALYSIS.md) |
-| Use the interactive Go board | `interactive_play_with_ownership.py` | [Interactive board](README_interactive_board.md) |
+| Reproduce the validated v5 experiment | `validated_probe_pipeline.py` | [Validity v5 runbook](docs/VALIDITY_V5_RUNBOOK.md) |
+| Read the validated results | `validated_results_report.py` | [Experiments and results](docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md) |
+| Run the legacy/exploratory probe workflow | `linear_probe_pipeline.py` | [Linear probes workflow](docs/LINEAR_PROBES_WORKFLOW.md) |
+| Generate self-play game data | `generate_games_dataset.py` | [Refactoring summary](docs/REFACTORING_SUMMARY.md) |
+| Inspect or change concept labels | `snorkel_board_positions.py` | [Snorkel features](docs/SNORKEL_FEATURES_DOCUMENTATION.md) |
+| Run activation interventions | `activation_manipulation.py` | [Activation manipulation](docs/ACTIVATION_MANIPULATION.md) |
+| Explore tenuki interventions | `tenuki_gradient_analysis.py` | [Tenuki analysis](docs/TENUKI_INTERVENTION_ANALYSIS.md) |
+| Use the interactive Go board | `interactive_play_with_ownership.py` | [Interactive board](docs/README_interactive_board.md) |
 
 ## File map
 
@@ -58,9 +58,18 @@ these exact paths.
 
 ### Supporting directories
 
+- `docs/` — canonical home of all experiment documentation.
+- `tests/` — canonical home of the test suite.
+- `validated/` — browsable view of the provenance-sensitive `validated_*` scripts.
 - `artifacts/` — generated protocols, runs, logs, exploratory output, and invalidated archives.
 - `katago/` — small KataGo parsing package.
-- `test_*.py` — tests kept beside their modules so existing pytest and import paths continue to work.
+- Root-level executable source paths remain canonical for compatibility.
+
+The `validated/` view contains relative symbolic links rather than copies. The
+validated pipeline records exact source paths and resolves sibling files when
+checking hashes, so physically moving those scripts would invalidate existing
+runs. Documentation and tests do not participate in those provenance hashes
+and therefore live directly under `docs/` and `tests/`.
 
 Generated caches such as `__pycache__/`, `.pytest_cache/`, and
 `.ipynb_checkpoints/` are not source code and can be ignored while navigating.
@@ -75,4 +84,3 @@ When adding work:
 3. Give new experiments a descriptive module plus a matching Markdown guide.
 4. Do not move frozen validated-v5 producers or edit archived artifact contents;
    add a versioned successor instead.
-

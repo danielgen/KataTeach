@@ -89,7 +89,7 @@ def _stage_labels(games: Path, run: Path, game_ids):
             "output_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
         }
     sha = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
-    source_dir = Path(__file__).resolve().parent
+    source_dir = Path(__file__).resolve().parent.parent
     (run / "labels_manifest.json").write_text(json.dumps({
         "schema_version": 1,
         "pipeline": "validated_label_builder",
@@ -207,7 +207,7 @@ def test_prepare_reserves_declared_fresh_cohort_for_holdouts(tmp_path):
     _make_game_tree(games, game_ids, moves_per_game=1)
     for game_id in game_ids:
         (games / game_id / "snorkel.jsonl").unlink()
-    source_dir = Path(__file__).resolve().parent
+    source_dir = Path(__file__).resolve().parent.parent
     concepts = source_dir / "concepts.yaml"
     concepts_document = yaml.safe_load(concepts.read_text())
     enabled_concepts = [
@@ -399,7 +399,7 @@ def test_fresh_training_requires_every_development_game_in_fidelity_gate(tmp_pat
         {"game_id": "cal", "split_role": "control_calibration"},
         {"game_id": "test", "split_role": "causal_test"},
     ]).to_parquet(run / "splits.parquet", index=False)
-    validator = Path(__file__).resolve().parent / "checkpoint_activation_fidelity.py"
+    validator = Path(__file__).resolve().parent.parent / "checkpoint_activation_fidelity.py"
     validator_hash = hashlib.sha256(validator.read_bytes()).hexdigest()
     protocol = tmp_path / "protocol.json"
     protocol.write_text(json.dumps({

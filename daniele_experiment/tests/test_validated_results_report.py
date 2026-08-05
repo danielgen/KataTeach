@@ -72,10 +72,10 @@ def _make_validated_run(run: Path) -> Path:
         "recomputed_fields": [],
         "migrated_legacy_fields": ["signal"],
         "builder_source_sha256": _sha(
-            Path(__file__).resolve().parent / "build_validated_labels.py"
+            Path(__file__).resolve().parent.parent / "build_validated_labels.py"
         ),
         "operational_definitions_source_sha256": _sha(
-            Path(__file__).resolve().parent / "operational_definitions.py"
+            Path(__file__).resolve().parent.parent / "operational_definitions.py"
         ),
     }
     _write_json(run / "labels_manifest.json", labels_manifest)

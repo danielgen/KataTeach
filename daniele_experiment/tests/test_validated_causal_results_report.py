@@ -167,7 +167,7 @@ def _make_causal_output(tmp_path: Path) -> Path:
             "confidence_level": 0.95,
         },
     }
-    source_dir = Path(__file__).resolve().parent
+    source_dir = Path(__file__).resolve().parent.parent
     protocol["source_sha256"] = {
         **current_pipeline_source_hashes(),
         **current_causal_source_hashes(),
@@ -250,10 +250,10 @@ def _make_causal_output(tmp_path: Path) -> Path:
         "recomputed_fields": ["tenuki_distance6"],
         "migrated_legacy_fields": [],
         "builder_source_sha256": _sha(
-            Path(__file__).resolve().parent / "build_validated_labels.py"
+            Path(__file__).resolve().parent.parent / "build_validated_labels.py"
         ),
         "operational_definitions_source_sha256": _sha(
-            Path(__file__).resolve().parent / "operational_definitions.py"
+            Path(__file__).resolve().parent.parent / "operational_definitions.py"
         ),
     }
     _write_json(probe_run / "labels_manifest.json", labels_manifest)

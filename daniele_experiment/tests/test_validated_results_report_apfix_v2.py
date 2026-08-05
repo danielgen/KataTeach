@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from daniele_experiment.test_validated_results_report import (
+from daniele_experiment.tests.test_validated_results_report import (
     _make_validated_run,
     _write_json,
 )
