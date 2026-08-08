@@ -1,0 +1,199 @@
+{
+  "causal": {
+    "activation_equivalence_absolute_tolerance": 1e-05,
+    "causal_seed": 20260730,
+    "control_matching": "control_calibration games: mean legal-plus-pass policy Jensen-Shannon divergence",
+    "doses": [
+      -2.0,
+      -1.0,
+      0.0,
+      1.0,
+      2.0
+    ],
+    "full_vs_head_equivalence_sample_size": 6,
+    "label_stratified_position_sampling": true,
+    "maximum_calibration_positions": 50,
+    "maximum_test_positions": 100,
+    "one_position_per_game": true,
+    "policy_equivalence_absolute_tolerance": 1e-06,
+    "policy_head_batch_size": 64,
+    "primary_hypothesis": {
+      "concept": "tenuki",
+      "decision_rule": {
+        "alpha": 0.05,
+        "expected_trained_slope": "positive",
+        "headline_support_requires": "trained slope > 0 AND random-direction p <= alpha AND spatial-shuffle p <= alpha",
+        "no_substitution": "No individual dose, secondary readout, or minimum p-value may replace this aggregate conjunction.",
+        "random_direction_test": "one-sided finite-control empirical p <= alpha",
+        "spatial_shuffle_test": "one-sided finite-control empirical p <= alpha"
+      },
+      "prediction": "positive dose increases readout; negative dose decreases it",
+      "readout": "tenuki_distance6_policy_mass",
+      "representation": "local",
+      "statistic": {
+        "dose_set": "all values in causal.doses",
+        "intercept": true,
+        "label_weights": {
+          "0": 0.5,
+          "1": 0.5
+        },
+        "name": "label_balanced_ols_slope_across_all_frozen_doses",
+        "outcome": "paired readout delta",
+        "predictor": "nominal_dose",
+        "resampling": "resample games with replacement within each frozen label stratum; reuse each draw across every dose"
+      }
+    },
+    "random_direction_controls": 100,
+    "secondary_evaluation_rules": {
+      "forcing": {
+        "confirmatory_gate": false,
+        "infeasibility_rule": "If any prospectively selected game is mask-ineligible, omit the forcing causal analysis as infeasible; do not replace/refill games.",
+        "mask_eligibility": "A selected position must contain both reply_peak95 target and comparison candidate actions.",
+        "scope": "best_effort_exploratory"
+      },
+      "urgency_peak": {
+        "confirmatory_gate": false,
+        "scope": "exploratory"
+      }
+    },
+    "secondary_exploratory_concepts": [
+      "forcing",
+      "urgency_peak"
+    ],
+    "secondary_representation": "local",
+    "spatial_shuffle_controls": 50
+  },
+  "checkpoint": {
+    "bytes": 585834070,
+    "path": "/Users/danielegentili/Desktop/KataTeach/daniele_experiment/model.ckpt",
+    "selected_weights": "raw_model",
+    "sha256": "9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3",
+    "use_swa": false
+  },
+  "development_activation_fidelity_gate": {
+    "absolute_max_error_tolerance": 0.0001,
+    "claim_scope": "Empirical compatibility of the supplied checkpoint with sampled saved activations, not proof that it originally generated the historical corpus.",
+    "device": "cpu",
+    "expected_games": 500,
+    "required_before_training": true,
+    "sample_count": 500,
+    "sampling": "one deterministic saved pre-move position per development game",
+    "seed": 20260730,
+    "split_role": "development"
+  },
+  "environment": {
+    "numpy": "2.3.3",
+    "python": "3.12.11",
+    "scikit_learn": "1.7.2",
+    "torch": "2.8.0"
+  },
+  "freeze_script_sha256": "3c1e553e5a07eb25f58d08d90828be7ba412414345f9430931beeabfc1ac4d55",
+  "fresh_holdout": {
+    "assignment": "sort fresh UUIDs, permute once with NumPy default_rng(split_seed), first 50 calibration and remaining 100 causal_test",
+    "causal_test_games": 100,
+    "cohort": "validity_v5_postfreeze_holdout",
+    "control_calibration_games": 50,
+    "game_identity": "UUIDv5(NAMESPACE_URL, 'katateach:<cohort>:<game_seed>')",
+    "game_seed_count": 150,
+    "game_seed_first": 202607300000,
+    "game_seed_last": 202607300149,
+    "game_seed_set_sha256": "dec4111d692d6daca68afca93821e22401ce5b8fe4e6c48fe25ab63bebbffdac",
+    "games": 150,
+    "no_refill_rule": "Any failed or pilot generation shard is quarantined. The seed set is not silently extended or replaced after any label or model output is inspected.",
+    "split_seed": 20260730,
+    "write_once": true
+  },
+  "frozen_at_utc": "2026-07-30T22:25:49.238748+00:00",
+  "game_generation": {
+    "board_size": 19,
+    "device": "cpu",
+    "final_temperature": 0.8,
+    "initial_temperature": 1.2,
+    "maximum_moves": 400,
+    "minimum_raw_policy_probability": 0.01,
+    "model_evaluations": "direct neural policy without MCTS",
+    "move_sampling_rng": "NumPy default_rng/PCG64, one unique seed per game",
+    "resign_consecutive_moves": 3,
+    "resign_threshold": 0.1,
+    "rules": "GameState.RULES_TT",
+    "run_legacy_snorkel": false,
+    "save_html": 0,
+    "top_k": 10,
+    "torch_threads": 4,
+    "transition_moves": 60
+  },
+  "historical_data_scope": {
+    "development_game_ids_sha256": "013d1066bd20add65511d8f085599a37278abfc5294499f9bd0bd6ac61193d7e",
+    "development_games": 500,
+    "statement": "All pre-existing games are developmental because exploratory analyses previously inspected them. They may support nested-CV probe estimates but never the final causal-test claim."
+  },
+  "inference": {
+    "balanced_position_sample": "label-stratified estimand; do not present as prevalence-weighted corpus effect",
+    "bootstrap_replicates": 2000,
+    "confidence_level": 0.95,
+    "control_empirical_p": "(1 + controls_at_least_as_extreme) / (1 + n_controls)",
+    "unit": "game"
+  },
+  "labels": {
+    "all_selected_alignment_gate": true,
+    "fresh_legacy_migrated_fields": [],
+    "fresh_recomputed_contracts": [
+      "tenuki_distance6@2",
+      "reply_peak95@2",
+      "regional_policy_peak@2"
+    ]
+  },
+  "probes": {
+    "C_values": [
+      0.001,
+      0.01,
+      0.1,
+      1.0,
+      10.0
+    ],
+    "all_enabled_concepts_required": true,
+    "concepts": [
+      "tenuki",
+      "forcing",
+      "urgency_peak"
+    ],
+    "concepts_config": "daniele_experiment/concepts_validated_v5.yaml",
+    "development_games_only": 500,
+    "f1_threshold": "inner out-of-fold maximum F1",
+    "group_unit": "game_id",
+    "inner_group_folds": 4,
+    "max_iter": 2000,
+    "outer_group_folds": 5,
+    "probability_calibration": false,
+    "quality_gate": null,
+    "representations": [
+      "global",
+      "local",
+      "combined"
+    ],
+    "selection_metric": "mean inner-fold average precision"
+  },
+  "protocol_id": "validity_v5",
+  "schema_version": 1,
+  "source_sha256": {
+    "daniele_experiment/build_validated_labels.py": "457ce4f37b9e1e4c1a4d5770dafb03112a8bba953f94d74a547c4efca678811d",
+    "daniele_experiment/causal_controls.py": "2b58b9bfe80d74d87e5d1678b64565b8cf180883d5184f2419d97e7ac658977c",
+    "daniele_experiment/checkpoint_activation_fidelity.py": "a5e3871ee69f3332613a27321462c83d295f786ded0f49914bd6d9f07202ecf0",
+    "daniele_experiment/common_utils.py": "fa3a58d236a52857d091e239ec8ae9f7a94c40082e86efdc78be07517bb61288",
+    "daniele_experiment/concepts_validated_v5.yaml": "08a73b22eefce9facd5fd25b931f3e1c655a543837058bf6094a7f008f07f3d8",
+    "daniele_experiment/generate_games_dataset.py": "e68c11dbbd1e77bbd4b77841bc34aaf27bb79086490b83e6133b58289e812aac",
+    "daniele_experiment/operational_definitions.py": "8031d6969db21fa6b23e7868755bb8933a788eac642bc83278c51b27538da02a",
+    "daniele_experiment/validated_causal_eval.py": "28635effad5cab55f6fb4a4b9ff1f680581a8ddc35f85b4e872a0bae8445b745",
+    "daniele_experiment/validated_causal_results_report.py": "27466f2d2f2366eab39af9d908485f77af938832afd1c55c9432473f72ef79c2",
+    "daniele_experiment/validated_probe_pipeline.py": "440623472a614fc6c012eed43c5deee783c94abf4b587d7b9f1ab72ff7527139",
+    "daniele_experiment/validated_results_report.py": "a197f8faacdd050e5053e1b61c8c67aa6149e72f397671afe94174ca5b9c010d",
+    "python/board.py": "8b3607b500d96831f59cb7eaf8a47d1c247e50a4af44981c2f8388093d5edcf5",
+    "python/features.py": "35ce451fb1ff2e527bccb3a90e9ffdd6db212e52e45e6c7e0267fdd6e186f8d2",
+    "python/gamestate.py": "dc4b84bc7f9827a988565815d4fc8ada85ad2d34eb3e9c90ae64aa6009216e90",
+    "python/load_model.py": "53b059e9c000837adedca85ddd14a1ae23c52a1b4bd3cebf1b7686434dbd1606",
+    "python/model_pytorch.py": "33cb18495f0be8d246405034c0fc676b4b12171c1fcfaf0d4a9fe3ae155b35a1",
+    "python/modelconfigs.py": "b5fa366b4ee19834cccd3d3ecde14a663bd30fd976538617bf68ccd92fcf4db9",
+    "python/sgfmetadata.py": "4e2154e3df3ba2677b1c06fa3fbbce333e3c190d5c3112281286a9ee6828a872"
+  },
+  "status": "frozen_before_fresh_data_generation"
+}

@@ -1,0 +1,48 @@
+{
+  "activation_provenance": {
+    "checkpoint_attribution": {
+      "checkpoint_sha256": null,
+      "declarations": [],
+      "limitation": "The saved activations cannot be cryptographically attributed to a checkpoint because no source game meta.json records one.",
+      "status": "not_recorded_in_generator_metadata"
+    },
+    "meta_files_missing": [],
+    "meta_files_present": 500,
+    "meta_identity_bytes_sha256": "3c8700ce1cf766ac94df55f4bbe0ae76b547e5155ccde8d7633db99a81db34f1",
+    "sampled_checkpoint_activation_validation": {
+      "reason": "Exact source checkpoint provenance is unavailable; replaying a sampled activation against an assumed checkpoint would create false fidelity evidence.",
+      "status": "not_performed"
+    }
+  },
+  "artifacts": {
+    "concepts_yaml": "frozen_config/concepts.yaml",
+    "concepts_yaml_sha256": "384599fdaf1a26785d22f470d5decd11aa865c17e648678d29423dda951be805",
+    "labels_games_dir": "labels/games",
+    "splits": "splits.parquet",
+    "splits_sha256": "17ab3541a84eab2c2c0ea9859c10238e3f43ac5b797d0f09a58657fd036178ab"
+  },
+  "contract_implementation_sha256": "8031d6969db21fa6b23e7868755bb8933a788eac642bc83278c51b27538da02a",
+  "created_at_utc": "2026-07-30T22:22:35.695004+00:00",
+  "fresh_holdout": null,
+  "nested_cv": {
+    "inner_folds": 4,
+    "outer_folds": 5,
+    "selection_metric": "average_precision",
+    "threshold_selection": "inner_oof_max_f1"
+  },
+  "pipeline": "validated_probe_pipeline",
+  "schema_version": 1,
+  "seed": 20260730,
+  "source_code_sha256": {
+    "daniele_experiment/operational_definitions.py": "8031d6969db21fa6b23e7868755bb8933a788eac642bc83278c51b27538da02a",
+    "daniele_experiment/validated_probe_pipeline.py": "440623472a614fc6c012eed43c5deee783c94abf4b587d7b9f1ab72ff7527139"
+  },
+  "source_concepts_yaml": "/Users/danielegentili/Desktop/KataTeach/daniele_experiment/concepts.yaml",
+  "source_games_dir": "/Users/danielegentili/Desktop/KataTeach/games",
+  "split_assignment": "seeded_random_all_games",
+  "split_counts": {
+    "causal_test": 0,
+    "control_calibration": 0,
+    "development": 500
+  }
+}

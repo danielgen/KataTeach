@@ -1,0 +1,1914 @@
+{
+  "bootstrap": {
+    "base_seed": 20260730,
+    "conditioning": "Intervals are conditional on the fixed nested-CV out-of-fold predictions and fitted fold-specific thresholds; bootstrap replicates do not refit probes, scalers, hyperparameters, or thresholds.",
+    "confidence_level": 0.95,
+    "frozen_inference": {
+      "bootstrap_replicates": 2000,
+      "confidence_level": 0.95
+    },
+    "inference_protocol_conforms": true,
+    "interval": "percentile",
+    "procedure": "sample games with replacement within each outer fold; recompute each fold metric; average fold metrics; use identical draws for ablations",
+    "refits_models": false,
+    "replicates": 2000,
+    "stratification": "outer_fold",
+    "unit": "game"
+  },
+  "concepts": {
+    "forcing": {
+      "ablations": {
+        "combined_minus_global": {
+          "left": "combined",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.16128010292267897,
+              "confidence_level": 0.95,
+              "lower": 0.14862761049627535,
+              "point_estimate": 0.1612387061561634,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.17477779344195254
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.07545237085035518,
+              "confidence_level": 0.95,
+              "lower": 0.06830953757695835,
+              "point_estimate": 0.07538026749164936,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.08274836845284804
+            },
+            "f1": {
+              "bootstrap_mean": 0.12480657346838687,
+              "confidence_level": 0.95,
+              "lower": 0.11330064354881507,
+              "point_estimate": 0.12465682721193638,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.13713317907613612
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.05960616939815157,
+              "confidence_level": 0.95,
+              "lower": 0.05527596764332318,
+              "point_estimate": 0.05954761943443798,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.06395317880903947
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.16209637444291336,
+                "1": 0.14675450338647777,
+                "2": 0.150901014768823,
+                "3": 0.16136646949013556,
+                "4": 0.18507516869246732
+              },
+              "mean_delta": 0.1612387061561634,
+              "sd_ddof": 1,
+              "sd_delta": 0.01487942251649476
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.06644436936468479,
+                "1": 0.06438008946187024,
+                "2": 0.07121361048906816,
+                "3": 0.07897409624860496,
+                "4": 0.09588917189401869
+              },
+              "mean_delta": 0.07538026749164936,
+              "sd_ddof": 1,
+              "sd_delta": 0.012764658118407718
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.1188602320005877,
+                "1": 0.10847190642841353,
+                "2": 0.12458834494120874,
+                "3": 0.1273587078349787,
+                "4": 0.14400494485449322
+              },
+              "mean_delta": 0.12465682721193638,
+              "sd_ddof": 1,
+              "sd_delta": 0.013011597536870088
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.057451335104890866,
+                "1": 0.057971817783633806,
+                "2": 0.05983228040528188,
+                "3": 0.05936554096898072,
+                "4": 0.06311712290940263
+              },
+              "mean_delta": 0.05954761943443798,
+              "sd_ddof": 1,
+              "sd_delta": 0.002221097607415743
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "global"
+        },
+        "combined_minus_local": {
+          "left": "combined",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.036522496573164885,
+              "confidence_level": 0.95,
+              "lower": 0.031792414916466456,
+              "point_estimate": 0.03665880454607071,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.041733101374988
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.004351590173769391,
+              "confidence_level": 0.95,
+              "lower": -3.144469224196535e-05,
+              "point_estimate": 0.004392525812397241,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.008831314388180748
+            },
+            "f1": {
+              "bootstrap_mean": 0.024080080989668472,
+              "confidence_level": 0.95,
+              "lower": 0.017269556954868523,
+              "point_estimate": 0.02413256208890413,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.03108649712649421
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.006588147224496421,
+              "confidence_level": 0.95,
+              "lower": 0.005686952325933881,
+              "point_estimate": 0.0066011600225614146,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.0074515901377347855
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.04044016422407648,
+                "1": 0.03840702798420248,
+                "2": 0.03283072819441957,
+                "3": 0.03638707133141905,
+                "4": 0.03522903099623598
+              },
+              "mean_delta": 0.03665880454607071,
+              "sd_ddof": 1,
+              "sd_delta": 0.002920925628200067
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.00022402126318765703,
+                "1": 0.017565741017398717,
+                "2": 0.012641241730627861,
+                "3": -0.014986395232178262,
+                "4": 0.006518020282950232
+              },
+              "mean_delta": 0.004392525812397241,
+              "sd_ddof": 1,
+              "sd_delta": 0.012639339884958163
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.026283996492312722,
+                "1": 0.01861641418441773,
+                "2": 0.021684626143450236,
+                "3": 0.018374949657672168,
+                "4": 0.035702823966667796
+              },
+              "mean_delta": 0.02413256208890413,
+              "sd_ddof": 1,
+              "sd_delta": 0.007212316010091576
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.008407402764371796,
+                "1": 0.005524403250243504,
+                "2": 0.006252243628096288,
+                "3": 0.005694966919562616,
+                "4": 0.007126783550532867
+              },
+              "mean_delta": 0.0066011600225614146,
+              "sd_ddof": 1,
+              "sd_delta": 0.0011875528064555132
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "local"
+        },
+        "local_minus_global": {
+          "left": "local",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.12475760634951405,
+              "confidence_level": 0.95,
+              "lower": 0.11045705839347753,
+              "point_estimate": 0.12457990161009269,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.13958880956134292
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.0711007806765858,
+              "confidence_level": 0.95,
+              "lower": 0.06319658278811834,
+              "point_estimate": 0.07098774167925212,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.07940690743038398
+            },
+            "f1": {
+              "bootstrap_mean": 0.1007264924787184,
+              "confidence_level": 0.95,
+              "lower": 0.08761716583752581,
+              "point_estimate": 0.10052426512303225,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.11442862602441996
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.05301802217365515,
+              "confidence_level": 0.95,
+              "lower": 0.04833580596428869,
+              "point_estimate": 0.05294645941187657,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.05787877899344833
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.12165621021883688,
+                "1": 0.1083474754022753,
+                "2": 0.11807028657440344,
+                "3": 0.1249793981587165,
+                "4": 0.14984613769623134
+              },
+              "mean_delta": 0.12457990161009269,
+              "sd_ddof": 1,
+              "sd_delta": 0.01543500083664777
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.06622034810149713,
+                "1": 0.04681434844447152,
+                "2": 0.058572368758440296,
+                "3": 0.09396049148078323,
+                "4": 0.08937115161106846
+              },
+              "mean_delta": 0.07098774167925212,
+              "sd_ddof": 1,
+              "sd_delta": 0.020167544848941916
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.09257623550827498,
+                "1": 0.0898554922439958,
+                "2": 0.1029037187977585,
+                "3": 0.10898375817730654,
+                "4": 0.10830212088782543
+              },
+              "mean_delta": 0.10052426512303225,
+              "sd_ddof": 1,
+              "sd_delta": 0.008870086700885902
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.04904393234051907,
+                "1": 0.0524474145333903,
+                "2": 0.05358003677718559,
+                "3": 0.05367057404941811,
+                "4": 0.05599033935886977
+              },
+              "mean_delta": 0.05294645941187657,
+              "sd_ddof": 1,
+              "sd_delta": 0.002533265222556783
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "global"
+        }
+      },
+      "bootstrap_seed": 2181839186998394838,
+      "label_validation": {
+        "description": "Recomputed from raw move records under the frozen operational definition; no archived central label value was reused.",
+        "presentation_scope": "primary",
+        "source": "reply_peak95",
+        "tier": "canonical_recomputed"
+      },
+      "representations": {
+        "combined": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 499,
+            "n_negatives": 45569,
+            "n_positions": 50503,
+            "n_positives": 4934
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.778259346272788,
+              "sd": 0.007200540342272911,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7693279912865219,
+                "1": 0.7725889102228186,
+                "2": 0.7795387549531296,
+                "3": 0.7865155853505889,
+                "4": 0.7833254895508809
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8465663339718041,
+              "sd": 0.010463370917377965,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8290797869858544,
+                "1": 0.84588374081683,
+                "2": 0.849367510555736,
+                "3": 0.852554803628166,
+                "4": 0.8559458278724335
+              }
+            },
+            "f1": {
+              "mean": 0.7086469382777238,
+              "sd": 0.013005587669115725,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.6952554744525548,
+                "1": 0.6938110749185668,
+                "2": 0.7165394402035623,
+                "3": 0.7168015230842456,
+                "4": 0.7208271787296898
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9642614372410412,
+              "sd": 0.0014918783136754546,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9617227207031063,
+                "1": 0.9643410584920589,
+                "2": 0.9647991540758939,
+                "3": 0.9656198672338738,
+                "4": 0.9648243857002728
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.7783051329456276,
+              "confidence_level": 0.95,
+              "lower": 0.7657296831260022,
+              "point_estimate": 0.778259346272788,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7910579459364955
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.8465659064443589,
+              "confidence_level": 0.95,
+              "lower": 0.8397178401108408,
+              "point_estimate": 0.8465663339718041,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8534521785134411
+            },
+            "f1": {
+              "bootstrap_mean": 0.7085368301903412,
+              "confidence_level": 0.95,
+              "lower": 0.6967686543004495,
+              "point_estimate": 0.7086469382777238,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7197577921542982
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9642492961938137,
+              "confidence_level": 0.95,
+              "lower": 0.9619712891355142,
+              "point_estimate": 0.9642614372410412,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9663834593566929
+            }
+          }
+        },
+        "global": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 499,
+            "n_negatives": 45569,
+            "n_positions": 50503,
+            "n_positives": 4934
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.6170206401166245,
+              "sd": 0.013480184321671439,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.6072316168436085,
+                "1": 0.6258344068363408,
+                "2": 0.6286377401843066,
+                "3": 0.6251491158604533,
+                "4": 0.5982503208584136
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.7711860664801546,
+              "sd": 0.009456676763022516,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7626354176211696,
+                "1": 0.7815036513549598,
+                "2": 0.7781539000666678,
+                "3": 0.7735807073795611,
+                "4": 0.7600566559784148
+              }
+            },
+            "f1": {
+              "mean": 0.5839901110657875,
+              "sd": 0.007141248156053199,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.576395242451967,
+                "1": 0.5853391684901532,
+                "2": 0.5919510952623536,
+                "3": 0.5894428152492669,
+                "4": 0.5768222338751966
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9047138178066032,
+              "sd": 0.0018982062510365142,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9042713855982154,
+                "1": 0.9063692407084251,
+                "2": 0.904966873670612,
+                "3": 0.9062543262648931,
+                "4": 0.9017072627908702
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.6170250300229487,
+              "confidence_level": 0.95,
+              "lower": 0.5991967971953807,
+              "point_estimate": 0.6170206401166245,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.6348561264589854
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.7711135355940036,
+              "confidence_level": 0.95,
+              "lower": 0.7621458815604324,
+              "point_estimate": 0.7711860664801546,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7799860130043409
+            },
+            "f1": {
+              "bootstrap_mean": 0.5837302567219544,
+              "confidence_level": 0.95,
+              "lower": 0.570226832576143,
+              "point_estimate": 0.5839901110657875,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.5978031557486548
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9046431267956621,
+              "confidence_level": 0.95,
+              "lower": 0.8995078804577751,
+              "point_estimate": 0.9047138178066032,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.90971421034886
+            }
+          }
+        },
+        "local": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 499,
+            "n_negatives": 45569,
+            "n_positions": 50503,
+            "n_positives": 4934
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.7416005417267171,
+              "sd": 0.009455940896386366,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7288878270624454,
+                "1": 0.7341818822386161,
+                "2": 0.7467080267587101,
+                "3": 0.7501285140191698,
+                "4": 0.7480964585546449
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8421738081594068,
+              "sd": 0.016546558427354814,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8288557657226667,
+                "1": 0.8283179997994313,
+                "2": 0.8367262688251081,
+                "3": 0.8675411988603443,
+                "4": 0.8494278075894832
+              }
+            },
+            "f1": {
+              "mean": 0.6845143761888197,
+              "sd": 0.012542774241701438,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.668971477960242,
+                "1": 0.675194660734149,
+                "2": 0.6948548140601121,
+                "3": 0.6984265734265734,
+                "4": 0.685124354763022
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9576602772184797,
+              "sd": 0.002555969027369837,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9533153179387345,
+                "1": 0.9588166552418154,
+                "2": 0.9585469104477976,
+                "3": 0.9599249003143112,
+                "4": 0.95769760214974
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.7417826363724628,
+              "confidence_level": 0.95,
+              "lower": 0.7276926275181731,
+              "point_estimate": 0.7416005417267171,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7559556682377916
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.8422143162705895,
+              "confidence_level": 0.95,
+              "lower": 0.8353580793303096,
+              "point_estimate": 0.8421738081594068,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8493524787512396
+            },
+            "f1": {
+              "bootstrap_mean": 0.6844567492006728,
+              "confidence_level": 0.95,
+              "lower": 0.6727185087166473,
+              "point_estimate": 0.6845143761888197,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.6967018175700053
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9576611489693173,
+              "confidence_level": 0.95,
+              "lower": 0.9551207243481586,
+              "point_estimate": 0.9576602772184797,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9601296136112438
+            }
+          }
+        }
+      }
+    },
+    "tenuki": {
+      "ablations": {
+        "combined_minus_global": {
+          "left": "combined",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.1738756309972288,
+              "confidence_level": 0.95,
+              "lower": 0.16753645631574524,
+              "point_estimate": 0.17406073702328917,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.17985741865635207
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.1136022352120677,
+              "confidence_level": 0.95,
+              "lower": 0.10913505892769548,
+              "point_estimate": 0.11363986770613002,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.11795095145167415
+            },
+            "f1": {
+              "bootstrap_mean": 0.1455773379427532,
+              "confidence_level": 0.95,
+              "lower": 0.1404717784695936,
+              "point_estimate": 0.14564040227913827,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.1506122978434143
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.10475805790742027,
+              "confidence_level": 0.95,
+              "lower": 0.10114469481877093,
+              "point_estimate": 0.10482116890205699,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.10807023484773584
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.18784550673148426,
+                "1": 0.17651797271964476,
+                "2": 0.16836363584678138,
+                "3": 0.16495498046830126,
+                "4": 0.1726215893502342
+              },
+              "mean_delta": 0.17406073702328917,
+              "sd_ddof": 1,
+              "sd_delta": 0.008852976808033956
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.1131816717891384,
+                "1": 0.11456312014383196,
+                "2": 0.10565610859728491,
+                "3": 0.11823454187108318,
+                "4": 0.11656389612931162
+              },
+              "mean_delta": 0.11363986770613002,
+              "sd_ddof": 1,
+              "sd_delta": 0.0048596224383124515
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.1495406605995948,
+                "1": 0.14531763985087975,
+                "2": 0.13597046972986637,
+                "3": 0.1493647127109604,
+                "4": 0.14800852850439006
+              },
+              "mean_delta": 0.14564040227913827,
+              "sd_ddof": 1,
+              "sd_delta": 0.005663530172740285
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.10558914954842247,
+                "1": 0.11083845522431002,
+                "2": 0.10094749425588301,
+                "3": 0.10344071682814227,
+                "4": 0.10329002865352721
+              },
+              "mean_delta": 0.10482116890205699,
+              "sd_ddof": 1,
+              "sd_delta": 0.003743424989585731
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "global"
+        },
+        "combined_minus_local": {
+          "left": "combined",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.009494998276884957,
+              "confidence_level": 0.95,
+              "lower": 0.008129829931503262,
+              "point_estimate": 0.009465335657372264,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.010899640930904494
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.00959583953317486,
+              "confidence_level": 0.95,
+              "lower": 0.007383624630193731,
+              "point_estimate": 0.00955881400978822,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.01168453541712854
+            },
+            "f1": {
+              "bootstrap_mean": 0.012089870135615252,
+              "confidence_level": 0.95,
+              "lower": 0.009234098606572622,
+              "point_estimate": 0.012037651647719461,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.014720083069146751
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.006985646648731339,
+              "confidence_level": 0.95,
+              "lower": 0.006223453360321663,
+              "point_estimate": 0.006969915513022351,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.0077893159360046755
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.0109011355147135,
+                "1": 0.00861132837254408,
+                "2": 0.009427092937494552,
+                "3": 0.009685821419349705,
+                "4": 0.008701300042759486
+              },
+              "mean_delta": 0.009465335657372264,
+              "sd_ddof": 1,
+              "sd_delta": 0.0009252940843504654
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.012988783267789406,
+                "1": 0.005689590571709147,
+                "2": 0.007222415593456155,
+                "3": 0.012150527084712426,
+                "4": 0.009742753531273962
+              },
+              "mean_delta": 0.00955881400978822,
+              "sd_ddof": 1,
+              "sd_delta": 0.0031203023529279223
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.01728673927561908,
+                "1": 0.007906658197289529,
+                "2": 0.009573966889506957,
+                "3": 0.013049759855563114,
+                "4": 0.012371134020618624
+              },
+              "mean_delta": 0.012037651647719461,
+              "sd_ddof": 1,
+              "sd_delta": 0.0035994216173619955
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.007710643430491215,
+                "1": 0.006613800333401865,
+                "2": 0.006235428981687385,
+                "3": 0.0069156371890209956,
+                "4": 0.007374067630510295
+              },
+              "mean_delta": 0.006969915513022351,
+              "sd_ddof": 1,
+              "sd_delta": 0.0005876332623568773
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "local"
+        },
+        "local_minus_global": {
+          "left": "local",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.16438063272034384,
+              "confidence_level": 0.95,
+              "lower": 0.15752724345803143,
+              "point_estimate": 0.1645954013659169,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.1708709641621588
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.10400639567889283,
+              "confidence_level": 0.95,
+              "lower": 0.09933595348492802,
+              "point_estimate": 0.1040810536963418,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.10843859016936604
+            },
+            "f1": {
+              "bootstrap_mean": 0.13348746780713797,
+              "confidence_level": 0.95,
+              "lower": 0.12807454533239304,
+              "point_estimate": 0.13360275063141883,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.138677397100582
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.09777241125868892,
+              "confidence_level": 0.95,
+              "lower": 0.09374949262783247,
+              "point_estimate": 0.09785125338903464,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.10132061594343361
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.17694437121677076,
+                "1": 0.16790664434710068,
+                "2": 0.15893654290928683,
+                "3": 0.15526915904895155,
+                "4": 0.1639202893074747
+              },
+              "mean_delta": 0.1645954013659169,
+              "sd_ddof": 1,
+              "sd_delta": 0.008410092709597786
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.100192888521349,
+                "1": 0.10887352957212282,
+                "2": 0.09843369300382876,
+                "3": 0.10608401478637075,
+                "4": 0.10682114259803765
+              },
+              "mean_delta": 0.1040810536963418,
+              "sd_ddof": 1,
+              "sd_delta": 0.004513819794715944
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.13225392132397573,
+                "1": 0.13741098165359023,
+                "2": 0.12639650284035941,
+                "3": 0.1363149528553973,
+                "4": 0.13563739448377143
+              },
+              "mean_delta": 0.13360275063141883,
+              "sd_ddof": 1,
+              "sd_delta": 0.004465080843463663
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.09787850611793125,
+                "1": 0.10422465489090815,
+                "2": 0.09471206527419562,
+                "3": 0.09652507963912127,
+                "4": 0.09591596102301692
+              },
+              "mean_delta": 0.09785125338903464,
+              "sd_ddof": 1,
+              "sd_delta": 0.0037409753003925387
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "global"
+        }
+      },
+      "bootstrap_seed": 3665785650282345168,
+      "label_validation": {
+        "description": "Recomputed from raw move records under the frozen operational definition; no archived central label value was reused.",
+        "presentation_scope": "primary",
+        "source": "tenuki_distance6",
+        "tier": "canonical_recomputed"
+      },
+      "representations": {
+        "combined": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 500,
+            "n_negatives": 32553,
+            "n_positions": 50003,
+            "n_positives": 17450
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.9238211680536919,
+              "sd": 0.002668933529098375,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9272400058330589,
+                "1": 0.9241225739310067,
+                "2": 0.9252643603318645,
+                "3": 0.9220457342136119,
+                "4": 0.9204331659589173
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8862752946162539,
+              "sd": 0.003502424558230037,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8867138498435972,
+                "1": 0.883389889066579,
+                "2": 0.8838273968364465,
+                "3": 0.8920826189823402,
+                "4": 0.8853627183523061
+              }
+            },
+            "f1": {
+              "mean": 0.84892843751855,
+              "sd": 0.0016702759612028568,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8489111321520357,
+                "1": 0.8489500362056481,
+                "2": 0.8478617195648934,
+                "3": 0.851634076302475,
+                "4": 0.8472852233676976
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9576752120817694,
+              "sd": 0.0017310765135975402,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9599159493301685,
+                "1": 0.9579897120544788,
+                "2": 0.9581017588849126,
+                "3": 0.957242438630016,
+                "4": 0.9551262015092719
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.9238080725127074,
+              "confidence_level": 0.95,
+              "lower": 0.9199089754044362,
+              "point_estimate": 0.9238211680536919,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9276466269012804
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.8862555917543977,
+              "confidence_level": 0.95,
+              "lower": 0.8831299448156544,
+              "point_estimate": 0.8862752946162539,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8893932549926016
+            },
+            "f1": {
+              "bootstrap_mean": 0.8488765412092805,
+              "confidence_level": 0.95,
+              "lower": 0.8445616679393879,
+              "point_estimate": 0.84892843751855,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.853345203444323
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9576630239238603,
+              "confidence_level": 0.95,
+              "lower": 0.955930365341624,
+              "point_estimate": 0.9576752120817694,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9593834212327215
+            }
+          }
+        },
+        "global": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 500,
+            "n_negatives": 32553,
+            "n_positions": 50003,
+            "n_positives": 17450
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.7497604310304027,
+              "sd": 0.007426567212421677,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7393944991015746,
+                "1": 0.747604601211362,
+                "2": 0.7569007244850832,
+                "3": 0.7570907537453107,
+                "4": 0.7478115766086831
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.7726354269101238,
+              "sd": 0.003941632116573745,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7735321780544588,
+                "1": 0.768826768922747,
+                "2": 0.7781712882391616,
+                "3": 0.773848077111257,
+                "4": 0.7687988222229944
+              }
+            },
+            "f1": {
+              "mean": 0.7032880352394117,
+              "sd": 0.005162599508402803,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.6993704715524409,
+                "1": 0.7036323963547684,
+                "2": 0.711891249835027,
+                "3": 0.7022693635915146,
+                "4": 0.6992766948633076
+              }
+            },
+            "roc_auc": {
+              "mean": 0.8528540431797126,
+              "sd": 0.0037120359453357236,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8543267997817461,
+                "1": 0.8471512568301688,
+                "2": 0.8571542646290295,
+                "3": 0.8538017218018737,
+                "4": 0.8518361728557446
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.7499324415154786,
+              "confidence_level": 0.95,
+              "lower": 0.7432435242788074,
+              "point_estimate": 0.7497604310304027,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7567349441732087
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.7726533565423301,
+              "confidence_level": 0.95,
+              "lower": 0.7684945033180348,
+              "point_estimate": 0.7726354269101238,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7768582951595908
+            },
+            "f1": {
+              "bootstrap_mean": 0.7032992032665274,
+              "confidence_level": 0.95,
+              "lower": 0.6980761508928497,
+              "point_estimate": 0.7032880352394117,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.708616866273087
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.85290496601644,
+              "confidence_level": 0.95,
+              "lower": 0.849221279166031,
+              "point_estimate": 0.8528540431797126,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8568154945240297
+            }
+          }
+        },
+        "local": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 500,
+            "n_negatives": 32553,
+            "n_positions": 50003,
+            "n_positives": 17450
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.9143558323963197,
+              "sd": 0.002140733739619646,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9163388703183454,
+                "1": 0.9155112455584626,
+                "2": 0.91583726739437,
+                "3": 0.9123599127942622,
+                "4": 0.9117318659161578
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8767164806064656,
+              "sd": 0.002316861589088255,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8737250665758078,
+                "1": 0.8777002984948699,
+                "2": 0.8766049812429904,
+                "3": 0.8799320918976278,
+                "4": 0.8756199648210321
+              }
+            },
+            "f1": {
+              "mean": 0.8368907858708304,
+              "sd": 0.003664212324785389,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8316243928764167,
+                "1": 0.8410433780083586,
+                "2": 0.8382877526753865,
+                "3": 0.8385843164469119,
+                "4": 0.834914089347079
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9507052965687471,
+              "sd": 0.0017966760639049621,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9522053058996773,
+                "1": 0.9513759117210769,
+                "2": 0.9518663299032252,
+                "3": 0.950326801440995,
+                "4": 0.9477521338787616
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.9143130742358223,
+              "confidence_level": 0.95,
+              "lower": 0.9101173711427358,
+              "point_estimate": 0.9143558323963197,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9185893184993658
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.876659752221223,
+              "confidence_level": 0.95,
+              "lower": 0.8732350701144461,
+              "point_estimate": 0.8767164806064656,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8801062152322289
+            },
+            "f1": {
+              "bootstrap_mean": 0.8367866710736652,
+              "confidence_level": 0.95,
+              "lower": 0.832098983635784,
+              "point_estimate": 0.8368907858708304,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.84155887973565
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9506773772751288,
+              "confidence_level": 0.95,
+              "lower": 0.9486089375220704,
+              "point_estimate": 0.9507052965687471,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9526397679774331
+            }
+          }
+        }
+      }
+    },
+    "urgency_peak": {
+      "ablations": {
+        "combined_minus_global": {
+          "left": "combined",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.001432265463926741,
+              "confidence_level": 0.95,
+              "lower": -0.001979219293797058,
+              "point_estimate": 0.0014416632851422361,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.00477775820742757
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.0012854413982123507,
+              "confidence_level": 0.95,
+              "lower": -0.0018478989149838642,
+              "point_estimate": 0.0012927777379703187,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.004570393710113726
+            },
+            "f1": {
+              "bootstrap_mean": 0.0021295983313501543,
+              "confidence_level": 0.95,
+              "lower": -0.0026233446695616996,
+              "point_estimate": 0.002154552422227196,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.0067041713708823215
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.0010209286604735386,
+              "confidence_level": 0.95,
+              "lower": 0.0003879978983128948,
+              "point_estimate": 0.001023399430328853,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.0016525009389774191
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.005112248571590539,
+                "1": -0.004533304321229448,
+                "2": 5.0542299683487e-05,
+                "3": 0.005048852132396586,
+                "4": 0.0015299777432700168
+              },
+              "mean_delta": 0.0014416632851422361,
+              "sd_ddof": 1,
+              "sd_delta": 0.00400400620197247
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.004342434947417151,
+                "1": 0.004676044970519433,
+                "2": -0.002977544204724736,
+                "3": 0.0045941983978852186,
+                "4": -0.004171245421245473
+              },
+              "mean_delta": 0.0012927777379703187,
+              "sd_ddof": 1,
+              "sd_delta": 0.004464792358396801
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": -0.002546309412813197,
+                "1": -0.005579825473672084,
+                "2": 0.009659882971424616,
+                "3": 0.008601631198135506,
+                "4": 0.0006373828280611393
+              },
+              "mean_delta": 0.002154552422227196,
+              "sd_ddof": 1,
+              "sd_delta": 0.0067475054353749895
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.0009402091252626033,
+                "1": 0.0009129640900791269,
+                "2": 0.0011028131210687464,
+                "3": 0.0010589519545541881,
+                "4": 0.0011020588606796
+              },
+              "mean_delta": 0.001023399430328853,
+              "sd_ddof": 1,
+              "sd_delta": 9.065651310291632e-05
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "global"
+        },
+        "combined_minus_local": {
+          "left": "combined",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.08080265648071122,
+              "confidence_level": 0.95,
+              "lower": 0.0737695716920494,
+              "point_estimate": 0.08094414744174172,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.08806808381649539
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.0369896768197791,
+              "confidence_level": 0.95,
+              "lower": 0.03243384807603318,
+              "point_estimate": 0.03709916440437962,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.04168126423684136
+            },
+            "f1": {
+              "bootstrap_mean": 0.0684056446332786,
+              "confidence_level": 0.95,
+              "lower": 0.06149809243555325,
+              "point_estimate": 0.06855791200361838,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.07552993714484399
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.020543690140671048,
+              "confidence_level": 0.95,
+              "lower": 0.01901101406411643,
+              "point_estimate": 0.020585056098414656,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.022060462460516603
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": 0.08385485946966342,
+                "1": 0.08283457885272472,
+                "2": 0.09049378281204001,
+                "3": 0.07809928809908828,
+                "4": 0.06943822797519217
+              },
+              "mean_delta": 0.08094414744174172,
+              "sd_ddof": 1,
+              "sd_delta": 0.007805781808777676
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": 0.03807126049118936,
+                "1": 0.027655723096911444,
+                "2": 0.04671409838752638,
+                "3": 0.03387938953471359,
+                "4": 0.039175350511557294
+              },
+              "mean_delta": 0.03709916440437962,
+              "sd_ddof": 1,
+              "sd_delta": 0.0070222505116384875
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": 0.06902652791773689,
+                "1": 0.07256302804660919,
+                "2": 0.07089022606781825,
+                "3": 0.06491705490486355,
+                "4": 0.06539272308106403
+              },
+              "mean_delta": 0.06855791200361838,
+              "sd_ddof": 1,
+              "sd_delta": 0.0033531517120414583
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": 0.021954189213975628,
+                "1": 0.017208325464544538,
+                "2": 0.02271173533851023,
+                "3": 0.02128146814082532,
+                "4": 0.01976956233421756
+              },
+              "mean_delta": 0.020585056098414656,
+              "sd_ddof": 1,
+              "sd_delta": 0.0021765580433539453
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "local"
+        },
+        "local_minus_global": {
+          "left": "local",
+          "paired_game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": -0.07937039101678448,
+              "confidence_level": 0.95,
+              "lower": -0.08755678131506095,
+              "point_estimate": -0.07950248415659948,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": -0.07145754903515351
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": -0.03570423542156675,
+              "confidence_level": 0.95,
+              "lower": -0.041067055408787925,
+              "point_estimate": -0.0358063866664093,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": -0.030630976293446674
+            },
+            "f1": {
+              "bootstrap_mean": -0.06627604630192843,
+              "confidence_level": 0.95,
+              "lower": -0.0736384685576151,
+              "point_estimate": -0.06640335958139118,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": -0.05910824026588548
+            },
+            "roc_auc": {
+              "bootstrap_mean": -0.01952276148019751,
+              "confidence_level": 0.95,
+              "lower": -0.021160105484516228,
+              "point_estimate": -0.019561656668085802,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": -0.017923858803806526
+            }
+          },
+          "paired_outer_fold_deltas": {
+            "average_precision": {
+              "delta_by_outer_fold": {
+                "0": -0.07874261089807288,
+                "1": -0.08736788317395416,
+                "2": -0.09044324051235653,
+                "3": -0.0730504359666917,
+                "4": -0.06790825023192215
+              },
+              "mean_delta": -0.07950248415659948,
+              "sd_ddof": 1,
+              "sd_delta": 0.009463049783926652
+            },
+            "balanced_accuracy": {
+              "delta_by_outer_fold": {
+                "0": -0.03372882554377221,
+                "1": -0.02297967812639201,
+                "2": -0.04969164259225112,
+                "3": -0.02928519113682837,
+                "4": -0.04334659593280277
+              },
+              "mean_delta": -0.0358063866664093,
+              "sd_ddof": 1,
+              "sd_delta": 0.010735709003496265
+            },
+            "f1": {
+              "delta_by_outer_fold": {
+                "0": -0.07157283733055009,
+                "1": -0.07814285352028127,
+                "2": -0.061230343096393636,
+                "3": -0.05631542370672804,
+                "4": -0.06475534025300289
+              },
+              "mean_delta": -0.06640335958139118,
+              "sd_ddof": 1,
+              "sd_delta": 0.008599153092200412
+            },
+            "roc_auc": {
+              "delta_by_outer_fold": {
+                "0": -0.021013980088713025,
+                "1": -0.01629536137446541,
+                "2": -0.021608922217441484,
+                "3": -0.020222516186271133,
+                "4": -0.01866750347353796
+              },
+              "mean_delta": -0.019561656668085802,
+              "sd_ddof": 1,
+              "sd_delta": 0.0021333934078659723
+            }
+          },
+          "pairing": "same outer-fold rows and same resampled game multiplicities",
+          "right": "global"
+        }
+      },
+      "bootstrap_seed": 3675462229709710796,
+      "label_validation": {
+        "description": "Recomputed from raw move records under the frozen operational definition; no archived central label value was reused.",
+        "presentation_scope": "primary",
+        "source": "regional_policy_peak",
+        "tier": "canonical_recomputed"
+      },
+      "representations": {
+        "combined": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 500,
+            "n_negatives": 42501,
+            "n_positions": 50003,
+            "n_positives": 7502
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.8601323728476225,
+              "sd": 0.005466144218472658,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.854283333632205,
+                "1": 0.8567486410226542,
+                "2": 0.8635426414164988,
+                "3": 0.867801424543387,
+                "4": 0.858285823623367
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8870404038394435,
+              "sd": 0.007151880741261837,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8778519819445086,
+                "1": 0.8951652131790995,
+                "2": 0.8844064376011638,
+                "3": 0.8843956341672796,
+                "4": 0.8933827523051661
+              }
+            },
+            "f1": {
+              "mean": 0.7806942748448736,
+              "sd": 0.007358782926792769,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7686692869174621,
+                "1": 0.7864112757499097,
+                "2": 0.7791293213828425,
+                "3": 0.786345626333435,
+                "4": 0.7829158638407193
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9710634157704796,
+              "sd": 0.003411808950738959,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.966240363037516,
+                "1": 0.9754433797042664,
+                "2": 0.9700016561831978,
+                "3": 0.9708524548421573,
+                "4": 0.9727792250852596
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.8604280785213912,
+              "confidence_level": 0.95,
+              "lower": 0.8516997516433793,
+              "point_estimate": 0.8601323728476225,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8689962297927445
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.887122605479669,
+              "confidence_level": 0.95,
+              "lower": 0.881856477690148,
+              "point_estimate": 0.8870404038394435,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8920803103682492
+            },
+            "f1": {
+              "bootstrap_mean": 0.7807372798080457,
+              "confidence_level": 0.95,
+              "lower": 0.7718208886979505,
+              "point_estimate": 0.7806942748448736,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7891951368861457
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9710953563696266,
+              "confidence_level": 0.95,
+              "lower": 0.9694084120019661,
+              "point_estimate": 0.9710634157704796,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.972735468453956
+            }
+          }
+        },
+        "global": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 500,
+            "n_negatives": 42501,
+            "n_positions": 50003,
+            "n_positives": 7502
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.8586907095624803,
+              "sd": 0.005929450279185678,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8491710850606145,
+                "1": 0.8612819453438837,
+                "2": 0.8634920991168153,
+                "3": 0.8627525724109905,
+                "4": 0.856755845880097
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8857476261014732,
+              "sd": 0.00934984026763827,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8735095469970915,
+                "1": 0.89048916820858,
+                "2": 0.8873839818058885,
+                "3": 0.8798014357693944,
+                "4": 0.8975539977264115
+              }
+            },
+            "f1": {
+              "mean": 0.7785397224226465,
+              "sd": 0.0091030759144611,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7712155963302753,
+                "1": 0.7919911012235817,
+                "2": 0.7694694384114179,
+                "3": 0.7777439951352995,
+                "4": 0.7822784810126582
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9700400163401506,
+              "sd": 0.003415892509744162,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9653001539122534,
+                "1": 0.9745304156141873,
+                "2": 0.968898843062129,
+                "3": 0.9697935028876031,
+                "4": 0.97167716622458
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.8589958130574646,
+              "confidence_level": 0.95,
+              "lower": 0.8506664432582967,
+              "point_estimate": 0.8586907095624803,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8669304500782785
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.8858371640814566,
+              "confidence_level": 0.95,
+              "lower": 0.8804158567051135,
+              "point_estimate": 0.8857476261014732,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8913243493174562
+            },
+            "f1": {
+              "bootstrap_mean": 0.7786076814766956,
+              "confidence_level": 0.95,
+              "lower": 0.7691914864785382,
+              "point_estimate": 0.7785397224226465,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.787715358396174
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9700744277091531,
+              "confidence_level": 0.95,
+              "lower": 0.9682865887180627,
+              "point_estimate": 0.9700400163401506,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.971769027377726
+            }
+          }
+        },
+        "local": {
+          "counts": {
+            "n_games": 500,
+            "n_games_with_positive": 500,
+            "n_negatives": 42501,
+            "n_positions": 50003,
+            "n_positives": 7502
+          },
+          "fold_metrics": {
+            "average_precision": {
+              "mean": 0.7791882254058807,
+              "sd": 0.00930171520753738,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.7704284741625416,
+                "1": 0.7739140621699295,
+                "2": 0.7730488586044588,
+                "3": 0.7897021364442988,
+                "4": 0.7888475956481749
+              }
+            },
+            "balanced_accuracy": {
+              "mean": 0.8499412394350638,
+              "sd": 0.012046222284793425,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.8397807214533193,
+                "1": 0.867509490082188,
+                "2": 0.8376923392136374,
+                "3": 0.850516244632566,
+                "4": 0.8542074017936088
+              }
+            },
+            "f1": {
+              "mean": 0.7121363628412554,
+              "sd": 0.008508406103280507,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.6996427589997252,
+                "1": 0.7138482477033005,
+                "2": 0.7082390953150243,
+                "3": 0.7214285714285714,
+                "4": 0.7175231407596553
+              }
+            },
+            "roc_auc": {
+              "mean": 0.9504783596720647,
+              "sd": 0.005382992646757229,
+              "sd_ddof": 1,
+              "values_by_outer_fold": {
+                "0": 0.9442861738235404,
+                "1": 0.9582350542397219,
+                "2": 0.9472899208446875,
+                "3": 0.949570986701332,
+                "4": 0.953009662751042
+              }
+            }
+          },
+          "game_cluster_bootstrap": {
+            "average_precision": {
+              "bootstrap_mean": 0.7796254220406801,
+              "confidence_level": 0.95,
+              "lower": 0.7674686304438397,
+              "point_estimate": 0.7791882254058807,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7916656975064955
+            },
+            "balanced_accuracy": {
+              "bootstrap_mean": 0.8501329286598899,
+              "confidence_level": 0.95,
+              "lower": 0.8446690823726968,
+              "point_estimate": 0.8499412394350638,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.8557110636595777
+            },
+            "f1": {
+              "bootstrap_mean": 0.7123316351747672,
+              "confidence_level": 0.95,
+              "lower": 0.7023036697067869,
+              "point_estimate": 0.7121363628412554,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.7217757515883354
+            },
+            "roc_auc": {
+              "bootstrap_mean": 0.9505516662289556,
+              "confidence_level": 0.95,
+              "lower": 0.9481403188031241,
+              "point_estimate": 0.9504783596720647,
+              "replicates_requested": 2000,
+              "replicates_valid": 2000,
+              "status": "ok",
+              "upper": 0.9530760242284002
+            }
+          }
+        }
+      }
+    }
+  },
+  "correction": {
+    "changed_field_patterns": [
+      "concepts.*.representations.*.game_cluster_bootstrap.average_precision",
+      "concepts.*.ablations.*.paired_game_cluster_bootstrap.average_precision"
+    ],
+    "corrected_ap_status_counts": {
+      "ablations": {
+        "ok": 9
+      },
+      "representations": {
+        "ok": 9
+      }
+    },
+    "correction_id": "average_precision_zero_weight_leading_score_group_v2",
+    "correction_reporter_source_sha256": "a882a7430d67f14869fa377a9e73c361500392ea149cd38a30876cd9b98b63db",
+    "frozen_validator_invoked": true,
+    "non_ap_fields_reproduced_exactly": true,
+    "original_ap_status_counts": {
+      "ablations": {
+        "not_estimable": 9
+      },
+      "representations": {
+        "not_estimable": 9
+      }
+    },
+    "original_frozen_reporter_source_sha256": "a197f8faacdd050e5053e1b61c8c67aa6149e72f397671afe94174ca5b9c010d",
+    "original_report": "validated_results_report.json",
+    "original_report_manifest": "validated_results_report_manifest.json",
+    "original_report_manifest_sha256": "86c636e05495de94885df153318f86fe283ff94dba6194be561069e0f83ade80",
+    "original_report_sha256": "103e7f3ecec674055309920f6812cdbc14738186ce4b75c9a8ab00021c56cd85",
+    "part_of_original_prospective_protocol": false,
+    "post_freeze_correction": true,
+    "reason": "The frozen vectorised AP bootstrap evaluated precision as 0/0 when a game-cluster resample assigned zero weight to leading probability groups. Those empty groups have zero positive increment and must contribute zero, not NaN, to AP.",
+    "reused_bootstrap_settings": {
+      "base_seed": 20260730,
+      "confidence_level": 0.95,
+      "replicates": 2000
+    },
+    "scope": "Only representation game_cluster_bootstrap.average_precision and ablation paired_game_cluster_bootstrap.average_precision records are recomputed. Fold point estimates and every non-AP field reproduce the original report exactly.",
+    "upstream_training_manifest_sha256": "4175cfb9a6c84fe832a8dca55ec01844fd36465e2a09c58a576047748c346e31"
+  },
+  "created_at_utc": "2026-07-31T18:19:16.893281+00:00",
+  "metric_notes": {
+    "average_precision": "non-interpolated average precision",
+    "balanced_accuracy": "uses each outer fold's inner-CV-selected threshold",
+    "f1": "uses each outer fold's inner-CV-selected threshold",
+    "fold_sd": "sample standard deviation across outer folds (ddof=1)"
+  },
+  "pipeline": "validated_results_report_apfix_v2",
+  "provenance": {
+    "build_manifest_sha256": "2b42b8a92d5bf9c4bbcfafb117ef53841221c7e8dc1b1973af1369782b808214",
+    "checkpoint_activation_fidelity": {
+      "absolute_tolerance": 0.0001,
+      "checkpoint_sha256": "9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3",
+      "claim_scope": "Passing is empirical compatibility evidence for the supplied checkpoint and the sampled saved activations under this replay implementation. It is not proof that the checkpoint originally generated the activations, and it does not establish compatibility for unsampled positions.",
+      "observed_max_abs_error": 3.504753112792969e-05,
+      "path": "checkpoint_activation_fidelity.json",
+      "sample_count": 500,
+      "sampling_algorithm": "one_deterministic_position_per_game_v1",
+      "sha256": "3fb491aac29023c3f4249b8a29eb1f932fd18fbde497d784daf532c7375f4994"
+    },
+    "correction_reporter_source_sha256": "a882a7430d67f14869fa377a9e73c361500392ea149cd38a30876cd9b98b63db",
+    "frozen_reporter_source_sha256": "a197f8faacdd050e5053e1b61c8c67aa6149e72f397671afe94174ca5b9c010d",
+    "labels_manifest_sha256": "4099a2d825c1e56f74f867a98dc888be5f1e98208253f706b1f3b81f4b1d3aa7",
+    "original_frozen_report_manifest_sha256": "86c636e05495de94885df153318f86fe283ff94dba6194be561069e0f83ade80",
+    "original_frozen_report_sha256": "103e7f3ecec674055309920f6812cdbc14738186ce4b75c9a8ab00021c56cd85",
+    "run_manifest_sha256": "c9b21f7c98ec84043945a353610f4311227baaa79981acd0af224cde901ad52f",
+    "training_manifest_sha256": "4175cfb9a6c84fe832a8dca55ec01844fd36465e2a09c58a576047748c346e31"
+  },
+  "run_dir": "/Users/danielegentili/Desktop/KataTeach/daniele_experiment/artifacts/runs/validity_v5_canonical",
+  "schema_version": 1,
+  "source_pipeline": "validated_results_report",
+  "status": "complete_post_freeze_reporting_correction"
+}

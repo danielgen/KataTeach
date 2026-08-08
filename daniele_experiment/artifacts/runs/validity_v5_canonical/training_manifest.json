@@ -1,0 +1,1349 @@
+{
+  "C_values": [
+    0.001,
+    0.01,
+    0.1,
+    1.0,
+    10.0
+  ],
+  "artifacts": {
+    "nested_cv_results.parquet": "1a153de9cb505fa7ceec16c06ce879a1065ccfb980111c6e38bd86c82ca7d7d2",
+    "outer_predictions/forcing__combined.parquet": "e488627035d19576a5375fd5c5c307108f760cf30e84182cde5e2c02296f10e0",
+    "outer_predictions/forcing__global.parquet": "f2814c7db2109d7569b23c065df7d52ff1b0d7eb81d1461d8f9c48a9e77a58da",
+    "outer_predictions/forcing__local.parquet": "3914883e75de8a93e1514c4ac6967a1d08b4b314bb5f0164d07121b25c1355ed",
+    "outer_predictions/tenuki__combined.parquet": "42452d6fcf59c87d1bfd30fb316ab2fb3dd22b010c4d8bb14db10fd92a68fcaa",
+    "outer_predictions/tenuki__global.parquet": "a45b1bcbed815430adfb5fbe3da5dbc69906f2a73c35846a85c04c8d85e4aa9b",
+    "outer_predictions/tenuki__local.parquet": "c3bee34c5b63565cbe82b3e941be6d6cd9793819807d8356a08f7dc6570b54c1",
+    "outer_predictions/urgency_peak__combined.parquet": "a529d3c3b23c7fe30a872cb5476a3ccbe1e9e11565bba73c7f0324d8cea25017",
+    "outer_predictions/urgency_peak__global.parquet": "0fb2aedef246c6503adb22f7395b6344c732421f4d2d08d211b6be7811623217",
+    "outer_predictions/urgency_peak__local.parquet": "1223851c0eac0ffd4608b56b79ae07a4de6c7a398641e24498bf0c40377c3f67",
+    "probe_results.json": "b57bb1b6988d99cbf826335178e0a53ca453ad299ffe165aaf274553daa1a8ae",
+    "probes/combined/probe_forcing.joblib": "30a7102e67cfbf7bac59180750c4d76634f17a314d7c086f41d9fcac10c11358",
+    "probes/combined/probe_forcing.meta.json": "858de20588802cb7600aeff2af5a36f50f94880dc45bd7a12877f03cc1c727d0",
+    "probes/combined/probe_tenuki.joblib": "fdb7dcf4144aa92db1ac59d9e6932c833a99ad9cff16792eded01c88e88c7c6a",
+    "probes/combined/probe_tenuki.meta.json": "09018608c0113615b91fcce7e87cd2d8f94d913c533da5fb12ab21f9c2abfb94",
+    "probes/combined/probe_urgency_peak.joblib": "ea4f4d9c12844e7b1abd39e1855898073dd2124872765bd46ace79a04a45fced",
+    "probes/combined/probe_urgency_peak.meta.json": "45ae0c054d1638422bf8aca539523214df031f02c46b62ccbd7f40a22f69f61c",
+    "probes/combined/scaler_forcing.joblib": "0c7f932c11eb86e0c05ae57c4e397306c29b6ebc93dc986c944abf757c5ea392",
+    "probes/combined/scaler_tenuki.joblib": "d93b5c39afb878a194aea83f87736d4160ed55e65ed1b882d76c6a7cba3a2f00",
+    "probes/combined/scaler_urgency_peak.joblib": "d93b5c39afb878a194aea83f87736d4160ed55e65ed1b882d76c6a7cba3a2f00",
+    "probes/global/probe_forcing.joblib": "ac7a5a752343d8900d3a904c45cd551ed17046b03ebb1d297c46a82ca38a070c",
+    "probes/global/probe_forcing.meta.json": "eca02e98995ce82f4349b4037b2dac75d24969b182cd6e2040b4b14b3feb6784",
+    "probes/global/probe_tenuki.joblib": "1eb50631145eef117275f5f24900004055cdbd244f4bb36ad000f6ee929938a1",
+    "probes/global/probe_tenuki.meta.json": "53cd3b7611236eae62ec7cc9e9631b2977f3200b458ca435c0f4529a71d8c302",
+    "probes/global/probe_urgency_peak.joblib": "fe38f4861a8cb26016e96f0926705a9f7a057f40dfa9f0ba4c8e485ecc276381",
+    "probes/global/probe_urgency_peak.meta.json": "5b943653fa0644f5fcfeca1adbc5425214e50ff5f238b82c6e855d39c14fff05",
+    "probes/global/scaler_forcing.joblib": "08fb40c3a1bdb99a68457b03b376037d5009335384c326b784124e04bd65076d",
+    "probes/global/scaler_tenuki.joblib": "84b4e0e2120d4ee9f67942f7b5e15aab5eee4bcdb675b8177dd548fb8ab80472",
+    "probes/global/scaler_urgency_peak.joblib": "84b4e0e2120d4ee9f67942f7b5e15aab5eee4bcdb675b8177dd548fb8ab80472",
+    "probes/local/probe_forcing.joblib": "5ac35b9465e6b99e21dc0a0134b98f0a0f61faf35a1799f8c68046db9a7f90a5",
+    "probes/local/probe_forcing.meta.json": "6fd24e2e5e04180554bb95081e03c61c4ba2f086273347791b4d045f63ae7c50",
+    "probes/local/probe_tenuki.joblib": "4102bcd74823ae50ab8d2a8656aae7b86cb8dbfed21e20cc9f7df6ed6f9057cd",
+    "probes/local/probe_tenuki.meta.json": "9e3292b98295fab901294d690ffbb881a2204e3d372a3b3d7fc43aee0dcb805a",
+    "probes/local/probe_urgency_peak.joblib": "f9fa9012379cfbe54118dd331c058abdb006437f22150b09d7a6692099641cc9",
+    "probes/local/probe_urgency_peak.meta.json": "7cec7cead8f3b9c39a5727bf03af775aeb4fa3a4f669bba8412a02157a8281ea",
+    "probes/local/scaler_forcing.joblib": "25e2370f3be04e26f0d7f9c4efa8b3556f11939ef2ce5acce979d659be449f99",
+    "probes/local/scaler_tenuki.joblib": "cb3d0df8bd25efd5bc9df88d86cf39f4edf971d842c134905ddd583b7aac5eeb",
+    "probes/local/scaler_urgency_peak.joblib": "cb3d0df8bd25efd5bc9df88d86cf39f4edf971d842c134905ddd583b7aac5eeb"
+  },
+  "build_manifest_sha256": "2b42b8a92d5bf9c4bbcfafb117ef53841221c7e8dc1b1973af1369782b808214",
+  "checkpoint_activation_fidelity": {
+    "absolute_tolerance": 0.0001,
+    "checkpoint_sha256": "9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3",
+    "claim_scope": "Passing is empirical compatibility evidence for the supplied checkpoint and the sampled saved activations under this replay implementation. It is not proof that the checkpoint originally generated the activations, and it does not establish compatibility for unsampled positions.",
+    "observed_max_abs_error": 3.504753112792969e-05,
+    "path": "checkpoint_activation_fidelity.json",
+    "sample_count": 500,
+    "sampling_algorithm": "one_deterministic_position_per_game_v1",
+    "sha256": "3fb491aac29023c3f4249b8a29eb1f932fd18fbde497d784daf532c7375f4994"
+  },
+  "class_weight": "balanced",
+  "concepts": [
+    "tenuki",
+    "forcing",
+    "urgency_peak"
+  ],
+  "contract_implementation_sha256": "8031d6969db21fa6b23e7868755bb8933a788eac642bc83278c51b27538da02a",
+  "created_at_utc": "2026-07-31T00:13:38.829591+00:00",
+  "dataset_sha256": "1495ce4e0749fb37b7d65263a9095464b2462df087dbfda14809b23e06e6bc17",
+  "frozen_probe_design": {
+    "C_values": [
+      0.001,
+      0.01,
+      0.1,
+      1.0,
+      10.0
+    ],
+    "concepts": [
+      "tenuki",
+      "forcing",
+      "urgency_peak"
+    ],
+    "development_games_only": 500,
+    "f1_threshold": "inner out-of-fold maximum F1",
+    "inner_group_folds": 4,
+    "max_iter": 2000,
+    "outer_group_folds": 5,
+    "probability_calibration": false,
+    "quality_gate": null,
+    "representations": [
+      "global",
+      "local",
+      "combined"
+    ],
+    "selection_metric": "mean inner-fold average precision"
+  },
+  "inner_folds": 4,
+  "input_provenance_sha256": "b51e4f690aa9889bc44b483674bdff280fe5d3eadb7f1542975af41d84fa3508",
+  "labels_manifest_sha256": "4099a2d825c1e56f74f867a98dc888be5f1e98208253f706b1f3b81f4b1d3aa7",
+  "max_iter": 2000,
+  "outer_folds": 5,
+  "pipeline": "validated_probe_pipeline",
+  "representations": [
+    "global",
+    "local",
+    "combined"
+  ],
+  "schema_version": 1,
+  "selection_metric": "mean inner-fold average precision",
+  "source_code_sha256": {
+    "daniele_experiment/operational_definitions.py": "8031d6969db21fa6b23e7868755bb8933a788eac642bc83278c51b27538da02a",
+    "daniele_experiment/validated_probe_pipeline.py": "440623472a614fc6c012eed43c5deee783c94abf4b587d7b9f1ab72ff7527139"
+  },
+  "split_manifest_sha256": "43ef5d6600dafe56420cdfcafbc6906115ce06538f74ae206566caa8b3358157",
+  "threshold_selection": "inner out-of-fold maximum F1",
+  "trainability_audit": {
+    "forcing": {
+      "development": {
+        "negative": 45569,
+        "positive": 4934,
+        "samples": 50503
+      },
+      "development_quantile_thresholds": null,
+      "final_inner_folds": [
+        {
+          "fit": {
+            "negative": 34171,
+            "positive": 3751,
+            "samples": 37922
+          },
+          "inner_fold": 0,
+          "validation": {
+            "negative": 11398,
+            "positive": 1183,
+            "samples": 12581
+          }
+        },
+        {
+          "fit": {
+            "negative": 33810,
+            "positive": 3630,
+            "samples": 37440
+          },
+          "inner_fold": 1,
+          "validation": {
+            "negative": 11759,
+            "positive": 1304,
+            "samples": 13063
+          }
+        },
+        {
+          "fit": {
+            "negative": 34239,
+            "positive": 3709,
+            "samples": 37948
+          },
+          "inner_fold": 2,
+          "validation": {
+            "negative": 11330,
+            "positive": 1225,
+            "samples": 12555
+          }
+        },
+        {
+          "fit": {
+            "negative": 34487,
+            "positive": 3712,
+            "samples": 38199
+          },
+          "inner_fold": 3,
+          "validation": {
+            "negative": 11082,
+            "positive": 1222,
+            "samples": 12304
+          }
+        }
+      ],
+      "outer_folds": [
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 26536,
+                "positive": 2900,
+                "samples": 29436
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 9339,
+                "positive": 933,
+                "samples": 10272
+              }
+            },
+            {
+              "fit": {
+                "negative": 27010,
+                "positive": 2850,
+                "samples": 29860
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8865,
+                "positive": 983,
+                "samples": 9848
+              }
+            },
+            {
+              "fit": {
+                "negative": 26816,
+                "positive": 2904,
+                "samples": 29720
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 9059,
+                "positive": 929,
+                "samples": 9988
+              }
+            },
+            {
+              "fit": {
+                "negative": 27263,
+                "positive": 2845,
+                "samples": 30108
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8612,
+                "positive": 988,
+                "samples": 9600
+              }
+            }
+          ],
+          "outer_fold": 0,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 9694,
+            "positive": 1101,
+            "samples": 10795
+          },
+          "train": {
+            "negative": 35875,
+            "positive": 3833,
+            "samples": 39708
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 26885,
+                "positive": 2962,
+                "samples": 29847
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 9838,
+                "positive": 1095,
+                "samples": 10933
+              }
+            },
+            {
+              "fit": {
+                "negative": 27512,
+                "positive": 2983,
+                "samples": 30495
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 9211,
+                "positive": 1074,
+                "samples": 10285
+              }
+            },
+            {
+              "fit": {
+                "negative": 27821,
+                "positive": 3092,
+                "samples": 30913
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8902,
+                "positive": 965,
+                "samples": 9867
+              }
+            },
+            {
+              "fit": {
+                "negative": 27951,
+                "positive": 3134,
+                "samples": 31085
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8772,
+                "positive": 923,
+                "samples": 9695
+              }
+            }
+          ],
+          "outer_fold": 1,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 8846,
+            "positive": 877,
+            "samples": 9723
+          },
+          "train": {
+            "negative": 36723,
+            "positive": 4057,
+            "samples": 40780
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 27798,
+                "positive": 2947,
+                "samples": 30745
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 9231,
+                "positive": 1028,
+                "samples": 10259
+              }
+            },
+            {
+              "fit": {
+                "negative": 27572,
+                "positive": 2964,
+                "samples": 30536
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 9457,
+                "positive": 1011,
+                "samples": 10468
+              }
+            },
+            {
+              "fit": {
+                "negative": 27747,
+                "positive": 2990,
+                "samples": 30737
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 9282,
+                "positive": 985,
+                "samples": 10267
+              }
+            },
+            {
+              "fit": {
+                "negative": 27970,
+                "positive": 3024,
+                "samples": 30994
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 9059,
+                "positive": 951,
+                "samples": 10010
+              }
+            }
+          ],
+          "outer_fold": 2,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 8540,
+            "positive": 959,
+            "samples": 9499
+          },
+          "train": {
+            "negative": 37029,
+            "positive": 3975,
+            "samples": 41004
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 27512,
+                "positive": 2952,
+                "samples": 30464
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 8843,
+                "positive": 966,
+                "samples": 9809
+              }
+            },
+            {
+              "fit": {
+                "negative": 27362,
+                "positive": 2971,
+                "samples": 30333
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8993,
+                "positive": 947,
+                "samples": 9940
+              }
+            },
+            {
+              "fit": {
+                "negative": 26757,
+                "positive": 2915,
+                "samples": 29672
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 9598,
+                "positive": 1003,
+                "samples": 10601
+              }
+            },
+            {
+              "fit": {
+                "negative": 27434,
+                "positive": 2916,
+                "samples": 30350
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8921,
+                "positive": 1002,
+                "samples": 9923
+              }
+            }
+          ],
+          "outer_fold": 3,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 9214,
+            "positive": 1016,
+            "samples": 10230
+          },
+          "train": {
+            "negative": 36355,
+            "positive": 3918,
+            "samples": 40273
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 27047,
+                "positive": 2878,
+                "samples": 29925
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 9247,
+                "positive": 1075,
+                "samples": 10322
+              }
+            },
+            {
+              "fit": {
+                "negative": 27361,
+                "positive": 3038,
+                "samples": 30399
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8933,
+                "positive": 915,
+                "samples": 9848
+              }
+            },
+            {
+              "fit": {
+                "negative": 27577,
+                "positive": 2985,
+                "samples": 30562
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8717,
+                "positive": 968,
+                "samples": 9685
+              }
+            },
+            {
+              "fit": {
+                "negative": 26897,
+                "positive": 2958,
+                "samples": 29855
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 9397,
+                "positive": 995,
+                "samples": 10392
+              }
+            }
+          ],
+          "outer_fold": 4,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 9275,
+            "positive": 981,
+            "samples": 10256
+          },
+          "train": {
+            "negative": 36294,
+            "positive": 3953,
+            "samples": 40247
+          }
+        }
+      ]
+    },
+    "tenuki": {
+      "development": {
+        "negative": 32553,
+        "positive": 17450,
+        "samples": 50003
+      },
+      "development_quantile_thresholds": null,
+      "final_inner_folds": [
+        {
+          "fit": {
+            "negative": 24795,
+            "positive": 13086,
+            "samples": 37881
+          },
+          "inner_fold": 0,
+          "validation": {
+            "negative": 7758,
+            "positive": 4364,
+            "samples": 12122
+          }
+        },
+        {
+          "fit": {
+            "negative": 24592,
+            "positive": 13174,
+            "samples": 37766
+          },
+          "inner_fold": 1,
+          "validation": {
+            "negative": 7961,
+            "positive": 4276,
+            "samples": 12237
+          }
+        },
+        {
+          "fit": {
+            "negative": 24143,
+            "positive": 13137,
+            "samples": 37280
+          },
+          "inner_fold": 2,
+          "validation": {
+            "negative": 8410,
+            "positive": 4313,
+            "samples": 12723
+          }
+        },
+        {
+          "fit": {
+            "negative": 24129,
+            "positive": 12953,
+            "samples": 37082
+          },
+          "inner_fold": 3,
+          "validation": {
+            "negative": 8424,
+            "positive": 4497,
+            "samples": 12921
+          }
+        }
+      ],
+      "outer_folds": [
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 19256,
+                "positive": 10442,
+                "samples": 29698
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 6256,
+                "positive": 3354,
+                "samples": 9610
+              }
+            },
+            {
+              "fit": {
+                "negative": 19065,
+                "positive": 10382,
+                "samples": 29447
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 6447,
+                "positive": 3414,
+                "samples": 9861
+              }
+            },
+            {
+              "fit": {
+                "negative": 19006,
+                "positive": 10169,
+                "samples": 29175
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 6506,
+                "positive": 3627,
+                "samples": 10133
+              }
+            },
+            {
+              "fit": {
+                "negative": 19209,
+                "positive": 10395,
+                "samples": 29604
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 6303,
+                "positive": 3401,
+                "samples": 9704
+              }
+            }
+          ],
+          "outer_fold": 0,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 7041,
+            "positive": 3654,
+            "samples": 10695
+          },
+          "train": {
+            "negative": 25512,
+            "positive": 13796,
+            "samples": 39308
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 19899,
+                "positive": 10607,
+                "samples": 30506
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 6460,
+                "positive": 3414,
+                "samples": 9874
+              }
+            },
+            {
+              "fit": {
+                "negative": 19546,
+                "positive": 10438,
+                "samples": 29984
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 6813,
+                "positive": 3583,
+                "samples": 10396
+              }
+            },
+            {
+              "fit": {
+                "negative": 20007,
+                "positive": 10596,
+                "samples": 30603
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 6352,
+                "positive": 3425,
+                "samples": 9777
+              }
+            },
+            {
+              "fit": {
+                "negative": 19625,
+                "positive": 10422,
+                "samples": 30047
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 6734,
+                "positive": 3599,
+                "samples": 10333
+              }
+            }
+          ],
+          "outer_fold": 1,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 6194,
+            "positive": 3429,
+            "samples": 9623
+          },
+          "train": {
+            "negative": 26359,
+            "positive": 14021,
+            "samples": 40380
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 20093,
+                "positive": 10661,
+                "samples": 30754
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 6376,
+                "positive": 3474,
+                "samples": 9850
+              }
+            },
+            {
+              "fit": {
+                "negative": 19774,
+                "positive": 10648,
+                "samples": 30422
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 6695,
+                "positive": 3487,
+                "samples": 10182
+              }
+            },
+            {
+              "fit": {
+                "negative": 19912,
+                "positive": 10641,
+                "samples": 30553
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 6557,
+                "positive": 3494,
+                "samples": 10051
+              }
+            },
+            {
+              "fit": {
+                "negative": 19628,
+                "positive": 10455,
+                "samples": 30083
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 6841,
+                "positive": 3680,
+                "samples": 10521
+              }
+            }
+          ],
+          "outer_fold": 2,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 6084,
+            "positive": 3315,
+            "samples": 9399
+          },
+          "train": {
+            "negative": 26469,
+            "positive": 14135,
+            "samples": 40604
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 19638,
+                "positive": 10569,
+                "samples": 30207
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 6286,
+                "positive": 3380,
+                "samples": 9666
+              }
+            },
+            {
+              "fit": {
+                "negative": 19409,
+                "positive": 10469,
+                "samples": 29878
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 6515,
+                "positive": 3480,
+                "samples": 9995
+              }
+            },
+            {
+              "fit": {
+                "negative": 19555,
+                "positive": 10564,
+                "samples": 30119
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 6369,
+                "positive": 3385,
+                "samples": 9754
+              }
+            },
+            {
+              "fit": {
+                "negative": 19170,
+                "positive": 10245,
+                "samples": 29415
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 6754,
+                "positive": 3704,
+                "samples": 10458
+              }
+            }
+          ],
+          "outer_fold": 3,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 6629,
+            "positive": 3501,
+            "samples": 10130
+          },
+          "train": {
+            "negative": 25924,
+            "positive": 13949,
+            "samples": 39873
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 19551,
+                "positive": 10517,
+                "samples": 30068
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 6397,
+                "positive": 3382,
+                "samples": 9779
+              }
+            },
+            {
+              "fit": {
+                "negative": 19327,
+                "positive": 10381,
+                "samples": 29708
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 6621,
+                "positive": 3518,
+                "samples": 10139
+              }
+            },
+            {
+              "fit": {
+                "negative": 19431,
+                "positive": 10349,
+                "samples": 29780
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 6517,
+                "positive": 3550,
+                "samples": 10067
+              }
+            },
+            {
+              "fit": {
+                "negative": 19535,
+                "positive": 10450,
+                "samples": 29985
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 6413,
+                "positive": 3449,
+                "samples": 9862
+              }
+            }
+          ],
+          "outer_fold": 4,
+          "quantile_thresholds": null,
+          "test": {
+            "negative": 6605,
+            "positive": 3551,
+            "samples": 10156
+          },
+          "train": {
+            "negative": 25948,
+            "positive": 13899,
+            "samples": 39847
+          }
+        }
+      ]
+    },
+    "urgency_peak": {
+      "development": {
+        "negative": 42502,
+        "positive": 7501,
+        "samples": 50003
+      },
+      "development_quantile_thresholds": [
+        0.4707092590319703,
+        0.9802624574211748
+      ],
+      "final_inner_folds": [
+        {
+          "fit": {
+            "negative": 31875,
+            "positive": 5625,
+            "samples": 37500
+          },
+          "inner_fold": 0,
+          "validation": {
+            "negative": 10672,
+            "positive": 1831,
+            "samples": 12503
+          }
+        },
+        {
+          "fit": {
+            "negative": 31989,
+            "positive": 5645,
+            "samples": 37634
+          },
+          "inner_fold": 1,
+          "validation": {
+            "negative": 10528,
+            "positive": 1841,
+            "samples": 12369
+          }
+        },
+        {
+          "fit": {
+            "negative": 32334,
+            "positive": 5706,
+            "samples": 38040
+          },
+          "inner_fold": 2,
+          "validation": {
+            "negative": 10037,
+            "positive": 1926,
+            "samples": 11963
+          }
+        },
+        {
+          "fit": {
+            "negative": 31309,
+            "positive": 5526,
+            "samples": 36835
+          },
+          "inner_fold": 3,
+          "validation": {
+            "negative": 11278,
+            "positive": 1890,
+            "samples": 13168
+          }
+        }
+      ],
+      "outer_folds": [
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 25311,
+                "positive": 4467,
+                "samples": 29778
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 8136,
+                "positive": 1394,
+                "samples": 9530
+              }
+            },
+            {
+              "fit": {
+                "negative": 25017,
+                "positive": 4415,
+                "samples": 29432
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8449,
+                "positive": 1427,
+                "samples": 9876
+              }
+            },
+            {
+              "fit": {
+                "negative": 24818,
+                "positive": 4380,
+                "samples": 29198
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8511,
+                "positive": 1599,
+                "samples": 10110
+              }
+            },
+            {
+              "fit": {
+                "negative": 25088,
+                "positive": 4428,
+                "samples": 29516
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8320,
+                "positive": 1472,
+                "samples": 9792
+              }
+            }
+          ],
+          "outer_fold": 0,
+          "quantile_thresholds": [
+            0.46911003987813343,
+            0.9798022199926217
+          ],
+          "test": {
+            "negative": 9009,
+            "positive": 1686,
+            "samples": 10695
+          },
+          "train": {
+            "negative": 33411,
+            "positive": 5897,
+            "samples": 39308
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 25673,
+                "positive": 4531,
+                "samples": 30204
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 8724,
+                "positive": 1452,
+                "samples": 10176
+              }
+            },
+            {
+              "fit": {
+                "negative": 25725,
+                "positive": 4540,
+                "samples": 30265
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8518,
+                "positive": 1597,
+                "samples": 10115
+              }
+            },
+            {
+              "fit": {
+                "negative": 25733,
+                "positive": 4541,
+                "samples": 30274
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8568,
+                "positive": 1538,
+                "samples": 10106
+              }
+            },
+            {
+              "fit": {
+                "negative": 25837,
+                "positive": 4560,
+                "samples": 30397
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8503,
+                "positive": 1480,
+                "samples": 9983
+              }
+            }
+          ],
+          "outer_fold": 1,
+          "quantile_thresholds": [
+            0.47173910565904814,
+            0.980987629789775
+          ],
+          "test": {
+            "negative": 8321,
+            "positive": 1302,
+            "samples": 9623
+          },
+          "train": {
+            "negative": 34323,
+            "positive": 6057,
+            "samples": 40380
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 25611,
+                "positive": 4520,
+                "samples": 30131
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 8940,
+                "positive": 1533,
+                "samples": 10473
+              }
+            },
+            {
+              "fit": {
+                "negative": 25976,
+                "positive": 4584,
+                "samples": 30560
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8594,
+                "positive": 1450,
+                "samples": 10044
+              }
+            },
+            {
+              "fit": {
+                "negative": 25704,
+                "positive": 4536,
+                "samples": 30240
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8863,
+                "positive": 1501,
+                "samples": 10364
+              }
+            },
+            {
+              "fit": {
+                "negative": 26248,
+                "positive": 4633,
+                "samples": 30881
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8132,
+                "positive": 1591,
+                "samples": 9723
+              }
+            }
+          ],
+          "outer_fold": 2,
+          "quantile_thresholds": [
+            0.4707141499306841,
+            0.9798708233264183
+          ],
+          "test": {
+            "negative": 7920,
+            "positive": 1479,
+            "samples": 9399
+          },
+          "train": {
+            "negative": 34513,
+            "positive": 6091,
+            "samples": 40604
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 25677,
+                "positive": 4532,
+                "samples": 30209
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 8175,
+                "positive": 1489,
+                "samples": 9664
+              }
+            },
+            {
+              "fit": {
+                "negative": 25748,
+                "positive": 4544,
+                "samples": 30292
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 8173,
+                "positive": 1408,
+                "samples": 9581
+              }
+            },
+            {
+              "fit": {
+                "negative": 25457,
+                "positive": 4493,
+                "samples": 29950
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8402,
+                "positive": 1521,
+                "samples": 9923
+              }
+            },
+            {
+              "fit": {
+                "negative": 24792,
+                "positive": 4376,
+                "samples": 29168
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 9166,
+                "positive": 1539,
+                "samples": 10705
+              }
+            }
+          ],
+          "outer_fold": 3,
+          "quantile_thresholds": [
+            0.4697902840129887,
+            0.9798953203173294
+          ],
+          "test": {
+            "negative": 8551,
+            "positive": 1579,
+            "samples": 10130
+          },
+          "train": {
+            "negative": 33892,
+            "positive": 5981,
+            "samples": 39873
+          }
+        },
+        {
+          "inner_folds": [
+            {
+              "fit": {
+                "negative": 25135,
+                "positive": 4436,
+                "samples": 29571
+              },
+              "inner_fold": 0,
+              "validation": {
+                "negative": 8604,
+                "positive": 1672,
+                "samples": 10276
+              }
+            },
+            {
+              "fit": {
+                "negative": 25058,
+                "positive": 4423,
+                "samples": 29481
+              },
+              "inner_fold": 1,
+              "validation": {
+                "negative": 9046,
+                "positive": 1320,
+                "samples": 10366
+              }
+            },
+            {
+              "fit": {
+                "negative": 25728,
+                "positive": 4541,
+                "samples": 30269
+              },
+              "inner_fold": 2,
+              "validation": {
+                "negative": 8111,
+                "positive": 1467,
+                "samples": 9578
+              }
+            },
+            {
+              "fit": {
+                "negative": 25687,
+                "positive": 4533,
+                "samples": 30220
+              },
+              "inner_fold": 3,
+              "validation": {
+                "negative": 8103,
+                "positive": 1524,
+                "samples": 9627
+              }
+            }
+          ],
+          "outer_fold": 4,
+          "quantile_thresholds": [
+            0.47122651007788113,
+            0.9805885810442967
+          ],
+          "test": {
+            "negative": 8700,
+            "positive": 1456,
+            "samples": 10156
+          },
+          "train": {
+            "negative": 33870,
+            "positive": 5977,
+            "samples": 39847
+          }
+        }
+      ]
+    }
+  },
+  "training_role": "development",
+  "trunk_identity_bytes_sha256": "a7aabe129fc7cd6661e4bf07b7e393e9bd5d831ba65fef9a41fbd1f501fafeac"
+}

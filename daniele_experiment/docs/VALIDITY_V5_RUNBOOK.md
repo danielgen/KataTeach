@@ -32,13 +32,13 @@ delete-and-retry that cohort**. The runner stops in this state. Preserve and
 quarantine the partial attempt, then establish a new protocol/cohort identity
 before any new generation.
 
-A fresh Git clone does not include the checkpoint, the 500-game development
-corpus, or the completed run artifacts. It therefore cannot regenerate the
-study from Git alone. The checkpoint's original download source was not
-retained, so exact independent end-to-end regeneration is not currently
-claimed. The repository supports inspection of the pipeline and written
-results; rerunning requires separately supplied data and the exact hashed
-checkpoint.
+A fresh Git clone includes the frozen protocol, compact final reports, and
+provenance summaries, but not the checkpoint, the 500-game development corpus,
+or large generated outputs. It therefore supports auditing the reported
+numbers but cannot regenerate the study from Git alone. The checkpoint's
+original download source was not retained, so exact independent end-to-end
+regeneration is not currently possible. Rerunning requires separately supplied
+source games and the exact hashed checkpoint.
 
 ## Canonical unattended run
 
@@ -66,6 +66,9 @@ generation; this is required for the strict saved-activation equivalence gate.
 
 Expected local wall time is roughly 2–4 hours, but hardware and probe
 convergence can make it longer.
+
+`caffeinate -i` prevents sleep on macOS. Omit that prefix on other operating
+systems, or replace it with the platform's equivalent.
 
 Canonical outputs are written below:
 

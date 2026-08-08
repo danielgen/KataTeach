@@ -5,7 +5,14 @@
 > cited as validated causal evidence. Use `validated_causal_eval.py` only with a
 > prospectively frozen protocol and untouched fresh calibration/test games.
 
-## Recommended: matched-position evaluation
+The examples below require a locally supplied `daniele_experiment/model.ckpt`
+and locally generated probes under `daniele_experiment/linear_probes/`. Those
+files are intentionally excluded from Git. The checkpoint cannot currently be
+downloaded from a recorded source; its expected SHA-256 is documented in the
+experiment README. The probes can be regenerated only when that exact
+checkpoint and the required game corpus are available.
+
+## Historical matched-position evaluation
 
 Build the position bank once from the existing games, labels, and probe scores:
 

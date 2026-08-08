@@ -5,6 +5,12 @@
 > not be cited or merged into validated results. Use the prospectively frozen
 > `validated_probe_pipeline.py` workflow and its run-scoped artifacts instead.
 
+The commands below require locally generated games, datasets, and trained
+probes. These large artifacts are excluded from Git. They are reproducible from
+the source pipeline only when the required game corpus and the exact checkpoint
+described in the experiment README are supplied. The example game UUID is not
+included in a fresh clone.
+
 The linear-probe workflow scores every move, writes browser-friendly concept
 data, and can inject that data into each game's `viz.html`.
 

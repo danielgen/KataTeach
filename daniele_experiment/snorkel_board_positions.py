@@ -30,7 +30,7 @@ TAU_ONLY_MOVE = 0.05    # "Only move" threshold
 TAU_GROUP_IOU = 0.4     # Group matching IoU threshold (raised from 0.1 to reduce false matches)
 TAU_GROUP_BELONGING = 0.2  # Ownership threshold for grouping stones by influence paths
 TAU_AJI_VICINITY = 5    # Aji reduction L1 radius
-TAU_DELTA_MIN = 0.05     # Minimum ownership delta for solidification/reduction (docs may lag)
+TAU_DELTA_MIN = 0.05     # Minimum ownership delta for solidification/reduction
 SEKI_THRESHOLD = 0.5     # Min seki probability to flag has_seki
 
 REGIONS = ["corner_tl", "corner_tr", "corner_bl", "corner_br",

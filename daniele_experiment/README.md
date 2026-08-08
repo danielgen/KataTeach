@@ -9,10 +9,10 @@ their current paths.
 
 | Goal | Entry point | Guide |
 | --- | --- | --- |
-| Reproduce the validated v5 experiment | `validated_probe_pipeline.py` | [Validity v5 runbook](docs/VALIDITY_V5_RUNBOOK.md) |
+| Inspect or rerun the validated v5 workflow | `validated_probe_pipeline.py` | [Validity v5 runbook](docs/VALIDITY_V5_RUNBOOK.md) |
 | Read the validated results | `validated_results_report.py` | [Experiments and results](docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md) |
 | Run the legacy/exploratory probe workflow | `linear_probe_pipeline.py` | [Linear probes workflow](docs/LINEAR_PROBES_WORKFLOW.md) |
-| Generate self-play game data | `generate_games_dataset.py` | [Refactoring summary](docs/REFACTORING_SUMMARY.md) |
+| Generate self-play game data | `generate_games_dataset.py` | Run `python daniele_experiment/generate_games_dataset.py --help` |
 | Inspect or change concept labels | `snorkel_board_positions.py` | [Snorkel features](docs/SNORKEL_FEATURES_DOCUMENTATION.md) |
 | Run activation interventions | `activation_manipulation.py` | [Activation manipulation](docs/ACTIVATION_MANIPULATION.md) |
 | Explore tenuki interventions | `tenuki_gradient_analysis.py` | [Tenuki analysis](docs/TENUKI_INTERVENTION_ANALYSIS.md) |
@@ -104,9 +104,16 @@ environment named `ml`; that environment name is not a dependency of the code.
 
 ## Data and checkpoint availability
 
-The multi-gigabyte game corpus, run directory, logs, and model checkpoint are
-excluded from Git. A clone contains the pipeline and results documentation, but
-not the data needed to rerun the experiment or inspect row-level artifacts.
+The compact validity-v5 audit record is tracked under `artifacts/protocols/`
+and selected paths under `artifacts/runs/`. It includes the frozen protocol,
+final corrected reports, report manifests, label and training provenance,
+causal validation summaries, and checkpoint-fidelity record. The two F1/F5
+exploratory JSON reports are tracked under `artifacts/exploratory/`.
+
+The multi-gigabyte game corpus, Parquet datasets, saved activations, trained
+probe weights, row-level predictions, logs, and model checkpoint remain
+excluded from Git. They can be regenerated only with the exact checkpoint and
+source game corpus described below.
 
 The locally preserved checkpoint has:
 
@@ -120,8 +127,10 @@ development games within the frozen tolerance. This is empirical compatibility
 evidence, not proof that it originally generated every historical activation.
 The later 150-game prospective cohort was explicitly bound to this hash.
 
-Exact end-to-end reproduction requires the omitted checkpoint and run data.
-Numerical claims, limitations, hashes, and provenance relationships are recorded in
+Exact end-to-end reproduction requires the omitted checkpoint and source game
+corpus. The tracked reports make the published numerical claims inspectable,
+but do not replace those inputs. Limitations, hashes, and provenance
+relationships are recorded in
 [`docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md`](docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md).
 
 Some exploratory JSON records contain absolute paths from the original machine.

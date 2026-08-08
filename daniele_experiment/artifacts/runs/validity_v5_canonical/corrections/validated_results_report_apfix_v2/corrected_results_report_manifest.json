@@ -1,0 +1,14 @@
+{
+  "correction_id": "average_precision_zero_weight_leading_score_group_v2",
+  "correction_reporter_source_sha256": "a882a7430d67f14869fa377a9e73c361500392ea149cd38a30876cd9b98b63db",
+  "created_at_utc": "2026-07-31T18:19:16.917494+00:00",
+  "original_frozen_report_manifest_sha256": "86c636e05495de94885df153318f86fe283ff94dba6194be561069e0f83ade80",
+  "original_frozen_report_sha256": "103e7f3ecec674055309920f6812cdbc14738186ce4b75c9a8ab00021c56cd85",
+  "original_frozen_reporter_source_sha256": "a197f8faacdd050e5053e1b61c8c67aa6149e72f397671afe94174ca5b9c010d",
+  "pipeline": "validated_results_report_apfix_v2",
+  "report": "corrections/validated_results_report_apfix_v2/corrected_results_report.json",
+  "report_sha256": "a94b78ffb0469ad1d732a51bc65b7ac13cc1f28c9445dd79da14b5bd1150b576",
+  "schema_version": 1,
+  "status": "complete_post_freeze_reporting_correction",
+  "upstream_training_manifest_sha256": "4175cfb9a6c84fe832a8dca55ec01844fd36465e2a09c58a576047748c346e31"
+}

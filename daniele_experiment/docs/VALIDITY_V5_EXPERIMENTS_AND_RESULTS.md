@@ -1,5 +1,21 @@
 # Validity-v5 Experiments and Results
 
+## Artifact availability
+
+The frozen protocol, corrected probe reports, report manifests, label and
+training provenance, checkpoint-fidelity record, causal summaries, and F1/F5
+exploratory JSON outputs cited below are tracked in this repository at their
+listed paths. Some records retain absolute paths from the machine that ran the
+experiment; these are execution metadata, while hashes and repository-relative
+names provide portable identity.
+
+Large generated inputs and intermediate outputs—including the game corpus,
+Parquet datasets, saved activations, trained probes, row-level predictions,
+runtime logs, and `model.ckpt`—are not tracked. The small focused-test record is
+included. Accordingly, the repository supports
+inspection of the final numerical record but not independent end-to-end rerun
+without the separately preserved source games and exact hashed checkpoint.
+
 This document records the experiments and results in the validity-v5 analysis. All quoted paths are relative to the repository root.
 
 The evidence has three distinct statuses:
@@ -74,7 +90,9 @@ The supplied checkpoint was replayed against one deterministically sampled saved
 
 Result source: `daniele_experiment/artifacts/runs/validity_v5_canonical/checkpoint_activation_fidelity.json`.
 
-The focused validity-v5 test suite recorded 88 passing tests.
+The frozen validity-v5 run recorded 88 passing tests; its focused-test log is
+tracked with the audit artifacts. The current repository test suite contains
+additional coverage and passed 118 tests in the `ml` environment on 2026-08-08.
 
 Test source: `daniele_experiment/artifacts/logs/validity_v5/focused_tests.log`.
 
@@ -331,6 +349,11 @@ Failed-attempt notice: `daniele_experiment/artifacts/archive/20260731_validity_v
 The uncorrected canonical and exploratory `validated_results_report.json` files remain part of the audit trail but are superseded for average-precision bootstrap reporting by the `apfix_v2` reports quoted above.
 
 ## 7. Authoritative artifact index
+
+The compact JSON, YAML, manifest, and focused-test records in this index are
+tracked. Entries for Parquet datasets, activation bindings, prediction
+directories, and the large feature-build manifests identify preserved local
+intermediates and are not part of the Git repository.
 
 | Evidence | Repository-relative path |
 |---|---|

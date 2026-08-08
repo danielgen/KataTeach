@@ -1,0 +1,11 @@
+{
+  "created_at_utc": "2026-07-31T08:57:16.899762+00:00",
+  "pipeline": "validated_causal_results_report",
+  "report": "validated_causal_results_report.json",
+  "report_sha256": "b076821acd2f3bb228a1e0393e1f7a5e237af9f7a89f86da860f744eece2fef7",
+  "reporter_source_sha256": "27466f2d2f2366eab39af9d908485f77af938832afd1c55c9432473f72ef79c2",
+  "schema_version": 1,
+  "status": "complete",
+  "upstream_causal_manifest_sha256": "4c700b0fe46506d186c956388575a0849e9aff1e43d77f18a51291cd9f6eb585",
+  "upstream_causal_rows_sha256": "fd286328ed149313c7e0b7f4ab8efd49fac1406dc9285cc9612356408af4ccc8"
+}

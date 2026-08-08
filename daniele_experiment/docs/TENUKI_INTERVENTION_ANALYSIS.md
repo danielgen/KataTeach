@@ -1,31 +1,29 @@
 # Tenuki Intervention: Setup, Verified Inventory, and Design-vs-Conceptual Failure Analysis
 
-Working analysis note. Sections 1–3 are verified against artifacts and code and are safe to
-cite. Section 4 is interpretation: it enumerates candidate explanations for the failed
-confirmatory intervention and marks which ones the existing evidence supports, excludes, or
-leaves open. Section 5 lists follow-up experiments that would distinguish them. All paths are
-repository-relative.
+This report records the failed confirmatory intervention and the completed F1
+and F5 exploratory diagnostics. Sections 7–9 contain the latest interpretation;
+the registered validity-v5 verdict remains unchanged. All paths are relative to
+the repository root.
 
 ## 1. Verified experiment inventory
 
-These counts were re-verified directly from the run artifacts (not just the writeup) on
-2026-08-05.
+These counts were re-verified directly from the run artifacts on 2026-08-05.
 
 - **27 concept labels received linear probes** in validity v5. Verified by counting the
   `concepts` entries in the two corrected reports:
-  - `artifacts/runs/validity_v5_canonical/corrections/validated_results_report_apfix_v2/corrected_results_report.json`
+  - `daniele_experiment/artifacts/runs/validity_v5_canonical/corrections/validated_results_report_apfix_v2/corrected_results_report.json`
     contains 3: `tenuki`, `forcing`, `urgency_peak`.
-  - `artifacts/runs/validity_v5_legacy_exploratory/corrections/validated_results_report_apfix_v2/corrected_results_report.json`
+  - `daniele_experiment/artifacts/runs/validity_v5_legacy_exploratory/corrections/validated_results_report_apfix_v2/corrected_results_report.json`
     contains 27: the same 3 (duplicated for comparison) plus 24 historical labels.
 - The frozen exploratory `concepts.yaml` actually **configures 30** concepts. Three
   (`seki`, `group_connectivity_shift`, `group_strength_shift`) never trained because their
   source fields are not among the 22 hash-checked migrated legacy fields in
-  `artifacts/runs/validity_v5_legacy_exploratory/labels_manifest.json`, and they do not
+  `daniele_experiment/artifacts/runs/validity_v5_legacy_exploratory/labels_manifest.json`, and they do not
   appear in the training manifest's `trainability_audit` (27 entries). So: 30 configured,
   27 probed, 3 canonical.
 - The 3 canonical variables were not "selected from the 27 by probe performance"; they were
   **promoted** by recomputing them from raw game records under versioned contracts
-  (`operational_definitions.py`), independently of the historical Snorkel output:
+  (`daniele_experiment/operational_definitions.py`), independently of the historical Snorkel output:
 
   | Human concept | Canonical contract | Legacy Snorkel name |
   |---|---|---|
@@ -35,16 +33,16 @@ These counts were re-verified directly from the run artifacts (not just the writ
 
 - **All probes were retrained inside validity v5** with corrected `idx361` feature indexing.
   No reported probe number predates the refactor; pre-correction results are archived under
-  `artifacts/archive/20260730_pre_idx361_invalid_v1/`.
+  `daniele_experiment/artifacts/archive/20260730_pre_idx361_invalid_v1/`.
 - **Exactly one valid activation-manipulation experiment exists**: the tenuki-distance proxy,
   on 100 held-out games. Forcing and urgency have probe evidence only. Earlier interventions
   for forcing/urgency/corner concepts are quarantined pre-`idx361` outputs.
 
 ## 2. The tenuki activation-manipulation setup
 
-Implementation: `validated_causal_eval.py` (`InterventionDirection`, `concept_spatial_mask`,
-`tenuki_contrast_mask`); controls in `causal_controls.py`; frozen protocol in
-`artifacts/protocols/validity_v5.json`.
+Implementation: `daniele_experiment/validated_causal_eval.py` (`InterventionDirection`, `concept_spatial_mask`,
+`tenuki_contrast_mask`); controls in `daniele_experiment/causal_controls.py`; frozen protocol in
+`daniele_experiment/artifacts/protocols/validity_v5.json`.
 
 ### 2.1 Direction (what gets added, channel-wise)
 
@@ -223,7 +221,7 @@ retroactively change the registered v5 verdict.
   to this mask–direction composite, confirming the sign was never a coin flip. Repeating
   with δ replaced by each random direction quantifies the direction-specific component
   exactly, without any calibration machinery.
-  **Implemented and executed on 2026-08-05: `tenuki_gradient_analysis.py`; results in
+  **Implemented and executed on 2026-08-05: `daniele_experiment/tenuki_gradient_analysis.py`; results in
   Section 7. The verdict in Sections 3–4 is revised there.**
 - **F2 — Complete the 2×2 (D1).** Run random-direction × shuffled-mask controls. Comparing
   the four cells decomposes mask, direction, and interaction contributions.
@@ -240,19 +238,21 @@ retroactively change the registered v5 verdict.
 - **F5 — Single-site intervention (D2).** Apply δ only at one candidate far location (the
   kind of location the probe was actually trained on) and read out that move's policy
   probability. This tests the direction in-distribution instead of broadcast.
-  **Implemented and executed on 2026-08-05: `tenuki_single_site_analysis.py`; results in
+  **Implemented and executed on 2026-08-05: `daniele_experiment/tenuki_single_site_analysis.py`; results in
   Section 8.**
-- **F6 — Larger / re-normalised doses (D5).** Extend to ±5, ±10 probe-score units and check
-  for non-linearity or sign change. (The currently running exploratory
-  `position_causal_eval.py` sweep with doses ±5 and 10 random directions is relevant here —
-  but note it is the quarantined exploratory tool: its outputs are diagnostic only and
-  cannot enter the confirmatory record.)
+- **F6 — Larger / re-normalised doses (D5).** Extend to ±5, ±10
+  probe-score units and check for non-linearity or sign change. This remains a
+  possible exploratory follow-up; no result from it enters the confirmatory
+  record.
 - **F7 — Counterfactual label flip probe (C2).** Construct positions where distance ≥ 6 and
   "strategically a tenuki" dissociate (e.g. forced ladders reaching far away) and check
   which one the probe tracks. Distinguishes geometric from strategic content of the
   direction.
 
-## 6. One-paragraph summary (pre-F1; revised by Section 7)
+## 6. Original pre-F1 interpretation
+
+This section is retained to show how the interpretation changed. It is
+superseded by the completed F1/F5 analysis and the current summary in Section 9.
 
 Validity v5 probed 27 weakly supervised concept labels (3 recomputed under validated
 contracts + 24 migrated exploratory ones; 30 were configured, 3 never trained); all probes
@@ -270,9 +270,9 @@ and F3 (activation patching) are the cheapest next steps that would separate the
 
 ## 7. F1 executed: analytic gradient results (2026-08-05)
 
-Implementation: `tenuki_gradient_analysis.py` (unit tests in
-`test_tenuki_gradient_analysis.py`, 7 passing). Output artifact:
-`artifacts/exploratory/tenuki_gradient_analysis.json`. Exploratory diagnostic only; the
+Implementation: `daniele_experiment/tenuki_gradient_analysis.py` (unit tests in
+`test_daniele_experiment/tenuki_gradient_analysis.py`, 7 passing). Output artifact:
+`daniele_experiment/artifacts/exploratory/tenuki_gradient_analysis.json`. Exploratory diagnostic only; the
 registered validity-v5 verdict is unchanged.
 
 For each of the same 100 hash-bound causal-test positions (selection verified identical to
@@ -357,9 +357,9 @@ further toward the conceptual side and identifies a concrete mechanism.**
 
 ## 8. F5 executed: single-site results and mechanism (2026-08-05)
 
-Implementation: `tenuki_single_site_analysis.py` (unit tests in
-`test_tenuki_single_site_analysis.py`; 13 passing across both diagnostic tools). Output:
-`artifacts/exploratory/tenuki_single_site_analysis.json`. Same 100 hash-bound causal-test
+Implementation: `daniele_experiment/tenuki_single_site_analysis.py` (unit tests in
+`test_daniele_experiment/tenuki_single_site_analysis.py`; 13 passing across both diagnostic tools). Output:
+`daniele_experiment/artifacts/exploratory/tenuki_single_site_analysis.json`. Same 100 hash-bound causal-test
 positions, same seeded random directions; all quantities are analytic dose-0 derivatives.
 Dose unit: one raw probe-score unit at the intervened site (a single-point mask has unit
 RMS, so this is the same dose convention as the confirmatory run before spatial shaping).
@@ -450,13 +450,12 @@ partially a broadcast-design artifact: the probe found a direction that is infor
 about tenuki but whose causal content is anti-aligned ("leavable / don't play here" rather
 than "play far"). Decodability and steerability dissociate here not because the direction
 is causally inert, but because its causal orientation contradicts the label semantics — a
-sharper version of the dissertation's central claim that probe performance cannot license
-causal-use conclusions.
+a sharper demonstration that probe performance alone cannot license conclusions
+about causal use.
 
-## 10. Claim boundaries for writing up (added 2026-08-05)
+## 10. Evidential boundaries
 
-This section fixes what the F1/F5 diagnostics do and do not license, for use when drafting
-the dissertation. Everything in Sections 7–9 is exploratory; the registered validity-v5
+Everything in Sections 7–9 is exploratory; the registered validity-v5
 verdict (`does_not_pass_predeclared_headline_support_criterion`) is unchanged.
 
 **Supported (safe to state, as exploratory findings):**
@@ -495,5 +494,4 @@ first-order version is already contained in F5 (self-effect at the actually sele
 −3.40 × 10⁻⁴ per dose unit, negative at 98/100 positions, strongest for far-selected
 moves). A new experiment would only add value as (a) a finite-dose test of practical
 top-move demotion, or (b) a *positive* confirmatory claim about the suppressor direction —
-which would require a newly frozen protocol and untouched games. Neither is needed for the
-dissertation's methodological conclusion.
+which would require a newly frozen protocol and untouched games.
