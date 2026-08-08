@@ -15,13 +15,11 @@ matching directory and use a stable run or protocol identifier.
 
 ## Portability of recorded paths
 
-The tracked exploratory JSON files preserve the absolute checkpoint and run
-paths reported by the original commands. These strings document where the
-commands ran; consumers should use the adjacent SHA-256 values and
-repository-relative artifact identities for provenance. The absolute paths are
-not required inputs and are not expected to exist on another machine.
+The exploratory JSON files record the absolute checkpoint and run paths used by
+the original commands. Portable provenance is provided by the adjacent SHA-256
+values and repository-relative artifact names; the absolute paths are not
+required inputs.
 
 Large run directories, logs, checkpoints, and archived payloads are excluded
-from Git. Their absence from a fresh clone is intentional, but means this
-repository alone is not a complete data deposit. Availability and checkpoint
-limitations are stated in `daniele_experiment/README.md`.
+from Git. Data and checkpoint availability are described in
+`daniele_experiment/README.md`.

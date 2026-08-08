@@ -1,9 +1,9 @@
 # Daniele experiment
 
 This package contains the KataGo game-generation, concept-labeling, linear-probe,
-and causal-validation experiments. Existing files intentionally remain at the
-package root: scripts, imports, run manifests, and archived checksums refer to
-these exact paths.
+and causal-validation experiments. Scripts used by the validated pipeline remain
+at the package root because imports, manifests, and archived checksums refer to
+their current paths.
 
 ## Start here
 
@@ -58,17 +58,16 @@ these exact paths.
 
 ### Supporting directories
 
-- `docs/` — canonical home of all experiment documentation.
-- `tests/` — canonical home of the test suite.
+- `docs/` — experiment documentation.
+- `tests/` — current tests and retained legacy checks.
 - `artifacts/` — generated protocols, runs, logs, exploratory output, and invalidated archives.
 - `katago/` — small KataGo parsing package.
-- Root-level executable source paths remain canonical for compatibility.
+- Root-level executable source paths are retained for compatibility.
 
 The validated scripts remain at the package root because the pipeline records
 their exact source paths and resolves sibling files when checking hashes.
-Physically moving them would invalidate existing runs. Documentation and tests
-do not participate in those provenance hashes and therefore live under
-`docs/` and `tests/`.
+Moving them would invalidate existing runs. Documentation and tests are stored
+under `docs/` and `tests/` because they are not part of those provenance hashes.
 
 Generated caches such as `__pycache__/`, `.pytest_cache/`, and
 `.ipynb_checkpoints/` are not source code and can be ignored while navigating.
@@ -105,10 +104,9 @@ environment named `ml`; that environment name is not a dependency of the code.
 
 ## Data and checkpoint availability
 
-The multi-gigabyte game corpus, canonical run directory, logs, and model
-checkpoint are intentionally excluded from Git. Consequently, a fresh clone
-contains the complete pipeline and written results, but not everything required
-to rerun the experiment or independently inspect every row-level artifact.
+The multi-gigabyte game corpus, run directory, logs, and model checkpoint are
+excluded from Git. A clone contains the pipeline and results documentation, but
+not the data needed to rerun the experiment or inspect row-level artifacts.
 
 The locally preserved checkpoint has:
 
@@ -122,21 +120,10 @@ development games within the frozen tolerance. This is empirical compatibility
 evidence, not proof that it originally generated every historical activation.
 The later 150-game prospective cohort was explicitly bound to this hash.
 
-Exact end-to-end reproduction from a fresh clone is therefore currently
-limited by unavailable external distribution of the checkpoint and run data.
-The numerical claims, limitations, hashes, and provenance relationships that
-remain available are documented in
+Exact end-to-end reproduction requires the omitted checkpoint and run data.
+Numerical claims, limitations, hashes, and provenance relationships are recorded in
 [`docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md`](docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md).
 
-Some tracked exploratory JSON records contain the absolute path of the machine
-on which they were generated. Those strings are historical execution metadata,
-not required input paths and not evidence that another user must recreate that
-directory structure.
-
-## Academic use
-
-This is supporting code for an MSc final project, not a separately published
-software or dataset release. A DOI or `CITATION.cff` has therefore not been
-invented. When referencing this work, cite the final project itself and link to
-the exact repository commit or release used, rather than the moving `main`
-branch.
+Some exploratory JSON records contain absolute paths from the original machine.
+They are execution metadata; the adjacent hashes and repository-relative
+artifact names provide the portable identifiers.

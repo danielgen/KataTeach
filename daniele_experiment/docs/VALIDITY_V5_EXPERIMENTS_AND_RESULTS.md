@@ -1,6 +1,6 @@
 # Validity-v5 Experiments and Results
 
-This document is a standalone technical record of the experiments and results in the validity-v5 analysis. It deliberately excludes the dissertation's literature review, philosophical framing, development narrative, and general introduction. All quoted paths are relative to the repository root.
+This document records the experiments and results in the validity-v5 analysis. All quoted paths are relative to the repository root.
 
 The evidence has three distinct statuses:
 

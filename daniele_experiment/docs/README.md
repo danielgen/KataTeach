@@ -1,6 +1,6 @@
 # Documentation
 
-This directory is the canonical home of the experiment documentation.
+This directory contains the experiment documentation.
 
 Start with:
 

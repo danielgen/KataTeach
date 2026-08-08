@@ -1,6 +1,6 @@
 # Validity-v5 runbook
 
-This workflow deliberately separates two result namespaces:
+The workflow uses two separate result namespaces:
 
 - `validity_v5_canonical`: tenuki, forcing proxy, and urgency proxy, all
   recomputed from raw moves/policies under versioned contracts.
@@ -28,7 +28,7 @@ that has all of the following:
 - exactly zero games carrying the `validity_v5_postfreeze_holdout` cohort ID.
 
 If between 1 and 149 fresh-cohort games exist, **do not resume, refill, or
-delete-and-retry that cohort**. The runner stops deliberately. Preserve and
+delete-and-retry that cohort**. The runner stops in this state. Preserve and
 quarantine the partial attempt, then establish a new protocol/cohort identity
 before any new generation.
 
@@ -57,15 +57,15 @@ probe representations, runs the held-out tenuki intervention and matched
 controls, and writes the causal report plus the original frozen probe report
 and its versioned AP-bootstrap correction.
 
-Do not interrupt the fresh-generation stage. A partial prospective cohort is
-intentionally not resumed or refilled. If a stage fails, retain the files and
+Do not interrupt the fresh-generation stage. A partial prospective cohort must
+not be resumed or refilled. If a stage fails, retain the files and
 inspect its log under `daniele_experiment/artifacts/logs/validity_v5/`.
 
 The causal replay is pinned to four CPU threads, matching fresh-game
 generation; this is required for the strict saved-activation equivalence gate.
 
 Expected local wall time is roughly 2–4 hours, but hardware and probe
-convergence can make it longer. It requires no agent/API monitoring.
+convergence can make it longer.
 
 Canonical outputs are written below:
 
