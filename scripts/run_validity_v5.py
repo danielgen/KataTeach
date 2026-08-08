@@ -53,15 +53,15 @@ CHECKPOINT_TOLERANCE = 0.0001
 DOSES = ("-2", "-1", "0", "1", "2")
 
 FOCUSED_TESTS = (
-    "daniele_experiment/test_operational_definitions.py",
-    "daniele_experiment/test_build_validated_labels.py",
-    "daniele_experiment/test_validated_probe_pipeline.py",
-    "daniele_experiment/test_validated_results_report.py",
-    "daniele_experiment/test_validated_results_report_apfix_v2.py",
-    "daniele_experiment/test_validated_causal_results_report.py",
-    "daniele_experiment/test_validated_causal_eval.py",
-    "daniele_experiment/test_causal_controls.py",
-    "daniele_experiment/test_checkpoint_activation_fidelity.py",
+    "daniele_experiment/tests/test_operational_definitions.py",
+    "daniele_experiment/tests/test_build_validated_labels.py",
+    "daniele_experiment/tests/test_validated_probe_pipeline.py",
+    "daniele_experiment/tests/test_validated_results_report.py",
+    "daniele_experiment/tests/test_validated_results_report_apfix_v2.py",
+    "daniele_experiment/tests/test_validated_causal_results_report.py",
+    "daniele_experiment/tests/test_validated_causal_eval.py",
+    "daniele_experiment/tests/test_causal_controls.py",
+    "daniele_experiment/tests/test_checkpoint_activation_fidelity.py",
 )
 
 

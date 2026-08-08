@@ -10,6 +10,36 @@ This workflow deliberately separates two result namespaces:
 
 Neither run reads old probe models, old probe scores, or old causal results.
 
+## Should the games be regenerated?
+
+**For the completed project workspace: no.** Keep the existing 500 development
+games and 150 prospective validity-v5 games unchanged. When all 150 fresh games
+exist with the expected cohort, seeds, and deterministic UUIDs, the canonical
+runner verifies them and prints `[generate] verified existing complete fresh
+cohort`; it does not generate replacements.
+
+The runner generates the 150 prospective games only in a prepared workspace
+that has all of the following:
+
+- the original 500 complete development games;
+- the exact checkpoint with SHA-256
+  `9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3`;
+- the frozen or reproducibly freezeable validity-v5 protocol; and
+- exactly zero games carrying the `validity_v5_postfreeze_holdout` cohort ID.
+
+If between 1 and 149 fresh-cohort games exist, **do not resume, refill, or
+delete-and-retry that cohort**. The runner stops deliberately. Preserve and
+quarantine the partial attempt, then establish a new protocol/cohort identity
+before any new generation.
+
+A fresh Git clone does not include the checkpoint, the 500-game development
+corpus, or the completed run artifacts. It therefore cannot regenerate the
+study from Git alone. The checkpoint's original download source was not
+retained, so exact independent end-to-end regeneration is not currently
+claimed. The repository supports inspection of the pipeline and written
+results; rerunning requires separately supplied data and the exact hashed
+checkpoint.
+
 ## Canonical unattended run
 
 From the repository root, run:
@@ -19,8 +49,9 @@ caffeinate -i conda run --no-capture-output -n ml \
   python scripts/run_validity_v5.py canonical
 ```
 
-The runner performs focused tests, freezes the protocol, generates 150 fresh
-games in three CPU shards, rebuilds canonical labels/features, validates the
+The runner performs focused tests, freezes or verifies the protocol, generates
+the 150 fresh games only if none exist (otherwise verifying and skipping the
+complete cohort), rebuilds canonical labels/features, validates the
 checkpoint against one saved activation per development game, trains all three
 probe representations, runs the held-out tenuki intervention and matched
 controls, and writes the causal report plus the original frozen probe report
@@ -75,10 +106,10 @@ caffeinate -i conda run --no-capture-output -n ml \
 
 This genuinely runs both workflows and may take roughly 10–28 hours in total.
 
-## Results and write-up
+## Results
 
-Do not copy numerical claims into `project_writeup.md` until the append-only
-reports exist and pass their provenance checks. For probe analysis, use
+Use numerical claims only after the append-only reports exist and pass their
+provenance checks. For probe analysis, use
 `corrections/validated_results_report_apfix_v2/corrected_results_report.json`.
 The prospectively frozen `validated_results_report.json` is retained unchanged
 for auditability, but its average-precision bootstrap intervals are superseded:

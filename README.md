@@ -16,7 +16,6 @@ KataGo's authentic human-like concepts.
 Project entry points:
 
 - [Experiment overview and file map](daniele_experiment/README.md)
-- [Full project write-up](daniele_experiment/docs/project_writeup.md)
 - [Validity-v5 experiments and results](daniele_experiment/docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md)
 - [Reproduction runbook](daniele_experiment/docs/VALIDITY_V5_RUNBOOK.md)
 
