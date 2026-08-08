@@ -212,12 +212,11 @@ of its aligned mask, does essentially nothing; with the mask, it behaves like a 
 direction. That pattern is most parsimoniously explained by **C1/C3 (the probe direction is
 not a functional control axis) combined with D1 (the composite design's sensitivity floor is
 set by mask-generic effects)**. The unanimous inverse sign is most likely a structural
-property of how the policy head reads *this particular mask-shaped perturbation* (D3/D4),
-not evidence of an "anti-tenuki" direction — the frozen protocol explicitly forbids that
-relabelling, and 30/100 random directions produced even more negative slopes.
-
-What the experiment does *not* license: concluding that KataGo has no tenuki-like internal
-feature. It tested one direction, one layer, one mask family, one dose range, without search.
+property of how the policy head reads *this particular mask-shaped perturbation* (D3/D4).
+Thirty of the 100 random directions produced even more negative slopes, so the
+result did not establish an "anti-tenuki" direction. It also cannot establish
+that KataGo lacks a tenuki-like internal feature: the experiment covered one
+direction, one layer, one mask family, and one dose range, without search.
 
 ## 5. Follow-up experiments that would separate the hypotheses
 
@@ -339,12 +338,11 @@ dose range) lose weight; the live explanations are now:
   local-attention feature that co-varies with the distance label in natural play but
   suppresses distant moves when amplified).
 
-The frozen protocol rightly forbids renaming this a "negative tenuki direction" as a
-*confirmatory* claim; but as an exploratory fact, the anti-aligned coupling is real,
-precise, and reproducible, and F5/F3 are the experiments that would tell whether it is an
-artifact of broadcasting or a property of the encoded feature. **F5 was executed the same
-day; see Section 7 — the sign does not flip back in-distribution, which moves the verdict
-further toward the conceptual side and identifies a concrete mechanism.**
+The frozen hypothesis concerned positive steering, so the negative coupling is
+an exploratory observation rather than confirmation of a differently named
+direction. The coupling is precise and reproducible. F5, reported in Section
+7, tested whether it was caused by broadcasting the intervention and found the
+same sign at individual in-distribution sites.
 
 ## 7. F5 single-site results and mechanism (2026-08-05)
 
@@ -416,9 +414,8 @@ The design lesson is equally concrete: the frozen mask assumed the direction was
 "play-far" feature and applied it positively on far sites. Under the suppressor reading,
 steering *toward* tenuki would instead apply the direction positively on **near** sites
 (make the local area look leavable). The decomposition already supports this prediction
-exploratorily — near-site injection raises far mass at 99% of sites — but any such claim
-would need a fresh frozen protocol and untouched games to be more than hypothesis
-generation.
+exploratorily: near-site injection raises far mass at 99% of sites. This
+prediction has not been tested on a new held-out cohort.
 
 What remains genuinely open: whether the suppressive content is best described as
 settledness, low local urgency, low policy confidence, or another correlate (F7-style
@@ -466,22 +463,18 @@ verdict (`does_not_pass_predeclared_headline_support_criterion`) is unchanged.
 
 ### Limitations
 
-- *"The probe actually found a settled-local-position concept."* The
-  settledness/leavability reading is one interpretation consistent with both the high AUC
-  and the negative self-effects, but F5 does not discriminate it from other anti-aligned
-  correlates: low local urgency, low local policy confidence, local "already decided"
-  status, or game-phase/density proxies. Naming the feature requires an F7-style
-  dissociation battery. The direction predicts the tenuki-distance label but
-  causally suppresses play at the intervened site; a possible interpretation
-  is that the local area can be left, although the data do not uniquely
-  identify that semantics.
-- Any *confirmatory* causal claim about the suppressor (including reversing the sign into
-  a "negative tenuki direction" or a steering recipe). The frozen protocol forbids post-hoc
-  sign reversal, and the diagnostics were computed on the same 100 test positions the
-  confirmatory run used, so they cannot serve as fresh held-out evidence.
+- The settledness or leavability interpretation is consistent with both the
+  high AUC and the negative self-effects, but F5 does not distinguish it from
+  low local urgency, low policy confidence, an already-decided local position,
+  or game-phase and density effects. The direction predicts the
+  tenuki-distance label and suppresses play at the intervened site, but its
+  semantic content is not uniquely identified.
+- F1 and F5 reused the 100 confirmatory test positions. They explain the
+  observed mechanism but are not an independent held-out confirmation of a
+  suppressor direction or a reversed steering procedure.
 
 The first-order version of a reverse test is already contained in F5 (self-effect at the actually selected move:
 −3.40 × 10⁻⁴ per dose unit, negative at 98/100 positions, strongest for far-selected
-moves). A new experiment would only add value as (a) a finite-dose test of practical
-top-move demotion, or (b) a *positive* confirmatory claim about the suppressor direction —
-which would require a newly frozen protocol and untouched games.
+moves). A finite-dose experiment could additionally measure practical top-move
+demotion. A new untouched cohort would be required to test the suppressor
+interpretation independently.

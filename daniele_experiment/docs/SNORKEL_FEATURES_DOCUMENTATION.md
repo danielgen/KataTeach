@@ -53,8 +53,8 @@ Regional summaries record where these changes occur.
 
 Forcing, tenuki, urgency, territory building or securing, influence change,
 and aji reduction are operational proxies built from the lower-level signals.
-They are useful labels for exploration, but their names should not be read as
-proof that the network represents the corresponding human concept.
+Their names describe the intended measurement; the labels alone do not
+establish that the network represents the corresponding human concept.
 
 The validated-v5 results use stricter versioned definitions for the canonical
 tenuki, forcing, and urgency variables. See

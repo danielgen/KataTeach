@@ -310,7 +310,11 @@ All three required conditions failed: the trained slope was not positive, the ra
 
 Decision source: `daniele_experiment/artifacts/runs/validity_v5_canonical/causal/tenuki_local/validated_causal_results_report.json`.
 
-The valid conclusion is that the intervention pipeline executed as specified, but this held-out experiment did not support concept-specific positive steering of the tenuki-distance readout. The inverse signed response should not be relabelled after inspection as a successful “negative tenuki direction,” because that would reverse the frozen hypothesis and would not resolve the failed direction-specific controls.
+The intervention pipeline executed as specified, but the held-out experiment
+did not support concept-specific positive steering of the tenuki-distance
+readout. The negative response answers a different question from the frozen
+positive-steering hypothesis and did not outperform the direction-specific
+controls under the predeclared test.
 
 ## 4. Experiment 3: exploratory probes for historical operational labels
 

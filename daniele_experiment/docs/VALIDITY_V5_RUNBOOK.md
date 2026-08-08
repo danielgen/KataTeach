@@ -100,8 +100,9 @@ CV. Its output remains separate:
 daniele_experiment/artifacts/runs/validity_v5_legacy_exploratory/
 ```
 
-Do not merge its tables with the canonical report or use its concepts in the
-headline causal claim.
+Its tables are stored separately from the main analysis because the labels come
+from the earlier exploratory feature set. They do not contribute to the causal
+test.
 
 To run the canonical and legacy-exploratory workflows consecutively in one
 unattended command, use:
@@ -111,16 +112,16 @@ caffeinate -i conda run --no-capture-output -n ml \
   python scripts/run_validity_v5.py all
 ```
 
-This genuinely runs both workflows and may take roughly 10–28 hours in total.
+The combined command runs both workflows and may take roughly 10–28 hours in
+total.
 
-## Results
+## Output reports
 
-Use numerical claims only after the append-only reports exist and pass their
-provenance checks. For probe analysis, use
+The final probe results are stored in
 `corrections/validated_results_report_apfix_v2/corrected_results_report.json`.
-The prospectively frozen `validated_results_report.json` is retained unchanged
-for auditability, but its average-precision bootstrap intervals are superseded:
-zero-weight leading score groups were incorrectly propagated as `NaN`. The
-versioned correction changes only AP bootstrap records and verifies that every
-other result reproduces exactly. Earlier invalidated numerical results remain
-archived and are not inputs to either run.
+This file corrects an average-precision bootstrap edge case in the original
+`validated_results_report.json`, where a zero-weight leading score group could
+produce `NaN`. The correction affects only the average-precision bootstrap
+summaries; the fitted probes, predictions, ROC-AUC values, and causal results
+are unchanged. The original report and earlier invalidated runs remain in the
+artifact archive as provenance records.

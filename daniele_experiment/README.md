@@ -1,9 +1,7 @@
 # Daniele experiment
 
-This package contains the KataGo game-generation, concept-labeling, linear-probe,
-and causal-validation experiments. Scripts used by the validated pipeline remain
-at the package root because imports, manifests, and archived checksums refer to
-their current paths.
+This package contains the KataGo game-generation, concept-labeling,
+linear-probe, and causal-validation experiments.
 
 ## Experiment in brief
 

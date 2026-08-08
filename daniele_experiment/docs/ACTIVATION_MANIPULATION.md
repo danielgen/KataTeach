@@ -1,9 +1,8 @@
 # Activation manipulation and causal concept checks
 
-> **Deprecated for inferential analysis.** This is an exploratory in-sample
-> intervention workflow. Its outputs have been quarantined and must not be
-> cited as validated causal evidence. Use `validated_causal_eval.py` only with a
-> prospectively frozen protocol and untouched fresh calibration/test games.
+> **Historical exploratory workflow.** These in-sample interventions predate
+> the validated causal experiment and are not included in its results. The
+> held-out validity-v5 procedure is implemented by `validated_causal_eval.py`.
 
 The examples below require a locally supplied `daniele_experiment/model.ckpt`
 and locally generated probes under `daniele_experiment/linear_probes/`. Those
@@ -223,14 +222,13 @@ Secondary (full-game) metrics:
 4. `area_score_black_minus_white` / `winner` — only meaningful if (2) is non-zero
 5. `dose_response.*_slope` — quick signed trend across doses, not a significance test
 
-A useful causal claim needs **both** a same-position policy effect (especially
-top-move flips) **and** a repeatable signed dose-response when swapping colors /
-varying openings. Probe AUC alone only establishes decodability.
+The strongest evidence from this workflow would combine a same-position policy
+effect, such as top-move changes, with a repeatable signed dose response across
+colours and openings. Probe AUC by itself measures decodability.
 
-If policy mass moves a little but `top_move_changed` stays 0 and all games are
-identical across doses, treat the result as a null causal finding for this
-global mean-pool intervention — not proof that the concept is unused in every
-representation.
+A small policy-mass change with no top-move changes and identical games across
+doses is a null result for this global mean-pool intervention. It does not
+establish that every representation is causally irrelevant.
 
 ## Method limits
 

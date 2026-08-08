@@ -1,9 +1,8 @@
 # Linear probes and game commentary
 
-> **Deprecated for inferential analysis.** This is the original non-nested
-> exploratory workflow. Its outputs have been quarantined and must
-> not be cited or merged into validated results. Use the prospectively frozen
-> `validated_probe_pipeline.py` workflow and its run-scoped artifacts instead.
+> **Historical exploratory workflow.** This original non-nested pipeline
+> predates validity v5. Its outputs are separate from the results produced by
+> `validated_probe_pipeline.py`.
 
 The commands below require locally generated games, datasets, and trained
 probes. These large artifacts are excluded from Git. They are reproducible from
