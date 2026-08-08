@@ -22,7 +22,7 @@ This directory contains the experiment documentation.
 ## Legacy exploratory workflows
 
 - [Linear probes and game commentary](LINEAR_PROBES_WORKFLOW.md) describes the
-  deprecated pre-`idx361` workflow.
+  deprecated exploratory workflow.
 - [Activation manipulation](ACTIVATION_MANIPULATION.md) describes an older
   exploratory intervention tool. It is not the validated-v5 causal procedure.
 

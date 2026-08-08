@@ -5,6 +5,24 @@ and causal-validation experiments. Scripts used by the validated pipeline remain
 at the package root because imports, manifests, and archived checksums refer to
 their current paths.
 
+## Experiment in brief
+
+KataGo played games against itself while its internal `trunkfinal` activations
+and move policies were recorded. The study tested whether simple linear models
+could predict three move properties from those activations: playing far from
+the preceding move, inducing a highly concentrated reply, and concentrating
+policy probability in one board region. It then intervened on the learned
+far-move direction in a separate held-out cohort to test whether decodability
+translated into causal control of the policy.
+
+The analysis used 500 earlier self-play games for probe development and 150
+new games generated after the causal design was frozen. Of the new games, 50
+were used to calibrate control interventions and 100 for the final test. The
+main labels were strongly predictable, but the intervention did not satisfy
+its predeclared positive-steering criterion. The later exploratory diagnostics
+showed that the learned direction locally suppressed moves rather than
+increasing their probability.
+
 ## Start here
 
 | Goal | Entry point | Guide |

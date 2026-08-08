@@ -5,15 +5,18 @@ The workflow uses two separate result namespaces:
 - `validity_v5_canonical`: tenuki, forcing proxy, and urgency proxy, all
   recomputed from raw moves/policies under versioned contracts.
 - `validity_v5_legacy_exploratory`: the full historical concept set, retrained
-  with corrected `idx361` features and nested grouped CV, but clearly labelled
-  as depending on legacy-derived snorkel targets.
+  with nested grouped CV, but clearly labelled as depending on exploratory
+  Snorkel-derived targets.
 
 Neither run reads old probe models, old probe scores, or old causal results.
 
 ## Should the games be regenerated?
 
-**For the completed project workspace: no.** Keep the existing 500 development
-games and 150 prospective validity-v5 games unchanged. When all 150 fresh games
+**For the completed project workspace: no.** The 500 development games are the
+original self-play corpus stored as UUID-named directories under `games/`.
+Each directory contains the game record and move-level model outputs. The 150
+prospective validity-v5 games are the separately seeded post-protocol cohort.
+Keep both sets unchanged. When all 150 fresh games
 exist with the expected cohort, seeds, and deterministic UUIDs, the canonical
 runner verifies them and prints `[generate] verified existing complete fresh
 cohort`; it does not generate replacements.
@@ -80,8 +83,9 @@ daniele_experiment/artifacts/runs/validity_v5_canonical/causal/tenuki_local/
 
 ## Historical exploratory probes
 
-The canonical runner freezes the original 500-game exploratory split before
-adding fresh games. After the canonical run—immediately or another day—run:
+The canonical runner identifies the original 500 UUID-named game directories
+as the development cohort before adding the 150 held-out games. After the
+canonical run—immediately or another day—run:
 
 ```bash
 caffeinate -i conda run --no-capture-output -n ml \
@@ -118,5 +122,5 @@ The prospectively frozen `validated_results_report.json` is retained unchanged
 for auditability, but its average-precision bootstrap intervals are superseded:
 zero-weight leading score groups were incorrectly propagated as `NaN`. The
 versioned correction changes only AP bootstrap records and verifies that every
-other result reproduces exactly. Previous pre-`idx361` numerical results remain
+other result reproduces exactly. Earlier invalidated numerical results remain
 archived and are not inputs to either run.

@@ -1,28 +1,59 @@
 # Validity-v5 Experiments and Results
 
-## Artifact availability
+## Study overview
+
+The study used KataGo to play games against itself and recorded the network's
+internal activation immediately before each move. Linear probes were then
+trained to predict three precisely defined move properties from those
+activations. A separate intervention experiment tested whether changing the
+activation direction associated with one property—playing far from the
+previous move—caused the policy to assign more probability to distant moves.
+
+Two game cohorts were used:
+
+- **Development cohort:** 500 self-play games generated during the earlier
+  exploratory phase of the project. Each game was stored locally as
+  `games/<game-id>/`, with an SGF, move-by-move model records, and metadata.
+  These games were used to train and cross-validate the probes and to construct
+  the intervention direction. Their exact original checkpoint is not recorded.
+- **Held-out cohort:** 150 additional self-play games generated only after the
+  validity-v5 design was frozen. Their checkpoint hash and random seeds were
+  recorded. Fifty games were used to calibrate the control interventions and
+  100 were used for the final causal test.
+
+The tracked canonical run manifest lists all 150 held-out game UUIDs. The
+tracked label manifest lists the 650 games used by the analysis together with
+hashes of their move records; the 500 entries not listed in the held-out cohort
+are the development games. The game directories themselves are too large for
+Git and remain local artifacts.
+
+## Repository contents
 
 The frozen protocol, corrected probe reports, report manifests, label and
 training provenance, checkpoint-fidelity record, causal summaries, and F1/F5
-exploratory JSON outputs cited below are tracked in this repository at their
-listed paths. Some records retain absolute paths from the machine that ran the
-experiment; these are execution metadata, while hashes and repository-relative
-names provide portable identity.
+exploratory JSON outputs are tracked at the paths cited below. Some records
+retain absolute paths from the machine that ran the experiment; hashes and
+repository-relative names provide the portable identifiers.
 
-Large generated inputs and intermediate outputs—including the game corpus,
-Parquet datasets, saved activations, trained probes, row-level predictions,
-runtime logs, and `model.ckpt`—are not tracked. The small focused-test record is
-included. Accordingly, the repository supports
-inspection of the final numerical record but not independent end-to-end rerun
-without the separately preserved source games and exact hashed checkpoint.
-
-All paths below are relative to the repository root.
+The game corpus, Parquet datasets, saved activations, trained probes,
+row-level predictions, runtime logs, and `model.ckpt` are too large or
+machine-specific to include. The repository therefore supports inspection of
+the final numerical record, but an end-to-end rerun also requires the preserved
+games and exact hashed checkpoint. All paths below are relative to the
+repository root.
 
 The evidence has three distinct statuses:
 
-1. **Canonical predictive evidence:** three operational variables rebuilt from raw game records and evaluated with nested game-grouped probe cross-validation. Here, “canonical” identifies the rebuilt validity-v5 pipeline; it does not imply that the proxy has been semantically validated as the full human concept.
+1. **Main predictive analysis:** three operational variables rebuilt from raw
+   game records and evaluated with nested, game-grouped probe
+   cross-validation. Elsewhere in the artifacts this analysis is called
+   “canonical” to distinguish it from the supplementary historical labels; the
+   term does not imply that the proxies are complete human Go concepts.
 2. **Confirmatory causal evidence:** one prospectively held-out intervention for the tenuki-distance proxy, assessed against a frozen directional hypothesis and two control families.
-3. **Historical exploratory evidence:** 24 configured labels derived from 22 hash-checked source fields migrated from the earlier weak-labelling/Snorkel analysis, then retrained with corrected feature indexing and nested grouped CV.
+3. **Historical exploratory evidence:** 24 additional labels derived from the
+   earlier weak-labelling analysis and evaluated with the same grouped
+   cross-validation procedure. These results are supplementary rather than
+   part of the main confirmatory claim.
 
 The principal empirical outcome is also two-part: all three canonical operational labels were highly linearly predictable from `trunkfinal` feature summaries, but the sole valid confirmatory intervention did **not** pass its predeclared support criterion.
 
@@ -40,7 +71,18 @@ Protocol source: `daniele_experiment/artifacts/protocols/validity_v5.json`.
 
 ### 1.2 Games and data partitions
 
-The 500 pre-existing games were assigned only to development: nested grouped probe evaluation and fitting the final intervention direction. Their metadata do not declare the source checkpoint, so their exact original checkpoint provenance cannot be recovered from those declarations. The later 500-position replay audit establishes sampled compatibility with the supplied checkpoint, not original-generation identity. After the protocol was frozen, 150 new games were generated with explicit checkpoint and seed provenance and assigned once to two untouched partitions.
+The 500 development games are the original self-play corpus described above,
+not a public benchmark or an external game collection. They were already
+present before the validity-v5 protocol was frozen and were used only for probe
+development. Their metadata do not identify the checkpoint that originally
+generated them. Replaying one saved position from every game showed that the
+available checkpoint closely reproduces their stored activations, but this
+compatibility check cannot establish original-generation identity.
+
+The 150 held-out games were newly generated after the protocol was frozen,
+using seeds `202607300000` through `202607300149` and the checkpoint identified
+in Section 1.1. Their UUIDs were derived deterministically from those seeds.
+They were assigned once to two untouched partitions:
 
 | Partition | Games | Use |
 |---|---:|---|
@@ -72,17 +114,19 @@ The three labels also have different evidence sources. Tenuki-distance is board-
 
 Contract sources: `daniele_experiment/artifacts/runs/validity_v5_canonical/labels_manifest.json`, `daniele_experiment/artifacts/runs/validity_v5_canonical/frozen_config/concepts.yaml`, and `daniele_experiment/operational_definitions.py`. Policy-head architecture: `python/model_pytorch.py`.
 
-### 1.4 Feature extraction and the indexing correction
+### 1.4 Activation summaries used by the probes
 
 Three feature summaries were constructed from each relevant `trunkfinal` activation:
 
 - **Global:** the spatial mean of each of the 512 channels.
-- **Selected-location:** the 512-channel vector at the recorded move's row-major board coordinate, `idx361`.
+- **Selected-location:** the 512-channel vector at the board point where the
+  recorded move was played.
 - **Combined:** concatenation of global and selected-location features, producing 1,024 features.
 
-KataGo's padded internal `move_loc` is not the same coordinate system as a flat 19-by-19 tensor index. The corrected pipeline converts and validates `idx361`, then indexes `trunkfinal[:, idx361 // 19, idx361 % 19]`. Results made with direct `move_loc` indexing were therefore excluded and archived.
-
-Feature source: `daniele_experiment/artifacts/runs/validity_v5_canonical/build_manifest.json`. Correction implementation: `daniele_experiment/validated_probe_pipeline.py`. Invalidation notice: `daniele_experiment/artifacts/archive/20260730_pre_idx361_invalid_v1/INVALID.md`.
+The global summary captures board-wide information; the selected-location
+summary captures the representation at the played point; the combined summary
+contains both. Feature source:
+`daniele_experiment/artifacts/runs/validity_v5_canonical/build_manifest.json`.
 
 ### 1.5 Validation checks
 
@@ -272,7 +316,11 @@ The valid conclusion is that the intervention pipeline executed as specified, bu
 
 ### 4.1 Scope and procedure
 
-The historical run retained the original broader concept inventory while rebuilding all global, selected-location, and combined features with corrected `idx361` indexing and retraining probes with the same nested game-grouped method. Three labels in that run—tenuki-distance, forcing, and urgency—were recomputed canonically and duplicate the canonical results above. The remaining 24 configured labels were constructed from 22 source fields explicitly migrated from the quarantined pre-correction analysis.
+The supplementary run retained the broader concept inventory from the earlier
+exploratory phase and retrained its probes with the same nested, game-grouped
+method. Three labels—tenuki-distance, forcing, and urgency—duplicate the main
+analysis. The remaining 24 labels come from 22 earlier board-analysis fields
+and should be treated as exploratory.
 
 These 24 results are exploratory. Their weak-labelling/Snorkel-derived source fields were not independently rebuilt or construct-validated during validity-v5. Corrected probe training shows predictability of the configured labels derived from those fields; it does not validate their intended Go semantics. There is no valid causal experiment for any of them.
 
@@ -338,7 +386,10 @@ The most direct overall statement is:
 
 ## 6. Excluded and archived results
 
-Pre-`idx361` feature, probe, and causal results are retained only for auditability and must not be used in analysis, figures, or claims. The archive explicitly discards legacy tenuki, forcing, urgency, feature, probe, and causal results from evidential use.
+An earlier feature-extraction implementation confused KataGo's padded board
+location with the flat 19-by-19 activation coordinate. Results produced before
+that correction are retained only as historical provenance and are excluded
+from every table and claim in this report.
 
 Invalidation notice: `daniele_experiment/artifacts/archive/20260730_pre_idx361_invalid_v1/INVALID.md`. Archive manifest: `daniele_experiment/artifacts/archive/20260730_pre_idx361_invalid_v1/manifest.json`. Checksums: `daniele_experiment/artifacts/archive/20260730_pre_idx361_invalid_v1/checksums.sha256`.
 

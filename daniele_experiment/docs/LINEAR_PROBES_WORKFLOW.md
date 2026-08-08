@@ -1,7 +1,7 @@
 # Linear probes and game commentary
 
-> **Deprecated for inferential analysis.** This is the legacy pre-`idx361`,
-> non-nested workflow. Its outputs have been quarantined and must
+> **Deprecated for inferential analysis.** This is the original non-nested
+> exploratory workflow. Its outputs have been quarantined and must
 > not be cited or merged into validated results. Use the prospectively frozen
 > `validated_probe_pipeline.py` workflow and its run-scoped artifacts instead.
 

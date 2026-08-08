@@ -5,6 +5,15 @@ and F5 exploratory diagnostics. Sections 6–8 contain the latest interpretation
 the registered validity-v5 verdict remains unchanged. All paths are relative to
 the repository root.
 
+The tested label marks a move as positive when it lies at least six Manhattan
+intersections from the previous non-pass move. A linear probe learned to
+predict this label from the network activation at the played board point. The
+causal test then added the learned activation direction across distant and
+nearby legal points and measured how the policy's total probability on distant
+moves changed. The expected increase did not occur: the response was small,
+precise, and negative. The F1 and F5 analyses below show that the direction acts
+primarily as a local move suppressor at the tested layer.
+
 ## 1. Verified experiment inventory
 
 These counts were re-verified directly from the run artifacts on 2026-08-05.
@@ -31,12 +40,12 @@ These counts were re-verified directly from the run artifacts on 2026-08-05.
   | Forcing | `reply_peak95@2` | `forcing` |
   | Urgency | `regional_policy_peak@2` | `urgency_peak` |
 
-- **All probes were retrained inside validity v5** with corrected `idx361` feature indexing.
-  No reported probe number predates the refactor; pre-correction results are archived under
-  `daniele_experiment/artifacts/archive/20260730_pre_idx361_invalid_v1/`.
+- **All probes were retrained inside validity v5.** No reported probe number
+  comes from the earlier invalidated feature-extraction run.
 - **Exactly one valid activation-manipulation experiment exists**: the tenuki-distance proxy,
   on 100 held-out games. Forcing and urgency have probe evidence only. Earlier interventions
-  for forcing/urgency/corner concepts are quarantined pre-`idx361` outputs.
+  for forcing, urgency, and corner concepts belong to the invalidated
+  historical run.
 
 ## 2. The tenuki activation-manipulation setup
 
@@ -46,9 +55,10 @@ Implementation: `daniele_experiment/validated_causal_eval.py` (`InterventionDire
 
 ### 2.1 Direction (what gets added, channel-wise)
 
-1. A **local** logistic probe (512 features = the trunk channel vector at the selected
-   move's `idx361` location) and its `StandardScaler` were fitted on the 500 development
-   games only.
+1. A **local** logistic probe used the 512-channel trunk representation at the
+   point where the recorded move was played. The probe and its
+   `StandardScaler` were fitted only on the 500 original self-play development
+   games.
 2. The standardized probe score is s(x) = β^T((x − μ)/σ) + b. Its gradient in raw
    activation space is g = β/σ (elementwise).
 3. The intervention direction is **δ = g / (gᵀg)**, so gᵀδ = 1: an unmasked unit dose moves
