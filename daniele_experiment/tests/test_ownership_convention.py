@@ -12,7 +12,10 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent / "python"))
 
 from board import Board
-from snorkel_board_positions import territory_sizes, count_building_territory
+from daniele_experiment.snorkel_board_positions import (
+    territory_sizes,
+    count_building_territory,
+)
 
 def analyze_ownership_convention():
     """Analyze the ownership convention in real data."""

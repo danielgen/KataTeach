@@ -9,7 +9,11 @@ Tests that with q=0.1 on values 0..99:
 
 import numpy as np
 import pandas as pd
-from linear_probe_pipeline import ConceptDefinition, compute_quantile_thresholds, extract_label
+from daniele_experiment.linear_probe_pipeline import (
+    ConceptDefinition,
+    compute_quantile_thresholds,
+    extract_label,
+)
 
 def test_quantile_labeling():
     """Test quantile labeling logic."""
@@ -117,4 +121,3 @@ def test_quantile_labeling():
 
 if __name__ == "__main__":
     test_quantile_labeling()
-

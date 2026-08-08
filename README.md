@@ -1,4 +1,43 @@
-# KataGo
+# KataTeach: concept probing and causal interventions in KataGo
+
+This repository accompanies an MSc final project investigating whether
+human-interpretable Go concepts are merely decodable from KataGo's internal
+activations or also causally involved in its policy. The project operationalises
+proxies for *tenuki*, forcing, and urgency, trains leakage-resistant linear
+probes on KataGo's final trunk representation, and tests a predeclared causal
+intervention on the learned tenuki direction.
+
+The principal result is a dissociation: all three operational labels were
+strongly linearly decodable, but the confirmatory tenuki intervention did not
+change policy in the predicted direction and did not pass the frozen control
+comparisons. The repository therefore does not claim to have recovered
+KataGo's authentic human-like concepts.
+
+Project entry points:
+
+- [Experiment overview and file map](daniele_experiment/README.md)
+- [Full project write-up](daniele_experiment/docs/project_writeup.md)
+- [Validity-v5 experiments and results](daniele_experiment/docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md)
+- [Reproduction runbook](daniele_experiment/docs/VALIDITY_V5_RUNBOOK.md)
+
+The experiment code builds on the upstream
+[KataGo project](https://github.com/lightvector/KataGo). The original KataGo
+README is retained below for build instructions, engine documentation, history,
+and attribution. This repository's MSc experiment is not an official KataGo
+project or upstream release.
+
+## Experiment reproducibility note
+
+The exact checkpoint used locally is bound by SHA-256
+`9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3`.
+Its original download filename and source URL were not retained, so the
+repository does not claim that a fresh clone is currently sufficient for exact
+end-to-end reproduction. See the [experiment README](daniele_experiment/README.md#data-and-checkpoint-availability)
+for the precise scope of the preserved evidence and missing external data.
+
+---
+
+# Upstream KataGo documentation
 
 * [Overview](#overview)
 * [Training History and Research](#training-history-and-research)

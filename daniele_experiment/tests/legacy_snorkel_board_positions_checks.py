@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent / "python"))
 
 from board import Board
-from snorkel_board_positions import (
+from daniele_experiment.snorkel_board_positions import (
     # Core functions
     classify_region, region_map, xy_to_loc, loc_to_xy, in_bounds,
     

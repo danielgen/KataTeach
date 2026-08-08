@@ -54,22 +54,21 @@ these exact paths.
 - `integrate_concepts_html.py` — adds concept scores and commentary to game HTML.
 - `visualize_katago_outputs_custom.py`, `visualize_ownership_simple.py` — standalone visualizers.
 - `interactive_play_with_ownership.py`, `notebook_example_interactive_board.py` — interactive board tools.
-- `katago_python.ipynb`, `Untitled.ipynb` — exploratory notebooks.
+- `katago_python.ipynb` — exploratory model-inspection notebook.
 
 ### Supporting directories
 
 - `docs/` — canonical home of all experiment documentation.
 - `tests/` — canonical home of the test suite.
-- `validated/` — browsable view of the provenance-sensitive `validated_*` scripts.
 - `artifacts/` — generated protocols, runs, logs, exploratory output, and invalidated archives.
 - `katago/` — small KataGo parsing package.
 - Root-level executable source paths remain canonical for compatibility.
 
-The `validated/` view contains relative symbolic links rather than copies. The
-validated pipeline records exact source paths and resolves sibling files when
-checking hashes, so physically moving those scripts would invalidate existing
-runs. Documentation and tests do not participate in those provenance hashes
-and therefore live directly under `docs/` and `tests/`.
+The validated scripts remain at the package root because the pipeline records
+their exact source paths and resolves sibling files when checking hashes.
+Physically moving them would invalidate existing runs. Documentation and tests
+do not participate in those provenance hashes and therefore live under
+`docs/` and `tests/`.
 
 Generated caches such as `__pycache__/`, `.pytest_cache/`, and
 `.ipynb_checkpoints/` are not source code and can be ignored while navigating.
@@ -84,3 +83,60 @@ When adding work:
 3. Give new experiments a descriptive module plus a matching Markdown guide.
 4. Do not move frozen validated-v5 producers or edit archived artifact contents;
    add a versioned successor instead.
+
+## Installation and tests
+
+Create an isolated Python environment and install the experiment dependencies:
+
+```bash
+python -m pip install -r daniele_experiment/requirements.txt
+```
+
+KataGo's Python model code is imported directly from this repository's
+`python/` directory. Run the experiment tests from the repository root:
+
+```bash
+pytest -q daniele_experiment/tests
+```
+
+GPU support is optional for the tests, but full data generation and replay are
+computationally expensive. The original experiment used a dedicated Conda
+environment named `ml`; that environment name is not a dependency of the code.
+
+## Data and checkpoint availability
+
+The multi-gigabyte game corpus, canonical run directory, logs, and model
+checkpoint are intentionally excluded from Git. Consequently, a fresh clone
+contains the complete pipeline and written results, but not everything required
+to rerun the experiment or independently inspect every row-level artifact.
+
+The locally preserved checkpoint has:
+
+- repository-relative expected path: `daniele_experiment/model.ckpt`;
+- SHA-256: `9476214872d78c80b53605cf5a654004faa7d59b6a743fd5b68942c36dd4ace3`;
+- embedded model configuration: version 15, 512 trunk channels, Mish activation;
+- original download filename/source URL: not retained.
+
+The checkpoint reproduced one sampled saved activation from each of the 500
+development games within the frozen tolerance. This is empirical compatibility
+evidence, not proof that it originally generated every historical activation.
+The later 150-game prospective cohort was explicitly bound to this hash.
+
+Exact end-to-end reproduction from a fresh clone is therefore currently
+limited by unavailable external distribution of the checkpoint and run data.
+The numerical claims, limitations, hashes, and provenance relationships that
+remain available are documented in
+[`docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md`](docs/VALIDITY_V5_EXPERIMENTS_AND_RESULTS.md).
+
+Some tracked exploratory JSON records contain the absolute path of the machine
+on which they were generated. Those strings are historical execution metadata,
+not required input paths and not evidence that another user must recreate that
+directory structure.
+
+## Academic use
+
+This is supporting code for an MSc final project, not a separately published
+software or dataset release. A DOI or `CITATION.cff` has therefore not been
+invented. When referencing this work, cite the final project itself and link to
+the exact repository commit or release used, rather than the moving `main`
+branch.
