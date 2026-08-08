@@ -5,7 +5,7 @@ converts NumPy values to ordinary Python values, serializes the analysis as
 JSON, and reads it from `data.analysis` in
 `visualize_katago_outputs_custom.py`.
 
-## Current interface
+## Feature interface
 
 The current analysis includes these groups of values:
 
@@ -31,16 +31,3 @@ solidification, and reduction outputs instead.
 dictionaries, sequences, and sets into JSON-compatible Python values. Features
 that need a preceding position return neutral values when the before-state is
 not available.
-
-## Checking a schema change
-
-When adding or renaming a feature:
-
-1. update `analyze_position_comprehensive()`;
-2. update any visualizer field that consumes the value;
-3. add or update a test under `daniele_experiment/tests/`;
-4. open a generated visualization and check the browser console for missing
-   or malformed values.
-
-This document describes the interface at a high level; tests and source code
-are authoritative for exact keys and behaviour.

@@ -1,6 +1,6 @@
 # KataTeach Features Legend
 
-This document explains all the features and concepts displayed in the move analysis panel.
+The move analysis panel displays the following features and concepts.
 
 ---
 
@@ -212,7 +212,7 @@ The board is divided into 9 regions:
 | TAU_POS | 0.10 | Weak ownership (territory "owned" if > 10%) |
 | TAU_SOLID | 0.70 | Solid territory (strongly owned if ≥ 70%) |
 | TAU_DELTA_MIN | 0.05 | Minimum change to count as solidification/reduction |
-| TAU_GROUP_IOU | 0.1 | Group matching threshold (10% overlap) |
+| TAU_GROUP_IOU | 0.4 | Group matching threshold (40% overlap) |
 | TAU_GROUP_BELONGING | 0.2 | Ownership threshold for grouping stones (20%) |
 
 ---
@@ -228,4 +228,3 @@ Looking at your example:
 - **B:S:R = 0.10:0.11:0.44** - Strongest effect is Reduction (0.44 intensity)
 
 This appears to be an aggressive move that cuts opponent groups while significantly impacting territorial balance in the player's favor.
-

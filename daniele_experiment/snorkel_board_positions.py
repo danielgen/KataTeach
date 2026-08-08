@@ -677,7 +677,7 @@ def compute_territory_delta_by_region(
             if np.abs(before[y, x]) < TAU_POS_LOW and after[y, x] > TAU_POS_HIGH:
                 build_c[r] += 1
                 build_i[r] += after[y, x] - before[y, x]
-            # Solidification: matches solidify_territory_delta (requires delta >= 0.1)
+            # Solidification: matches solidify_territory_delta
             delta = after[y, x] - before[y, x]
             if before[y, x] > TAU_POS and after[y, x] > before[y, x] and delta >= TAU_DELTA_MIN:
                 solid_c[r] += 1

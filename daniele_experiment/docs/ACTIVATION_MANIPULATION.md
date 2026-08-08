@@ -1,7 +1,7 @@
 # Activation manipulation and causal concept checks
 
-> **Deprecated for inferential analysis.** This document describes exploratory
-> in-sample intervention code. Its outputs have been quarantined and must not be
+> **Deprecated for inferential analysis.** This is an exploratory in-sample
+> intervention workflow. Its outputs have been quarantined and must not be
 > cited as validated causal evidence. Use `validated_causal_eval.py` only with a
 > prospectively frozen protocol and untouched fresh calibration/test games.
 

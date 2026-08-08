@@ -1,7 +1,7 @@
 # Tenuki Intervention: Setup, Verified Inventory, and Design-vs-Conceptual Failure Analysis
 
 This report records the failed confirmatory intervention and the completed F1
-and F5 exploratory diagnostics. Sections 7–9 contain the latest interpretation;
+and F5 exploratory diagnostics. Sections 6–8 contain the latest interpretation;
 the registered validity-v5 verdict remains unchanged. All paths are relative to
 the repository root.
 
@@ -222,7 +222,7 @@ retroactively change the registered v5 verdict.
   with δ replaced by each random direction quantifies the direction-specific component
   exactly, without any calibration machinery.
   **Implemented and executed on 2026-08-05: `daniele_experiment/tenuki_gradient_analysis.py`; results in
-  Section 7. The verdict in Sections 3–4 is revised there.**
+  Section 6. The verdict in Sections 3–4 is revised there.**
 - **F2 — Complete the 2×2 (D1).** Run random-direction × shuffled-mask controls. Comparing
   the four cells decomposes mask, direction, and interaction contributions.
 - **F3 — Activation patching instead of direction addition (C1 vs D2/D3).** Swap
@@ -239,7 +239,7 @@ retroactively change the registered v5 verdict.
   kind of location the probe was actually trained on) and read out that move's policy
   probability. This tests the direction in-distribution instead of broadcast.
   **Implemented and executed on 2026-08-05: `daniele_experiment/tenuki_single_site_analysis.py`; results in
-  Section 8.**
+  Section 7.**
 - **F6 — Larger / re-normalised doses (D5).** Extend to ±5, ±10
   probe-score units and check for non-linearity or sign change. This remains a
   possible exploratory follow-up; no result from it enters the confirmatory
@@ -249,29 +249,10 @@ retroactively change the registered v5 verdict.
   which one the probe tracks. Distinguishes geometric from strategic content of the
   direction.
 
-## 6. Original pre-F1 interpretation
-
-This section is retained to show how the interpretation changed. It is
-superseded by the completed F1/F5 analysis and the current summary in Section 9.
-
-Validity v5 probed 27 weakly supervised concept labels (3 recomputed under validated
-contracts + 24 migrated exploratory ones; 30 were configured, 3 never trained); all probes
-were retrained post-`idx361`-correction, and the three canonical labels were highly linearly
-decodable. The single confirmatory causal test added a probe-derived direction δ = g/(gᵀg)
-to `trunkfinal`, spatially shaped by a far-positive/near-negative contract mask, at doses
-±1, ±2, and read out far-region policy mass on 100 held-out positions. It failed all three
-frozen criteria: small precise *inverse* slope, and indistinguishable from random directions
-under the same mask (p = 0.703), while shuffled masks collapsed the effect ~20×. The failure
-is therefore not noise or implementation error; the effect magnitude belongs to the mask,
-and the learned direction shows no detectable concept-specific causal contribution. Whether
-that reflects a composite-design sensitivity floor (D1–D5) or a genuinely non-mediating
-probe direction (C1–C3) is not resolved by this experiment alone; F1 (analytic derivative)
-and F3 (activation patching) are the cheapest next steps that would separate them.
-
-## 7. F1 executed: analytic gradient results (2026-08-05)
+## 6. F1 analytic gradient results (2026-08-05)
 
 Implementation: `daniele_experiment/tenuki_gradient_analysis.py` (unit tests in
-`test_daniele_experiment/tenuki_gradient_analysis.py`, 7 passing). Output artifact:
+`daniele_experiment/tests/test_tenuki_gradient_analysis.py`, 7 passing). Output artifact:
 `daniele_experiment/artifacts/exploratory/tenuki_gradient_analysis.json`. Exploratory diagnostic only; the
 registered validity-v5 verdict is unchanged.
 
@@ -283,7 +264,7 @@ first-order dose response of any direction–mask composite is then a single dot
 directions, and the same 50 seeded mask shuffles as the confirmatory run — without any
 disruption-calibration machinery.
 
-### 7.1 Verification
+### 6.1 Verification
 
 - Analytic dose-0 derivative (equal-label-strata mean): **−0.0008721** per unit dose.
   Confirmatory OLS slope over doses ±2: −0.0008723. Absolute difference **2.4 × 10⁻⁷**.
@@ -296,7 +277,7 @@ disruption-calibration machinery.
   since the confirmatory run; the analysed tensors are the hash-bound originals, so this
   affects nothing downstream.
 
-### 7.2 Findings
+### 6.2 Findings
 
 | Quantity | Value |
 |---|---:|
@@ -330,7 +311,7 @@ disruption-calibration machinery.
    spatial contrast is a necessary component; but within the aligned-mask family the trained
    direction is a distinctly anti-aligned outlier rather than a typical draw.
 
-### 7.3 Revised design-vs-conceptual verdict
+### 6.3 Revised design-vs-conceptual verdict
 
 The failure is now best described as a **structural sign inversion, not an absence of
 coupling and not an execution or sensitivity artifact**. The direction that increases the
@@ -352,19 +333,19 @@ The frozen protocol rightly forbids renaming this a "negative tenuki direction" 
 *confirmatory* claim; but as an exploratory fact, the anti-aligned coupling is real,
 precise, and reproducible, and F5/F3 are the experiments that would tell whether it is an
 artifact of broadcasting or a property of the encoded feature. **F5 was executed the same
-day; see Section 8 — the sign does not flip back in-distribution, which moves the verdict
+day; see Section 7 — the sign does not flip back in-distribution, which moves the verdict
 further toward the conceptual side and identifies a concrete mechanism.**
 
-## 8. F5 executed: single-site results and mechanism (2026-08-05)
+## 7. F5 single-site results and mechanism (2026-08-05)
 
 Implementation: `daniele_experiment/tenuki_single_site_analysis.py` (unit tests in
-`test_daniele_experiment/tenuki_single_site_analysis.py`; 13 passing across both diagnostic tools). Output:
+`daniele_experiment/tests/test_tenuki_single_site_analysis.py`; 13 passing across both diagnostic tools). Output:
 `daniele_experiment/artifacts/exploratory/tenuki_single_site_analysis.json`. Same 100 hash-bound causal-test
 positions, same seeded random directions; all quantities are analytic dose-0 derivatives.
 Dose unit: one raw probe-score unit at the intervened site (a single-point mask has unit
 RMS, so this is the same dose convention as the confirmatory run before spatial shaping).
 
-### 8.1 The in-distribution test: the sign does not flip back
+### 7.1 The in-distribution test: the sign does not flip back
 
 For each position, δ was applied at one site at a time — the actually selected move
 (exactly the kind of location the local probe was trained on), the top-5 far candidates,
@@ -386,7 +367,7 @@ directions (random mean +7.9 × 10⁻⁶, SD 1.1 × 10⁻⁴), 97/100 are more p
 trained direction and only 5/100 have larger absolute effect. The learned direction is a
 top-5% *local move suppressor*.
 
-### 8.2 Broadcast decomposition: one mechanism explains the confirmatory failure
+### 7.2 Broadcast decomposition: one mechanism explains the confirmatory failure
 
 Decomposing the confirmatory far-mass derivative over board sites (identity error
 < 10⁻¹⁸; total reproduces the F1 value −0.000872):
@@ -398,7 +379,7 @@ Decomposing the confirmatory far-mass derivative over board sites (identity erro
 
 Unmasked per-site couplings close the loop: one probe-score unit of δ at a *near* site
 **increases** far-region mass (+7.4 × 10⁻⁶ per site, positive at 99% of sites), while at a
-*far* site it decreases it (−1.6 × 10⁻⁶, positive at only 8%). Combined with Section 8.1,
+*far* site it decreases it (−1.6 × 10⁻⁶, positive at only 8%). Combined with Section 7.1,
 the mechanism is renormalisation of a local suppression: injecting δ at a site suppresses
 that site's own probability, and the freed probability mass redistributes across the board.
 Suppress a near site and far mass rises; suppress a far site and far mass falls.
@@ -409,7 +390,7 @@ suppressor, i.e. boosting near moves). Both halves push far-region mass down —
 the inverse response was unanimous across positions, and why ~80% of the registered
 negative slope comes from the near half of the mask.
 
-### 8.3 Final reading: primarily conceptual, with a precise design lesson
+### 7.3 Final reading: primarily conceptual, with a precise design lesson
 
 The broadcast-extrapolation explanation (D2/D3 as *artifacts*) is now largely closed: the
 direction behaves the same way in-distribution, at single sites, including at the exact
@@ -434,7 +415,7 @@ settledness, low local urgency, low policy confidence, or another correlate (F7-
 dissociation tests would discriminate); and whether any of this survives at earlier layers
 (F4) or under natural activation differences (F3).
 
-## 9. Updated one-paragraph summary (supersedes Section 6)
+## 8. Summary
 
 The validity-v5 tenuki intervention failed its frozen criteria, and the two analytic
 follow-ups explain why. F1 showed the registered inverse slope (−0.000872 per dose) is a
@@ -449,16 +430,16 @@ confirmatory failure is therefore neither noise nor an execution artifact, and o
 partially a broadcast-design artifact: the probe found a direction that is informative
 about tenuki but whose causal content is anti-aligned ("leavable / don't play here" rather
 than "play far"). Decodability and steerability dissociate here not because the direction
-is causally inert, but because its causal orientation contradicts the label semantics — a
+is causally inert, but because its causal orientation contradicts the label semantics —
 a sharper demonstration that probe performance alone cannot license conclusions
 about causal use.
 
-## 10. Evidential boundaries
+## 9. Evidential boundaries
 
-Everything in Sections 7–9 is exploratory; the registered validity-v5
+The F1 and F5 analyses are exploratory; the registered validity-v5
 verdict (`does_not_pass_predeclared_headline_support_criterion`) is unchanged.
 
-**Supported (safe to state, as exploratory findings):**
+### Findings
 
 1. The registered inverse slope is a first-order structural property of the frozen policy
    head, not noise, dose-range effects, or an execution artifact (F1; analytic–empirical
@@ -473,24 +454,23 @@ verdict (`does_not_pass_predeclared_headline_support_criterion`) is unchanged.
    through the far-positive/near-negative mask, with ~80% of the negative slope from the
    near half (F5 decomposition, exact to < 10⁻¹⁸).
 
-**Not supported (overclaiming — do not state):**
+### Limitations
 
 - *"The probe actually found a settled-local-position concept."* The
   settledness/leavability reading is one interpretation consistent with both the high AUC
   and the negative self-effects, but F5 does not discriminate it from other anti-aligned
   correlates: low local urgency, low local policy confidence, local "already decided"
   status, or game-phase/density proxies. Naming the feature requires an F7-style
-  dissociation battery. Safe phrasing: "the direction predicts the tenuki-distance label
-  but causally suppresses play at the intervened site; a natural interpretation is a
-  'local area can be left' feature, though the data do not uniquely identify that
-  semantics."
+  dissociation battery. The direction predicts the tenuki-distance label but
+  causally suppresses play at the intervened site; a possible interpretation
+  is that the local area can be left, although the data do not uniquely
+  identify that semantics.
 - Any *confirmatory* causal claim about the suppressor (including reversing the sign into
   a "negative tenuki direction" or a steering recipe). The frozen protocol forbids post-hoc
   sign reversal, and the diagnostics were computed on the same 100 test positions the
   confirmatory run used, so they cannot serve as fresh held-out evidence.
 
-**On a further "reverse" test (using the direction to dissuade the played move):** the
-first-order version is already contained in F5 (self-effect at the actually selected move:
+The first-order version of a reverse test is already contained in F5 (self-effect at the actually selected move:
 −3.40 × 10⁻⁴ per dose unit, negative at 98/100 positions, strongest for far-selected
 moves). A new experiment would only add value as (a) a finite-dose test of practical
 top-move demotion, or (b) a *positive* confirmatory claim about the suppressor direction —

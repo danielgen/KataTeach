@@ -70,18 +70,9 @@ Moving them would invalidate existing runs. Documentation and tests are stored
 under `docs/` and `tests/` because they are not part of those provenance hashes.
 
 Generated caches such as `__pycache__/`, `.pytest_cache/`, and
-`.ipynb_checkpoints/` are not source code and can be ignored while navigating.
-
-## Path-stability convention
-
-Treat the current Python module names and artifact paths as public interfaces.
-When adding work:
-
-1. Extend an existing module when it belongs to an established pipeline.
-2. Put generated results under `artifacts/`, not beside source files.
-3. Give new experiments a descriptive module plus a matching Markdown guide.
-4. Do not move frozen validated-v5 producers or edit archived artifact contents;
-   add a versioned successor instead.
+`.ipynb_checkpoints/` are not source code. Frozen validated-v5 producers and
+archived artifact paths remain in place because manifests and checksums depend
+on them.
 
 ## Installation and tests
 

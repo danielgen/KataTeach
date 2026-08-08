@@ -16,7 +16,7 @@ included. Accordingly, the repository supports
 inspection of the final numerical record but not independent end-to-end rerun
 without the separately preserved source games and exact hashed checkpoint.
 
-This document records the experiments and results in the validity-v5 analysis. All quoted paths are relative to the repository root.
+All paths below are relative to the repository root.
 
 The evidence has three distinct statuses:
 

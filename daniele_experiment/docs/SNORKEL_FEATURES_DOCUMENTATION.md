@@ -68,10 +68,3 @@ array, and regional-dictionary values after conversion by the visualization
 pipeline. The source function and tests are authoritative for exact field
 names. [`FEATURE_VERIFICATION.md`](FEATURE_VERIFICATION.md) describes the
 Python-to-visualizer boundary.
-
-## Maintaining this document
-
-Keep this page at the level of feature meaning, perspective, and major
-thresholds. Do not add source line numbers: they become stale when the module is
-refactored. Any threshold change should update its named constant, relevant
-tests, and the table above in the same commit.
